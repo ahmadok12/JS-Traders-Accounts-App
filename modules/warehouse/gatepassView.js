@@ -224,25 +224,25 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
 
     return `
       <tr class="gp-line-row hover:bg-slate-50/70 transition-colors" data-row-index="${rowIdx}">
-        <td class="p-3 align-top">
+        <td class="p-2.5 align-top">
           ${pickerHtml}
         </td>
-        <td class="p-3 text-center align-top">
-          <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-2 py-1 rounded-lg border border-blue-200/80 font-bold mb-2">
+        <td class="p-2.5 text-center align-top">
+          <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded-lg border border-blue-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
             ${vId ? `WH Stock: ${whStock.toLocaleString()} ${unit}` : 'WH Stock: —'}
           </span>
-          <input type="number" min="0" value="${wVal}" placeholder="0" class="gp-wh-qty w-28 text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] focus:ring-2 focus:ring-blue-100 py-2 px-2 bg-white text-blue-900 shadow-2xs">
+          <input type="number" min="0" value="${wVal}" placeholder="0" class="gp-wh-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] focus:ring-2 focus:ring-blue-100 py-1.5 px-2 bg-white text-blue-900 shadow-2xs">
         </td>
-        <td class="p-3 text-center align-top">
-          <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/80 font-bold mb-2">
+        <td class="p-2.5 text-center align-top">
+          <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded-lg border border-amber-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
             ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${unit}` : 'Office Stock: —'}
           </span>
-          <input type="number" min="0" value="${oVal}" placeholder="0" class="gp-office-qty w-28 text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 py-2 px-2 bg-white text-amber-900 shadow-2xs">
+          <input type="number" min="0" value="${oVal}" placeholder="0" class="gp-office-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 py-1.5 px-2 bg-white text-amber-900 shadow-2xs">
         </td>
-        <td class="p-3 text-right align-top pt-4">
+        <td class="p-2.5 text-right align-top pt-3.5">
           <span class="gp-total-calc font-black text-slate-900 text-sm">${lineTotal > 0 ? `${lineTotal.toLocaleString()} ${unit}` : '—'}</span>
         </td>
-        <td class="p-3 text-center align-top pt-3.5">
+        <td class="p-2.5 text-center align-top pt-3">
           <button type="button" class="gp-remove-row-btn w-8 h-8 inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" title="Remove line item">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -310,10 +310,10 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200/80">
               <tr>
-                <th class="py-3 px-3 w-[48%] font-semibold">Product &amp; Variant SKU Selection</th>
-                <th class="py-3 px-2 w-[19%] font-semibold text-center">Delivered from WH *</th>
-                <th class="py-3 px-2 w-[19%] font-semibold text-center">Delivered from Office *</th>
-                <th class="py-3 px-3 w-[10%] font-semibold text-right">Cargo Qty</th>
+                <th class="py-3 px-3 w-[62%] font-semibold">Product &amp; Variant SKU Selection</th>
+                <th class="py-3 px-2 w-[13%] font-semibold text-center">Delivered from WH *</th>
+                <th class="py-3 px-2 w-[13%] font-semibold text-center">Delivered from Office *</th>
+                <th class="py-3 px-3 w-[8%] font-semibold text-right">Cargo Qty</th>
                 <th class="py-3 px-2 w-[4%] font-semibold text-center">Action</th>
               </tr>
             </thead>

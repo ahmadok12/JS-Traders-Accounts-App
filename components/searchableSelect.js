@@ -145,14 +145,12 @@ export function renderProductVariantPicker({
             <div class="truncate">
               <div class="flex items-center gap-1 flex-wrap">
                 <span class="font-bold text-slate-800 text-xs pv-prod-display-name truncate">
-                  ${currentProduct ? (currentProduct.customerName || currentProduct.businessName) : 'Select Product...'}
+                  ${currentProduct ? (currentProduct.businessName || currentProduct.customerName) : 'Select Product...'}
                 </span>
-                <span class="pv-prod-urdu text-[11px] font-medium text-slate-500 font-serif ${currentProduct?.urduName ? '' : 'hidden'}" dir="rtl">${currentProduct?.urduName || ''}</span>
               </div>
               <div class="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
                 <span class="pv-prod-code font-mono font-semibold text-[#138FCB]">${currentProduct?.code || ''}</span>
-                <span>•</span>
-                <span class="pv-prod-cat truncate">${currentProduct?.businessName || ''}</span>
+                ${currentProduct?.customerName ? `<span>•</span><span class="pv-prod-cust text-slate-500 font-medium truncate">${currentProduct.customerName}</span>` : '<span class="pv-prod-cust text-slate-500 font-medium truncate"></span>'}
               </div>
             </div>
           </div>
@@ -168,7 +166,7 @@ export function renderProductVariantPicker({
               <input
                 type="text"
                 class="pv-product-search w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] placeholder-slate-400 font-medium"
-                placeholder="Search products by code, English or Urdu...">
+                placeholder="Search products by code or name...">
               <span class="absolute left-2 top-2 text-slate-400 text-xs">🔍</span>
             </div>
           </div>
@@ -177,18 +175,13 @@ export function renderProductVariantPicker({
               <div
                 class="pv-product-option p-2 rounded-xl hover:bg-blue-50/70 border border-transparent hover:border-blue-200 cursor-pointer transition-all ${p.id === prodId ? 'bg-blue-50/50 border-blue-200' : ''}"
                 data-product-id="${p.id}"
-                data-search="${(p.code + ' ' + p.businessName + ' ' + (p.customerName || '') + ' ' + (p.urduName || '')).toLowerCase()}">
-                <div class="flex items-start justify-between gap-1.5">
-                  <div class="truncate">
-                    <div class="font-bold text-slate-800 text-xs truncate">${p.customerName || p.businessName}</div>
-                    <div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
-                      <span class="font-mono font-semibold text-[#138FCB]">${p.code}</span>
-                      <span class="text-slate-500 font-medium truncate">(${p.businessName})</span>
-                    </div>
+                data-search="${(p.code + ' ' + p.businessName + ' ' + (p.customerName || '')).toLowerCase()}">
+                <div class="truncate">
+                  <div class="font-bold text-slate-800 text-xs truncate">${p.businessName || p.customerName}</div>
+                  <div class="flex items-center gap-1.5 mt-0.5 text-[10px]">
+                    <span class="font-mono font-semibold text-[#138FCB]">${p.code}</span>
+                    ${p.customerName ? `<span>•</span><span class="text-slate-500 font-medium truncate">${p.customerName}</span>` : ''}
                   </div>
-                  ${p.urduName ? `
-                    <span class="text-[11px] font-bold text-slate-600 shrink-0 font-serif" dir="rtl">${p.urduName}</span>
-                  ` : ''}
                 </div>
               </div>
             `).join('')}
@@ -239,23 +232,13 @@ export function bindProductVariantPicker(container, { products, variants, onVari
 
   const updateProductDisplay = (product) => {
     const nameEl = container.querySelector('.pv-prod-display-name');
-    if (nameEl) nameEl.textContent = product.customerName || product.businessName || 'Select Product...';
-
-    const urduEl = container.querySelector('.pv-prod-urdu');
-    if (urduEl) {
-      if (product.urduName) {
-        urduEl.textContent = product.urduName;
-        urduEl.classList.remove('hidden');
-      } else {
-        urduEl.classList.add('hidden');
-      }
-    }
+    if (nameEl) nameEl.textContent = product.businessName || product.customerName || 'Select Product...';
 
     const codeEl = container.querySelector('.pv-prod-code');
     if (codeEl) codeEl.textContent = product.code || '';
 
-    const catEl = container.querySelector('.pv-prod-cat');
-    if (catEl) catEl.textContent = product.businessName || '';
+    const custEl = container.querySelector('.pv-prod-cust');
+    if (custEl) custEl.textContent = product.customerName || '';
   };
 
   const renderSingleVariantTrigger = (variant) => {
