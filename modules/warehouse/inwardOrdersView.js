@@ -1,32 +1,36 @@
 /**
- * JS Traders ERP - Stock Inward Orders View (Incoming Stock Demand)
+ * JS Traders ERP - Stock Inwards View (Incoming Stock Demand)
  * 
  * Core Design Principles:
- * 1. Represents stock expected to enter the warehouse.
- * 2. Does NOT increase physical warehouse inventory (pure demand document).
- * 3. Each line tracks independently: Expected Qty, Received Qty, Remaining Qty.
- * 4. Primary action [Create GRN / Inward] creates Gatepass Inward with remaining quantities.
- * 5. Full traceability of all linked GRNs per Inward Order.
- * 6. Completely decoupled from accounting: generic party and optional source_type.
+ * 1. For any stock coming in, user adds Stock Inwards.
+ * 2. Uses the exact same design and content of Sales Order (previously gatepass), with effect reversed.
+ * 3. Pure demand document: does NOT increase physical inventory upon creation.
+ * 4. Each line tracks independently: Expected Qty, Received Qty, Remaining Qty.
+ * 5. Added Stock Inwards can be converted into a GRN (Goods Received Note).
+ * 6. In case of partial receiving, there are multiple GRNs belonging to one Stock Inward order.
  */
 
 import { inwardOrderService } from '../../services/inwardOrderService.js';
 import { gatepassService } from '../../services/gatepassService.js';
 import { productService } from '../../services/productService.js';
+import { inventoryService } from '../../services/inventoryService.js';
+import { cutToLengthService } from '../../services/cutToLengthService.js';
+import { staffAuthService } from '../../services/staffAuthService.js';
 import { storageService } from '../../services/storageService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
+import { renderProductVariantPicker, bindProductVariantPicker } from '../../components/searchableSelect.js';
 import { toast } from '../../components/toast.js';
 
 export function renderInwardOrdersView() {
   const orders = inwardOrderService.getInwardOrders();
-  const warehouses = storageService.getCollection('warehouses') || [];
-  const whMap = new Map(warehouses.map(w => [w.id, w.name]));
+  const users = storageService.getCollection('users') || [];
+  const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search inward orders by IO #, supplier/party, ref...',
+    searchPlaceholder: 'Search stock inwards by IO #, supplier/origin, vehicle, notes...',
     dropdowns: [
       {
         id: 'sio-status-filter',
@@ -42,14 +46,19 @@ export function renderInwardOrdersView() {
         ]
       }
     ],
-    primaryAction: { label: '+ New Inward Order' }
+    primaryAction: { label: '+ Create Stock Inward' }
   });
 
   const columns = [
     {
       key: 'orderNumber',
       label: 'Inward Order #',
-      render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>`
+      render: row => `
+        <div>
+          <span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>
+          <div class="text-[9px] font-bold text-emerald-600 mt-0.5">DRAFT INWARD GRN</div>
+        </div>
+      `
     },
     {
       key: 'partyName',
@@ -57,22 +66,13 @@ export function renderInwardOrdersView() {
       render: row => `
         <div>
           <div class="font-bold text-slate-800">${row.partyName || 'Supplier / Origin'}</div>
-          <div class="text-[10px] text-slate-400 font-mono">Ref: ${row.referenceNumber || 'N/A'} • Date: ${row.date || 'Today'}</div>
+          <div class="text-[10px] text-slate-400 font-mono">Date: ${row.date || 'Today'} ${row.vehicleNumber ? `• ${row.vehicleNumber}` : ''}</div>
         </div>
       `
     },
     {
-      key: 'warehouse',
-      label: 'Target Facility',
-      render: row => `
-        <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">
-          ${whMap.get(row.targetWarehouseId) || 'Warehouse'}
-        </span>
-      `
-    },
-    {
       key: 'receiptProgress',
-      label: 'Receipt Progress (Expected vs Received)',
+      label: 'Receipt Progress (GRNs)',
       render: row => {
         let totalExp = 0;
         let totalRec = 0;
@@ -88,7 +88,7 @@ export function renderInwardOrdersView() {
               <span class="text-emerald-700">${totalRec} rec</span>
               <span class="text-slate-400 font-normal">/</span>
               <span class="text-slate-800">${totalExp} exp</span>
-              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} pending)</span>` : ''}
+              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} left)</span>` : ''}
             </div>
             <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
               <div class="h-full ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'}" style="width: ${pct}%"></div>
@@ -98,9 +98,46 @@ export function renderInwardOrdersView() {
       }
     },
     {
-      key: 'linesCount',
-      label: 'Items',
-      render: row => `<span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-semibold">${(row.lines || []).length} Item(s)</span>`
+      key: 'locationBreakdown',
+      label: 'Receiving Allocation',
+      render: row => {
+        let totalWh = 0;
+        let totalOff = 0;
+        (row.lines || []).forEach(l => {
+          totalWh += (Number(l.warehouseQty) || 0);
+          totalOff += (Number(l.officeQty) || 0);
+        });
+        return `
+          <div class="text-xs space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
+            </div>
+          </div>
+        `;
+      }
+    },
+    {
+      key: 'assignedStaff',
+      label: 'Assigned Staff',
+      render: row => {
+        const staffIds = row.assignedStaffIds || [];
+        if (staffIds.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">Unassigned</span>`;
+        }
+        return `
+          <div class="flex flex-wrap gap-1">
+            ${staffIds.map(id => {
+              const staff = userMap.get(id) || 'Staff';
+              return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${staff}</span>`;
+            }).join('')}
+          </div>
+        `;
+      }
     },
     {
       key: 'status',
@@ -129,7 +166,7 @@ export function renderInwardOrdersView() {
     columns,
     data: orders,
     actions,
-    emptyMessage: 'No inward orders registered yet.'
+    emptyMessage: 'No stock inward orders registered yet.'
   });
 
   return `
@@ -163,7 +200,8 @@ export function bindInwardOrdersEvents(container, refreshCallback) {
       const filtered = orders.filter(o =>
         (o.orderNumber && o.orderNumber.toLowerCase().includes(q)) ||
         (o.partyName && o.partyName.toLowerCase().includes(q)) ||
-        (o.referenceNumber && o.referenceNumber.toLowerCase().includes(q)) ||
+        (o.vehicleNumber && o.vehicleNumber.toLowerCase().includes(q)) ||
+        (o.driverName && o.driverName.toLowerCase().includes(q)) ||
         (o.notes && o.notes.toLowerCase().includes(q))
       );
       updateInwardOrdersTable(container, filtered, refreshCallback);
@@ -184,25 +222,29 @@ function updateInwardOrdersTable(container, filteredData, refreshCallback) {
   const tableContainer = container.querySelector('#sio-table-container');
   if (!tableContainer) return;
 
-  const warehouses = storageService.getCollection('warehouses') || [];
-  const whMap = new Map(warehouses.map(w => [w.id, w.name]));
+  const users = storageService.getCollection('users') || [];
+  const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const columns = [
-    { key: 'orderNumber', label: 'Inward Order #', render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>` },
+    {
+      key: 'orderNumber',
+      label: 'Inward Order #',
+      render: row => `
+        <div>
+          <span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>
+          <div class="text-[9px] font-bold text-emerald-600 mt-0.5">DRAFT INWARD GRN</div>
+        </div>
+      `
+    },
     {
       key: 'partyName',
       label: 'Supplier / Origin',
       render: row => `
         <div>
           <div class="font-bold text-slate-800">${row.partyName || 'Supplier / Origin'}</div>
-          <div class="text-[10px] text-slate-400 font-mono">Ref: ${row.referenceNumber || 'N/A'} • Date: ${row.date || 'Today'}</div>
+          <div class="text-[10px] text-slate-400 font-mono">Date: ${row.date || 'Today'} ${row.vehicleNumber ? `• ${row.vehicleNumber}` : ''}</div>
         </div>
       `
-    },
-    {
-      key: 'warehouse',
-      label: 'Target Facility',
-      render: row => `<span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700">${whMap.get(row.targetWarehouseId) || 'Warehouse'}</span>`
     },
     {
       key: 'receiptProgress',
@@ -231,7 +273,46 @@ function updateInwardOrdersTable(container, filteredData, refreshCallback) {
         `;
       }
     },
-    { key: 'linesCount', label: 'Items', render: row => `<span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-semibold">${(row.lines || []).length} Item(s)</span>` },
+    {
+      key: 'locationBreakdown',
+      label: 'Receiving Allocation',
+      render: row => {
+        let totalWh = 0;
+        let totalOff = 0;
+        (row.lines || []).forEach(l => {
+          totalWh += (Number(l.warehouseQty) || 0);
+          totalOff += (Number(l.officeQty) || 0);
+        });
+        return `
+          <div class="text-xs space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
+            </div>
+          </div>
+        `;
+      }
+    },
+    {
+      key: 'assignedStaff',
+      label: 'Assigned Staff',
+      render: row => {
+        const staffIds = row.assignedStaffIds || [];
+        if (staffIds.length === 0) return `<span class="text-slate-400 text-xs italic">Unassigned</span>`;
+        return `
+          <div class="flex flex-wrap gap-1">
+            ${staffIds.map(id => {
+              const staff = userMap.get(id) || 'Staff';
+              return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${staff}</span>`;
+            }).join('')}
+          </div>
+        `;
+      }
+    },
     {
       key: 'status',
       label: 'Order Status',
@@ -262,20 +343,18 @@ function updateInwardOrdersTable(container, filteredData, refreshCallback) {
 export function openInwardOrderDetailModal(order, refreshCallback) {
   const variants = productService.getVariants();
   const varMap = new Map(variants.map(v => [v.id, v.name]));
-  const warehouses = storageService.getCollection('warehouses') || [];
-  const whMap = new Map(warehouses.map(w => [w.id, w.name]));
   const isCancelled = order.status === 'Cancelled';
   const remainingLines = inwardOrderService.getRemainingExpectedLines(order.id);
   const linkedGRNs = gatepassService.getGRNsByInwardOrder(order.id);
 
   const contentHtml = `
     <div class="space-y-6 text-xs">
-      <!-- SECTION 1: Order Header Overview -->
+      <!-- SECTION 1: Header Overview -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>📥</span>
-            <span>1. Stock Inward Order Details</span>
+            <span>1. Stock Inward Overview (Draft GRN)</span>
           </h3>
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
             order.status === 'Fully Received' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
@@ -290,32 +369,32 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="p-3 bg-slate-50/70 rounded-xl border border-slate-200/70 space-y-1">
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Supplier / Origin</span>
-            <p class="text-sm font-bold text-slate-900">${order.partyName || 'Supplier / Origin'}</p>
+            <p class="text-sm font-bold text-slate-900">${order.partyName || 'Supplier / Vendor'}</p>
             <p class="text-[11px] text-slate-500">Ref: ${order.referenceNumber || 'N/A'}</p>
           </div>
 
           <div class="p-3 bg-slate-50/70 rounded-xl border border-slate-200/70 space-y-1">
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Order Info</span>
-            <p class="text-sm font-bold text-slate-800">${order.orderNumber}</p>
+            <p class="text-sm font-bold text-slate-800 font-mono">${order.orderNumber}</p>
             <p class="text-[11px] text-slate-500">Date: ${order.date || 'Today'}</p>
           </div>
 
-          <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-200/70 space-y-1 text-right">
-            <span class="text-[10px] font-bold text-[#138FCB] uppercase tracking-wider block">Target Facility</span>
-            <p class="text-base font-extrabold text-slate-900">${whMap.get(order.targetWarehouseId) || 'Warehouse'}</p>
-            <p class="text-[10px] text-slate-500">Stock increases on GRN verification</p>
+          <div class="p-3 bg-emerald-50/50 rounded-xl border border-emerald-200/70 space-y-1">
+            <span class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Carrier & Logistics</span>
+            <p class="text-xs font-bold text-slate-800">${order.vehicleNumber || 'Unassigned Vehicle'}</p>
+            <p class="text-[11px] text-slate-500">Driver: ${order.driverName || 'N/A'} ${order.driverPhone ? `(${order.driverPhone})` : ''}</p>
           </div>
         </div>
       </section>
 
-      <!-- SECTION 2: Order Line Items -->
+      <!-- SECTION 2: Expected Lines -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>📦</span>
-            <span>2. Expected Items &amp; Receipt Tracking</span>
+            <span>2. Expected Stock Lines &amp; Quantity Tracking</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-semibold">${(order.lines || []).length} Item(s)</span>
+          <span class="text-[10px] text-slate-400 font-semibold">${(order.lines || []).length} Line Item(s)</span>
         </div>
 
         <div class="border border-slate-200/80 rounded-xl overflow-hidden">
@@ -323,10 +402,11 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
             <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
                 <th class="py-2.5 px-3">Item Variant</th>
-                <th class="py-2.5 px-3 text-center">Expected</th>
-                <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Received</th>
+                <th class="py-2.5 px-3 text-center">WH Qty</th>
+                <th class="py-2.5 px-3 text-center">Office Qty</th>
+                <th class="py-2.5 px-3 text-center font-bold text-slate-800">Expected Total</th>
+                <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Received (GRN)</th>
                 <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
-                <th class="py-2.5 px-3">Notes</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -336,11 +416,15 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
                 const rem = Math.max(0, exp - rec);
                 return `
                   <tr class="hover:bg-slate-50/70">
-                    <td class="py-3 px-3 font-semibold text-slate-800">${varMap.get(l.variantId) || 'Item'}</td>
-                    <td class="py-3 px-3 text-center font-bold text-slate-800">${exp} ${l.unit || 'PCS'}</td>
+                    <td class="py-3 px-3 font-semibold text-slate-800">
+                      <div>${varMap.get(l.variantId) || 'Item'}</div>
+                      ${l.packagingName ? `<div class="text-[10px] text-slate-400">${l.packagingName}</div>` : ''}
+                    </td>
+                    <td class="py-3 px-3 text-center text-blue-700 font-bold">${l.warehouseQty || 0}</td>
+                    <td class="py-3 px-3 text-center text-amber-700 font-bold">${l.officeQty || 0}</td>
+                    <td class="py-3 px-3 text-center font-extrabold text-slate-900">${exp} ${l.unit || 'PCS'}</td>
                     <td class="py-3 px-3 text-center text-emerald-600 font-bold">${rec}</td>
                     <td class="py-3 px-3 text-center ${rem > 0 ? 'text-blue-600 font-extrabold' : 'text-slate-400'}">${rem}</td>
-                    <td class="py-3 px-3 text-slate-500">${l.notes || '—'}</td>
                   </tr>
                 `;
               }).join('')}
@@ -349,35 +433,35 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
         </div>
       </section>
 
-      <!-- SECTION 3: Linked Receipts (Goods Receipt Notes / GRNs) -->
+      <!-- SECTION 3: Linked GRNs -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <span>📋</span>
-            <span>3. Linked Goods Receipt Notes (GRNs) (${linkedGRNs.length})</span>
+            <span>📦</span>
+            <span>3. Linked Goods Received Notes / GRNs (${linkedGRNs.length})</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-semibold">Physical stock added upon GRN approval (Stock Receipt)</span>
+          <span class="text-[10px] text-slate-400 font-semibold">Multiple GRNs can be created for partial receipts</span>
         </div>
 
         ${linkedGRNs.length === 0 ? `
           <div class="p-4 bg-slate-50/60 rounded-xl text-center text-slate-400">
-            No Goods Receipt Notes (GRNs) recorded against this order yet.
+            No goods receipt notes issued against this order yet.
           </div>
         ` : `
           <div class="border border-slate-200/80 rounded-xl overflow-hidden">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th class="py-2 px-3">GRN Number</th>
+                  <th class="py-2 px-3">GRN #</th>
                   <th class="py-2 px-3">Date</th>
-                  <th class="py-2 px-3">Vehicle &amp; Carrier</th>
-                  <th class="py-2 px-3 text-center">Items Received</th>
+                  <th class="py-2 px-3">Carrier &amp; Driver</th>
+                  <th class="py-2 px-3 text-center">Received Units</th>
                   <th class="py-2 px-3 text-right">Status</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 ${linkedGRNs.map(g => {
-                  const itemsCount = (g.lines || []).reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+                  const itemsCount = (g.lines || []).reduce((s, l) => s + (Number(l.quantity) || (Number(l.warehouseQty || 0) + Number(l.officeQty || 0))), 0);
                   return `
                     <tr class="hover:bg-slate-50/70">
                       <td class="py-2.5 px-3 font-bold text-[#138FCB] font-mono">${g.gatepassNumber}</td>
@@ -429,7 +513,7 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
         </button>
         ${!isCancelled && remainingLines.length > 0 ? `
           <button id="sio-create-grn-btn" type="button" class="inline-flex items-center space-x-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all cursor-pointer">
-            <span>📥 Create Goods Receipt Note (GRN)</span>
+            <span>📥 Convert to GRN</span>
           </button>
         ` : ''}
       </div>
@@ -437,7 +521,7 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
   `;
 
   openModal({
-    title: `Inward Order: ${order.orderNumber}`,
+    title: `Stock Inward: ${order.orderNumber}`,
     subtitle: 'Expected incoming stock demand, receipt progress, and linked GRNs',
     badge: order.orderNumber,
     contentHtml,
@@ -514,16 +598,16 @@ export function openCreateGRNModal(order, onSaved) {
         <div>
           <label class="block font-bold text-slate-700 mb-1">Receiving Facility <span class="text-rose-500">*</span></label>
           <select id="grn-warehouse-select" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 font-semibold text-slate-800 shadow-2xs">
-            ${warehouses.map(w => `<option value="${w.id}" ${w.id === order.targetWarehouseId ? 'selected' : ''}>${w.name} (${w.city || ''})</option>`).join('')}
+            ${warehouses.map(w => `<option value="${w.id}">${w.name} (${w.city || ''})</option>`).join('')}
           </select>
         </div>
         <div>
           <label class="block font-bold text-slate-700 mb-1">Vehicle / Carrier #</label>
-          <input type="text" id="grn-vehicle-input" placeholder="e.g. LES-4029 Truck" value="LES-4029 Truck" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 font-mono text-slate-800 shadow-2xs">
+          <input type="text" id="grn-vehicle-input" placeholder="e.g. LES-4029 Truck" value="${order.vehicleNumber || 'LES-4029 Truck'}" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 font-mono text-slate-800 shadow-2xs">
         </div>
         <div>
           <label class="block font-bold text-slate-700 mb-1">Driver / Transporter</label>
-          <input type="text" id="grn-driver-input" placeholder="e.g. Tariq Mehmood" value="Tariq Mehmood" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 text-slate-800 shadow-2xs">
+          <input type="text" id="grn-driver-input" placeholder="e.g. Tariq Mehmood" value="${order.driverName || 'Tariq Mehmood'}" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 text-slate-800 shadow-2xs">
         </div>
       </div>
 
@@ -536,7 +620,7 @@ export function openCreateGRNModal(order, onSaved) {
               <th class="py-2.5 px-3 text-center">Expected</th>
               <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Received</th>
               <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
-              <th class="py-2.5 px-3 text-center w-32 text-emerald-800 font-bold">Receive Now</th>
+              <th class="py-2.5 px-3 text-center w-32 text-emerald-800 font-bold">Receive Now (GRN)</th>
             </tr>
           </thead>
           <tbody id="grn-lines-tbody" class="divide-y divide-slate-100">
@@ -552,7 +636,7 @@ export function openCreateGRNModal(order, onSaved) {
                   <td class="py-2.5 px-3 text-center text-emerald-600 font-bold">${line.receivedQty}</td>
                   <td class="py-2.5 px-3 text-center font-bold text-blue-600">${line.remainingQty} ${line.unit}</td>
                   <td class="py-2.5 px-3 text-center">
-                    <input type="number" min="0" value="${line.remainingQty}" class="grn-line-qty w-24 text-center border border-emerald-300 rounded-xl px-2 py-1.5 text-xs font-bold focus:border-emerald-600 shadow-2xs bg-emerald-50/40">
+                    <input type="number" min="0" max="${line.remainingQty}" value="${line.remainingQty}" class="grn-line-qty w-24 text-center border border-emerald-300 rounded-xl px-2 py-1.5 text-xs font-bold focus:border-emerald-600 shadow-2xs bg-emerald-50/30">
                   </td>
                 </tr>
               `;
@@ -562,8 +646,8 @@ export function openCreateGRNModal(order, onSaved) {
       </div>
 
       <div>
-        <label class="block font-bold text-slate-700 mb-1">Receipt Inspection Notes / Packaging Verification</label>
-        <textarea id="grn-notes-input" rows="2" placeholder="Packaging condition intact, verified physical piece count..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 text-slate-800 shadow-2xs resize-none"></textarea>
+        <label class="block font-bold text-slate-700 mb-1">Receipt Notes / Gate Instructions</label>
+        <textarea id="grn-notes-input" rows="2" placeholder="Inspection remarks, quality checks..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-600 text-slate-800 shadow-2xs resize-none"></textarea>
       </div>
     </form>
   `;
@@ -571,22 +655,22 @@ export function openCreateGRNModal(order, onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Inward stock is added only after Goods Receipt Note (GRN) approval (Stock Receipt)</span>
+      <span>🛡️ Generates Goods Received Note (GRN)</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="grn-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
         Cancel
       </button>
       <button id="grn-submit-btn" type="button" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>📥 Issue Goods Receipt Note (GRN)</span>
+        <span>📥 Issue GRN</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: `Create Goods Receipt Note (GRN): ${order.orderNumber}`,
-    subtitle: 'Receive physical stock against pending expected inward requirements',
-    badge: 'GRN-NEW',
+    title: `Convert to GRN: ${order.orderNumber}`,
+    subtitle: 'Generate physical Goods Received Note for warehouse receiving. Supports partial receiving batches.',
+    badge: 'GRN',
     contentHtml,
     footerHtml,
     size: 'max-w-2xl',
@@ -600,21 +684,30 @@ export function openCreateGRNModal(order, onSaved) {
         const notes = modalEl.querySelector('#grn-notes-input').value.trim();
 
         const lines = [];
+        let hasError = false;
 
         modalEl.querySelectorAll('#grn-lines-tbody tr').forEach(tr => {
           const variantId = tr.dataset.variantId;
+          const maxRem = Number(tr.dataset.remaining) || 0;
           const qtyInput = tr.querySelector('.grn-line-qty');
           const qty = Number(qtyInput?.value) || 0;
           if (qty > 0) {
+            if (qty > maxRem) {
+              toast.show(`Quantity cannot exceed pending ${maxRem}.`, 'error');
+              hasError = true;
+              return;
+            }
             lines.push({
               variantId,
-              warehouseQty: qty,
-              officeQty: 0,
+              warehouseQty: selectedWh === 'wh-1' ? qty : 0,
+              officeQty: selectedWh === 'wh-2' ? qty : 0,
               quantity: qty,
               unit: 'PCS'
             });
           }
         });
+
+        if (hasError) return;
 
         if (lines.length === 0) {
           toast.show('Please enter at least one quantity to receive.', 'warning');
@@ -629,7 +722,7 @@ export function openCreateGRNModal(order, onSaved) {
             lines,
             notes
           });
-          toast.show(`Goods Receipt Note ${gp.gatepassNumber} created successfully!`, 'success');
+          toast.show(`Goods Received Note ${gp.gatepassNumber} created successfully!`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {
@@ -643,8 +736,6 @@ export function openCreateGRNModal(order, onSaved) {
 export function printInwardOrderVoucher(order) {
   const variants = productService.getVariants();
   const varMap = new Map(variants.map(v => [v.id, v.name]));
-  const warehouses = storageService.getCollection('warehouses') || [];
-  const whMap = new Map(warehouses.map(w => [w.id, w.name]));
   const linkedGRNs = gatepassService.getGRNsByInwardOrder(order.id);
 
   const printWindow = window.open('', '_blank');
@@ -657,7 +748,7 @@ export function printInwardOrderVoucher(order) {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Inward Order - ${order.orderNumber}</title>
+      <title>Stock Inward Order - ${order.orderNumber}</title>
       <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; color: #1e293b; font-size: 13px; line-height: 1.5; }
         .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
@@ -688,7 +779,8 @@ export function printInwardOrderVoucher(order) {
           <div style="font-size: 11px; color: #475569; margin-top: 4px;">Plot 45-B Industrial Area, Multan Road, Lahore • Tel: +92 300 1234567</div>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: 20px; font-weight: 900; color: #059669;">INWARD ORDER</div>
+          <div style="font-size: 20px; font-weight: 900; color: #059669;">STOCK INWARD ORDER</div>
+          <div style="font-size: 11px; font-weight: 800; color: #64748b;">(DRAFT INWARD GRN)</div>
           <div style="font-size: 13px; font-weight: 800; font-family: monospace;">${order.orderNumber}</div>
           <div style="font-size: 11px; color: #64748b;">Date: ${order.date || 'Today'}</div>
         </div>
@@ -696,16 +788,16 @@ export function printInwardOrderVoucher(order) {
 
       <div class="grid">
         <div class="card">
-          <div class="card-label">Origin / Supplier Information</div>
+          <div class="card-label">Supplier / Origin Information</div>
           <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${order.partyName || 'Supplier / Origin'}</div>
-          <div style="font-size: 11px; color: #475569; margin-top: 2px;">Reference #: <strong>${order.referenceNumber || 'N/A'}</strong></div>
-          <div style="font-size: 11px; color: #475569;">Target Warehouse: <strong>${whMap.get(order.targetWarehouseId) || 'Main Warehouse'}</strong></div>
+          <div style="font-size: 11px; color: #475569; margin-top: 2px;">Carrier / Vehicle: <strong>${order.vehicleNumber || 'Unassigned'}</strong></div>
+          <div style="font-size: 11px; color: #475569;">Driver: <strong>${order.driverName || 'N/A'}</strong> ${order.driverPhone ? `(${order.driverPhone})` : ''}</div>
         </div>
         <div class="card">
-          <div class="card-label">Receipt Status</div>
+          <div class="card-label">Receipt &amp; GRN Status</div>
           <div>Status: <strong>${order.status}</strong></div>
-          <div>Linked GRNs: <strong>${linkedGRNs.length} Goods Receipt Note(s)</strong></div>
-          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Note: Physical stock is received upon Goods Receipt Note (GRN) approval (Stock Receipt).</div>
+          <div>Linked GRNs: <strong>${linkedGRNs.length} GRN(s)</strong></div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Physical stock is increased only upon Goods Received Note (GRN) approval.</div>
         </div>
       </div>
 
@@ -714,10 +806,11 @@ export function printInwardOrderVoucher(order) {
           <tr>
             <th>#</th>
             <th>Item Description</th>
-            <th class="text-center">Expected</th>
-            <th class="text-center">Received</th>
-            <th class="text-center">Pending</th>
-            <th>Item Notes / Specifications</th>
+            <th class="text-center">Receiving to WH</th>
+            <th class="text-center">Receiving to Office</th>
+            <th class="text-center">Expected Qty</th>
+            <th class="text-center">Received (GRN)</th>
+            <th class="text-center">Pending Qty</th>
           </tr>
         </thead>
         <tbody>
@@ -728,11 +821,15 @@ export function printInwardOrderVoucher(order) {
             return `
               <tr>
                 <td>${i + 1}</td>
-                <td><strong>${varMap.get(l.variantId) || 'Product Item'}</strong></td>
-                <td class="text-center"><strong>${exp}</strong> ${l.unit || 'PCS'}</td>
-                <td class="text-center" style="color: #059669; font-weight: 700;">${rec}</td>
-                <td class="text-center" style="color: #2563eb; font-weight: 700;">${rem}</td>
-                <td style="color: #64748b; font-size: 11px;">${l.notes || '—'}</td>
+                <td>
+                  <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
+                  ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
+                </td>
+                <td class="text-center font-mono">${l.warehouseQty || 0}</td>
+                <td class="text-center font-mono">${l.officeQty || 0}</td>
+                <td class="text-center font-mono" style="font-weight: 800;">${exp} ${l.unit || 'PCS'}</td>
+                <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${rec}</td>
+                <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${rem}</td>
               </tr>
             `;
           }).join('')}
@@ -741,7 +838,7 @@ export function printInwardOrderVoucher(order) {
 
       ${order.notes ? `
         <div style="margin-bottom: 20px; font-size: 11px; background: #f0fdf4; border: 1px solid #dcfce7; padding: 10px; border-radius: 6px;">
-          <strong>Receipt Instructions:</strong> ${order.notes}
+          <strong>Receipt Instructions / Notes:</strong> ${order.notes}
         </div>
       ` : ''}
 
@@ -756,7 +853,7 @@ export function printInwardOrderVoucher(order) {
         </div>
         <div>
           <div style="height: 40px;"></div>
-          <div class="sig-line">Transporter / Driver Acknowledgment</div>
+          <div class="sig-line">Transporter / Carrier Acknowledgment</div>
         </div>
       </div>
 
@@ -771,202 +868,641 @@ export function printInwardOrderVoucher(order) {
   printWindow.document.close();
 }
 
+/**
+ * Add Stock Inward Dialog
+ * SAME design and content as Sales Order (previously gatepass), with effect reversed.
+ * Represents draft GRN / incoming demand requirement.
+ */
 function openCreateInwardOrderModal(onSaved) {
-  const warehouses = storageService.getCollection('warehouses') || [];
+  const products = productService.getProducts();
   const variants = productService.getVariants();
+  const staffMembers = staffAuthService.getStaffMembers();
+  const whStaff = staffMembers.filter(s => s.staffType === 'warehouse_staff' || s.activeWarehouseId === 'wh-1');
+  const officeStaff = staffMembers.filter(s => s.staffType === 'office_staff' || s.activeWarehouseId === 'wh-2');
+
+  const renderRowHtml = (variantId = null, whQty = '', offQty = '', rowIdx = 0, initialPackaging = null) => {
+    let selectedVariant = variantId ? variants.find(v => v.id === variantId) || null : null;
+    let selectedProduct = selectedVariant
+      ? products.find(p => p.id === selectedVariant.productId) || products[0]
+      : products[0];
+
+    const prodVariants = selectedProduct
+      ? variants.filter(v => v.productId === selectedProduct.id)
+      : [];
+
+    if (!selectedVariant) {
+      if (prodVariants.length === 1) {
+        selectedVariant = prodVariants[0];
+      } else {
+        selectedVariant = null;
+      }
+    }
+
+    const vId = selectedVariant ? selectedVariant.id : '';
+    const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+    const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS');
+    const packagingUnits = isCtl ? (selectedProduct.packagingUnits || []) : [];
+    const curPackaging = initialPackaging || (packagingUnits.length > 0 ? packagingUnits[0].name : baseUnit);
+
+    const whStock = vId ? inventoryService.getBalance('wh-1', vId) : 0;
+    const officeStock = vId ? inventoryService.getBalance('wh-2', vId) : 0;
+    const wVal = (whQty !== '' && whQty !== null && whQty !== undefined) ? whQty : '';
+    const oVal = (offQty !== '' && offQty !== null && offQty !== undefined) ? offQty : '';
+    const lineTotal = (Number(wVal) || 0) + (Number(oVal) || 0);
+
+    const pickerHtml = renderProductVariantPicker({
+      rowId: `sio-row-${rowIdx}`,
+      selectedProductId: selectedProduct ? selectedProduct.id : null,
+      selectedVariantId: vId || null,
+      products,
+      variants,
+      whStock,
+      officeStock,
+      unit: baseUnit
+    });
+
+    const ctlHtml = `
+      <div class="sio-ctl-container ${isCtl ? '' : 'hidden'} mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 p-2 rounded-xl border border-slate-200/60">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Inward Mode:</span>
+          <select class="sio-item-packaging text-xs font-bold border border-slate-200 rounded-lg px-2.5 py-1 bg-white text-slate-800 focus:outline-none focus:border-emerald-600 shadow-2xs cursor-pointer">
+            ${packagingUnits.map(p => `
+              <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1" ${curPackaging === p.name ? 'selected' : ''}>
+                Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
+              </option>
+            `).join('')}
+            <option value="${baseUnit}" data-factor="1" data-is-roll="0" ${curPackaging === baseUnit ? 'selected' : ''}>
+              ✂️ ${baseUnit} (Loose Cut)
+            </option>
+          </select>
+        </div>
+        <div class="sio-ctl-stock-pill text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
+          <!-- Live physical rolls & loose breakdown -->
+        </div>
+      </div>
+    `;
+
+    return `
+      <tr class="sio-line-row hover:bg-slate-50/70 transition-colors" data-row-index="${rowIdx}">
+        <td class="p-2.5 align-top">
+          ${pickerHtml}
+          ${ctlHtml}
+        </td>
+        <td class="p-2.5 text-center align-top">
+          <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded-lg border border-blue-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+            ${vId ? `WH Stock: ${whStock.toLocaleString()} ${baseUnit}` : 'WH Stock: —'}
+          </span>
+          <input type="number" min="0" value="${wVal}" placeholder="0" class="sio-wh-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-blue-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 py-1.5 px-2 bg-white text-blue-900 shadow-2xs">
+        </td>
+        <td class="p-2.5 text-center align-top">
+          <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded-lg border border-amber-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+            ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${baseUnit}` : 'Office Stock: —'}
+          </span>
+          <input type="number" min="0" value="${oVal}" placeholder="0" class="sio-office-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-amber-200 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 py-1.5 px-2 bg-white text-amber-900 shadow-2xs">
+        </td>
+        <td class="p-2.5 text-right align-top pt-3.5">
+          <span class="sio-total-calc font-black text-slate-900 text-sm">${lineTotal > 0 ? `${lineTotal.toLocaleString()} ${baseUnit}` : '—'}</span>
+        </td>
+        <td class="p-2.5 text-center align-top pt-3">
+          <button type="button" class="sio-remove-row-btn w-8 h-8 inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" title="Remove line item">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </td>
+      </tr>
+    `;
+  };
 
   const contentHtml = `
-    <form id="create-sio-form" class="space-y-5 text-xs">
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+    <form id="create-sio-form" class="space-y-6 text-xs">
+      <!-- SECTION 1: Supplier & Logistics Configuration -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="supplier-and-logistics">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>📥</span>
-            <span>1. Supplier &amp; Origin Details</span>
+            <span>1. Supplier &amp; Logistics Details</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-medium">Generic incoming demand entry</span>
+          <span class="text-[10px] text-slate-400 font-medium">All fields marked with <span class="text-red-500 font-bold">*</span> are required</span>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="sio-party-input">Supplier / Party / Origin <span class="text-red-500">*</span></label>
-            <input type="text" id="sio-party-input" required placeholder="e.g. Qingdao Jinhe or Local Vendor" value="Qingdao Jinhe Poultry Machinery Co." class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <!-- Supplier / Origin Name -->
+          <div class="md:col-span-12 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="sio-party-name">Supplier / Origin Name <span class="text-red-500">*</span></label>
+            <input type="text" id="sio-party-name" required placeholder="Enter Supplier / Vendor / Factory Name" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-emerald-600 focus:ring focus:ring-emerald-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="sio-ref-input">Reference / Consignment #</label>
-            <input type="text" id="sio-ref-input" placeholder="e.g. BL-TXZJ-829104 or PO-102" value="REF-IMPORT-${Date.now().toString().slice(-4)}" class="w-full text-xs font-mono rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+          <!-- Vehicle Number -->
+          <div class="md:col-span-4 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="sio-vehicle">Carrier / Truck Number <span class="text-red-500">*</span></label>
+            <input type="text" id="sio-vehicle" required placeholder="e.g. LES-4029 Truck" value="LES-4029 Truck" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-emerald-600 focus:ring focus:ring-emerald-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="sio-wh-select">Destination Warehouse <span class="text-red-500">*</span></label>
-            <select id="sio-wh-select" class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${warehouses.map(w => `<option value="${w.id}">${w.name} (${w.city || ''})</option>`).join('')}
-            </select>
+          <!-- Driver Name -->
+          <div class="md:col-span-4 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="sio-driver">Driver / Transporter <span class="text-red-500">*</span></label>
+            <input type="text" id="sio-driver" required placeholder="e.g. Tariq Mehmood" value="Tariq Mehmood" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-emerald-600 focus:ring focus:ring-emerald-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+          </div>
+
+          <!-- Driver Phone -->
+          <div class="md:col-span-4 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="sio-driver-phone">Driver Phone</label>
+            <input type="tel" id="sio-driver-phone" placeholder="e.g. +92 345 6789012" value="+92 345 6789012" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-emerald-600 focus:ring focus:ring-emerald-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
         </div>
       </section>
 
-      <!-- Expected Lines Section -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+      <!-- SECTION 2: Inward Items & Target Facility Allocation Table -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="inward-items-section">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <span>📦</span>
-            <span>2. Expected Stock Lines</span>
-          </h3>
-          <button type="button" id="sio-add-line-btn" class="px-3 py-1.5 bg-blue-50 text-[#138FCB] font-bold rounded-xl border border-blue-200 hover:bg-blue-100 text-xs shadow-2xs cursor-pointer">
-            + Add Item Line
-          </button>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <span>📦</span>
+              <span>2. Inward Items &amp; Receiving Allocation (No Rates/Amounts)</span>
+            </h3>
+            <span id="sio-lines-count-badge" class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 text-slate-600">1 Product</span>
+          </div>
+          <span class="text-[10px] text-slate-400 font-medium">Type to search catalog &amp; pick variants</span>
         </div>
 
-        <div class="border border-slate-200/80 rounded-xl overflow-hidden">
+        <!-- Table Container -->
+        <div class="overflow-visible border border-slate-200/80 rounded-xl">
           <table class="w-full text-left text-xs">
-            <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+            <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200/80">
               <tr>
-                <th class="py-2.5 px-3 w-5/12">Product Variant</th>
-                <th class="py-2.5 px-3 text-center w-3/12">Expected Qty</th>
-                <th class="py-2.5 px-3 w-3/12">Notes / Batch #</th>
-                <th class="py-2.5 px-2 text-center w-1/12"></th>
+                <th class="py-3 px-3 w-[62%] font-semibold">Product &amp; Variant SKU Selection</th>
+                <th class="py-3 px-2 w-[13%] font-semibold text-center">Receiving to WH *</th>
+                <th class="py-3 px-2 w-[13%] font-semibold text-center">Receiving to Office *</th>
+                <th class="py-3 px-3 w-[8%] font-semibold text-right">Cargo Qty</th>
+                <th class="py-3 px-2 w-[4%] font-semibold text-center">Action</th>
               </tr>
             </thead>
-            <tbody id="sio-lines-tbody" class="divide-y divide-slate-100">
-              <tr class="sio-line-row">
-                <td class="p-3">
-                  <select class="sio-var-select w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:border-[#138FCB]">
-                    ${variants.map(v => `<option value="${v.id}">${v.name} (${v.sku})</option>`).join('')}
-                  </select>
-                </td>
-                <td class="p-3 text-center">
-                  <input type="number" min="1" value="50" class="sio-qty-input w-24 text-center border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold">
-                </td>
-                <td class="p-3">
-                  <input type="text" placeholder="e.g. Lot 1 inspection" class="sio-notes-input w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700">
-                </td>
-                <td class="p-3 text-center">
-                  <button type="button" class="sio-remove-row text-slate-400 hover:text-rose-600 font-bold p-1 cursor-pointer">✕</button>
-                </td>
-              </tr>
+            <tbody id="sio-items-tbody" class="divide-y divide-slate-100 text-slate-700">
+              ${renderRowHtml(null, '', '', 0)}
             </tbody>
           </table>
         </div>
+
+        <!-- Action Row under Table -->
+        <div class="pt-1">
+          <button type="button" id="add-sio-row-btn" class="inline-flex items-center space-x-2 px-4 py-2.5 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold border border-emerald-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-98">
+            <span class="text-base leading-none font-extrabold">+</span>
+            <span>Add Line Item</span>
+          </button>
+        </div>
       </section>
 
-      <!-- Notes Section -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-        <label class="text-xs font-semibold text-slate-700" for="sio-notes">Order Notes / Expected Delivery Window</label>
-        <textarea id="sio-notes" rows="2" placeholder="Container arrival ETA, offloading bay instructions..." class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] p-3 text-slate-800 bg-white shadow-2xs resize-none"></textarea>
+      <!-- SECTION 3: Dedicated Station Staff Assignment -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="staff-assignment-section">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-2">
+            <span>👥</span>
+            <span>3. Assign Station Floor Staff</span>
+          </h3>
+          <span class="text-[10px] text-slate-400">Staff receive instant mobile alert for unloading &amp; inspection</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Warehouse Staff Group (wh-1) -->
+          <div class="p-3.5 bg-blue-50/40 rounded-xl border border-blue-200/70 space-y-2">
+            <div class="flex items-center justify-between pb-1.5 border-b border-blue-200/60">
+              <span class="text-xs font-bold text-blue-800 flex items-center gap-1.5">
+                <span>📦 Warehouse Floor Staff</span>
+              </span>
+              <span class="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-full border border-blue-200">Main Warehouse (wh-1)</span>
+            </div>
+            <div class="space-y-1.5">
+              ${whStaff.map(staff => `
+                <label class="flex items-center justify-between p-2 bg-white hover:bg-blue-50/60 rounded-xl border border-blue-100 hover:border-blue-300 cursor-pointer transition-all shadow-2xs">
+                  <div class="flex items-center gap-2.5">
+                    <input type="checkbox" name="assignedStaff" value="${staff.id}" checked class="w-4 h-4 rounded text-emerald-600 focus:ring-0">
+                    <div>
+                      <span class="text-xs font-bold text-slate-800">${staff.fullName}</span>
+                      <span class="text-[10px] text-slate-400 block font-mono">PIN: ${staff.pin || '••••'}</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">Active Staff</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Office Staff Group (wh-2) -->
+          <div class="p-3.5 bg-amber-50/40 rounded-xl border border-amber-200/70 space-y-2">
+            <div class="flex items-center justify-between pb-1.5 border-b border-amber-200/60">
+              <span class="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                <span>🏢 Office Floor Staff</span>
+              </span>
+              <span class="text-[10px] font-bold text-amber-700 bg-white px-2 py-0.5 rounded-full border border-amber-200">Office Hub (wh-2)</span>
+            </div>
+            <div class="space-y-1.5">
+              ${officeStaff.map(staff => `
+                <label class="flex items-center justify-between p-2 bg-white hover:bg-amber-50/60 rounded-xl border border-amber-100 hover:border-amber-300 cursor-pointer transition-all shadow-2xs">
+                  <div class="flex items-center gap-2.5">
+                    <input type="checkbox" name="assignedStaff" value="${staff.id}" checked class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+                    <div>
+                      <span class="text-xs font-bold text-slate-800">${staff.fullName}</span>
+                      <span class="text-[10px] text-slate-400 block font-mono">PIN: ${staff.pin || '••••'}</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">Active Staff</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>
       </section>
+
+      <!-- SECTION 4: Bottom Dual Columns (Notes vs Summary) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <!-- Notes -->
+        <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2" data-purpose="terms-and-notes">
+          <label class="text-xs font-semibold text-slate-700" for="sio-notes">Receiving Notes / Quality Instructions</label>
+          <textarea class="w-full text-xs rounded-xl border border-slate-200 focus:border-emerald-600 focus:ring focus:ring-emerald-100 text-slate-700 p-3 resize-none shadow-2xs" id="sio-notes" placeholder="Consignment packing details, batch numbers, inspection checkpoints..." rows="3"></textarea>
+        </div>
+
+        <!-- Summary Breakdown Card -->
+        <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3" data-purpose="totals-summary-card">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 pb-1 border-b border-slate-100">Inward Cargo Summary</h3>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between text-slate-600">
+              <span>Receiving to WH (wh-1)</span>
+              <span id="summary-wh-qty" class="font-bold text-blue-700">0 PCS</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>Receiving to Office (wh-2)</span>
+              <span id="summary-off-qty" class="font-bold text-amber-700">0 PCS</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>Document Type</span>
+              <span class="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded text-[10px]">Stock Inward (Draft GRN)</span>
+            </div>
+          </div>
+
+          <!-- Grand Total Highlight Card -->
+          <div class="mt-4 pt-3 bg-emerald-50/50 -mx-5 -mb-5 p-5 rounded-b-2xl border-t border-emerald-100 flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-emerald-800">Total Inward Cargo</p>
+              <p class="text-[9px] text-slate-400">Does not increase inventory until GRN approval</p>
+            </div>
+            <div class="text-right">
+              <span id="summary-total-qty" class="text-2xl font-black text-slate-900 tracking-tight">0 PCS</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </form>
   `;
 
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Creates Inward Order (No stock movement until GRN verified)</span>
+      <span>🛡️ Creates Stock Inward Order (Draft GRN)</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="sio-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
         Cancel
       </button>
-      <button type="submit" form="create-sio-form" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>Save Inward Order</span>
+      <button type="submit" form="create-sio-form" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
+        <span>Save Stock Inward</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: 'New Inward Order',
-    subtitle: 'Register expected inbound goods demand for warehouse verification and putaway',
-    badge: 'IO-NEW',
+    title: 'Create Stock Inward',
+    subtitle: 'Add incoming stock demand without rates/amounts. Acts as draft GRN convertible to physical GRNs.',
+    badge: 'STOCK INWARD',
     contentHtml,
     footerHtml,
-    size: 'max-w-4xl',
+    size: 'max-w-5xl',
     onOpen: (modalEl) => {
       const cancelBtn = modalEl.querySelector('#sio-cancel-btn');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
-      const tbody = modalEl.querySelector('#sio-lines-tbody');
+      const tbody = modalEl.querySelector('#sio-items-tbody');
+      const addRowBtn = modalEl.querySelector('#add-sio-row-btn');
+      const summaryWh = modalEl.querySelector('#summary-wh-qty');
+      const summaryOff = modalEl.querySelector('#summary-off-qty');
+      const summaryTotal = modalEl.querySelector('#summary-total-qty');
+      const lineCountBadge = modalEl.querySelector('#sio-lines-count-badge');
+      let rowCounter = 1;
+
+      const updateRowCalculations = (row) => {
+        const varInput = row.querySelector('.pv-var-input');
+        const whIndicator = row.querySelector('.wh-stock-indicator');
+        const offIndicator = row.querySelector('.office-stock-indicator');
+        const whQtyInput = row.querySelector('.sio-wh-qty');
+        const offQtyInput = row.querySelector('.sio-office-qty');
+        const totalDisplay = row.querySelector('.sio-total-calc');
+        const ctlContainer = row.querySelector('.sio-ctl-container');
+        const packagingSelect = row.querySelector('.sio-item-packaging');
+        const ctlStockPill = row.querySelector('.sio-ctl-stock-pill');
+
+        const vId = varInput ? varInput.value : '';
+        if (!vId) {
+          if (whIndicator) whIndicator.textContent = 'WH Stock: —';
+          if (offIndicator) offIndicator.textContent = 'Office Stock: —';
+          if (totalDisplay) totalDisplay.textContent = '—';
+          if (ctlContainer) ctlContainer.classList.add('hidden');
+          return;
+        }
+
+        const selectedVariant = variants.find(v => v.id === vId);
+        const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+        const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+        const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+
+        if (isCtl && ctlContainer && packagingSelect) {
+          ctlContainer.classList.remove('hidden');
+
+          const packagingUnits = selectedProduct.packagingUnits || [];
+          const currentVal = packagingSelect.value;
+          const existingOptions = Array.from(packagingSelect.options).map(o => o.value);
+          const expectedValues = [...packagingUnits.map(p => p.name), baseUnit];
+          const isSame = existingOptions.length === expectedValues.length && existingOptions.every((v, idx) => v === expectedValues[idx]);
+
+          if (!isSame) {
+            packagingSelect.innerHTML = `
+              ${packagingUnits.map(p => `
+                <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1">
+                  Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
+                </option>
+              `).join('')}
+              <option value="${baseUnit}" data-factor="1" data-is-roll="0">
+                ✂️ ${baseUnit} (Loose Cut)
+              </option>
+            `;
+            if (currentVal && expectedValues.includes(currentVal)) {
+              packagingSelect.value = currentVal;
+            }
+          }
+
+          const selectedOption = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
+          const isRoll = selectedOption?.getAttribute('data-is-roll') === '1';
+          const rollFactor = Number(selectedOption?.getAttribute('data-factor')) || 1;
+          const packName = selectedOption?.value || baseUnit;
+
+          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1', vId);
+          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2', vId);
+
+          if (ctlStockPill && whSummary) {
+            ctlStockPill.innerHTML = `
+              <span class="font-bold text-[#138FCB]">WH:</span> ${whSummary.fullRollsCount} rolls + ${whSummary.loosePiecesFootage.toLocaleString()} ${baseUnit} loose | <span class="font-bold text-amber-700">Office:</span> ${offSummary?.fullRollsCount || 0} rolls + ${(offSummary?.loosePiecesFootage || 0).toLocaleString()} ${baseUnit}
+            `;
+          }
+
+          if (isRoll) {
+            const whRollMatch = (whSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
+            const offRollMatch = (offSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
+            const whRollCount = whRollMatch ? whRollMatch.count : 0;
+            const offRollCount = offRollMatch ? offRollMatch.count : 0;
+
+            if (whIndicator) whIndicator.textContent = `WH: ${whRollCount} Full Rolls (${packName})`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offRollCount} Full Rolls (${packName})`;
+            if (whQtyInput) whQtyInput.placeholder = '0 Rolls';
+            if (offQtyInput) offQtyInput.placeholder = '0 Rolls';
+          } else {
+            const whLoose = whSummary ? whSummary.loosePiecesFootage : 0;
+            const whTotal = whSummary ? whSummary.totalFootage : 0;
+            const offLoose = offSummary ? offSummary.loosePiecesFootage : 0;
+            const offTotal = offSummary ? offSummary.totalFootage : 0;
+
+            if (whIndicator) whIndicator.textContent = `WH: ${whLoose.toLocaleString()} ${baseUnit} Loose (${whTotal.toLocaleString()} ${baseUnit} Total)`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offLoose.toLocaleString()} ${baseUnit} Loose (${offTotal.toLocaleString()} ${baseUnit} Total)`;
+            if (whQtyInput) whQtyInput.placeholder = `0 ${baseUnit}`;
+            if (offQtyInput) offQtyInput.placeholder = `0 ${baseUnit}`;
+          }
+
+          const rawW = whQtyInput ? whQtyInput.value.trim() : '';
+          const rawO = offQtyInput ? offQtyInput.value.trim() : '';
+          const wQty = Number(rawW) || 0;
+          const oQty = Number(rawO) || 0;
+          const lineTotal = wQty + oQty;
+
+          if (!rawW && !rawO) {
+            if (totalDisplay) totalDisplay.textContent = '—';
+          } else {
+            if (isRoll) {
+              const totalFeet = lineTotal * rollFactor;
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal} Roll${lineTotal > 1 ? 's' : ''}</span> <span class="text-[10px] text-slate-500 font-semibold block">(${totalFeet.toLocaleString()} ${baseUnit})</span>`;
+            } else {
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(Loose Cut)</span>`;
+            }
+          }
+        } else {
+          if (ctlContainer) ctlContainer.classList.add('hidden');
+          const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : 'PCS';
+          const wStock = inventoryService.getBalance('wh-1', vId);
+          const oStock = inventoryService.getBalance('wh-2', vId);
+
+          if (whIndicator) whIndicator.textContent = `WH Stock: ${wStock.toLocaleString()} ${unit}`;
+          if (offIndicator) offIndicator.textContent = `Office Stock: ${oStock.toLocaleString()} ${unit}`;
+          if (whQtyInput) whQtyInput.placeholder = '0';
+          if (offQtyInput) offQtyInput.placeholder = '0';
+
+          const rawW = whQtyInput ? whQtyInput.value.trim() : '';
+          const rawO = offQtyInput ? offQtyInput.value.trim() : '';
+          const wQty = Number(rawW) || 0;
+          const oQty = Number(rawO) || 0;
+          const lineTotal = wQty + oQty;
+          if (!rawW && !rawO) {
+            if (totalDisplay) totalDisplay.textContent = '—';
+          } else {
+            if (totalDisplay) totalDisplay.textContent = `${lineTotal.toLocaleString()} ${unit}`;
+          }
+        }
+      };
+
+      const updateSummaryTotals = () => {
+        const rows = tbody.querySelectorAll('.sio-line-row');
+        let totalWh = 0;
+        let totalOff = 0;
+
+        rows.forEach(row => {
+          const whQty = Number(row.querySelector('.sio-wh-qty')?.value) || 0;
+          const offQty = Number(row.querySelector('.sio-office-qty')?.value) || 0;
+          totalWh += whQty;
+          totalOff += offQty;
+        });
+
+        const grandTotal = totalWh + totalOff;
+        if (summaryWh) summaryWh.textContent = totalWh > 0 ? `${totalWh.toLocaleString()} Cargo Units` : '0 Units';
+        if (summaryOff) summaryOff.textContent = totalOff > 0 ? `${totalOff.toLocaleString()} Cargo Units` : '0 Units';
+        if (summaryTotal) summaryTotal.textContent = grandTotal > 0 ? `${grandTotal.toLocaleString()} Cargo Units` : '0 Units';
+        if (lineCountBadge) lineCountBadge.textContent = `${rows.length} Product${rows.length > 1 ? 's' : ''}`;
+
+        const removeBtns = tbody.querySelectorAll('.sio-remove-row-btn');
+        removeBtns.forEach(btn => {
+          if (rows.length <= 1) {
+            btn.classList.add('opacity-30', 'cursor-not-allowed');
+            btn.setAttribute('disabled', 'true');
+          } else {
+            btn.classList.remove('opacity-30', 'cursor-not-allowed');
+            btn.removeAttribute('disabled');
+          }
+        });
+      };
 
       const bindRowEvents = (row) => {
-        const removeBtn = row.querySelector('.sio-remove-row');
+        const pickerContainer = row.querySelector('.pv-picker-container');
+        if (pickerContainer) {
+          bindProductVariantPicker(pickerContainer, {
+            products,
+            variants,
+            onVariantChanged: () => {
+              updateRowCalculations(row);
+              updateSummaryTotals();
+            }
+          });
+        }
+
+        const packagingSelect = row.querySelector('.sio-item-packaging');
+        if (packagingSelect) {
+          packagingSelect.onchange = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
+          };
+        }
+
+        const whQtyInput = row.querySelector('.sio-wh-qty');
+        const offQtyInput = row.querySelector('.sio-office-qty');
+        const removeBtn = row.querySelector('.sio-remove-row-btn');
+
+        if (whQtyInput) {
+          whQtyInput.oninput = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
+          };
+        }
+
+        if (offQtyInput) {
+          offQtyInput.oninput = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
+          };
+        }
+
         if (removeBtn) {
           removeBtn.onclick = () => {
-            if (tbody.querySelectorAll('.sio-line-row').length > 1) {
+            const rows = tbody.querySelectorAll('.sio-line-row');
+            if (rows.length > 1) {
               row.remove();
-            } else {
-              toast.show('Inward order must have at least one line item.', 'warning');
+              updateSummaryTotals();
             }
           };
         }
       };
 
-      tbody.querySelectorAll('.sio-line-row').forEach(bindRowEvents);
+      const appendNewRow = (variantId = null, whQty = '', offQty = '') => {
+        rowCounter++;
+        const tempDiv = document.createElement('tbody');
+        tempDiv.innerHTML = renderRowHtml(variantId, whQty, offQty, rowCounter);
+        const newRow = tempDiv.firstElementChild;
+        tbody.appendChild(newRow);
+        bindRowEvents(newRow);
+        updateRowCalculations(newRow);
+        updateSummaryTotals();
+        return newRow;
+      };
 
-      const addLineBtn = modalEl.querySelector('#sio-add-line-btn');
-      if (addLineBtn) {
-        addLineBtn.onclick = () => {
-          const tr = document.createElement('tr');
-          tr.className = 'sio-line-row';
-          tr.innerHTML = `
-            <td class="p-3">
-              <select class="sio-var-select w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:border-[#138FCB]">
-                ${variants.map(v => `<option value="${v.id}">${v.name} (${v.sku})</option>`).join('')}
-              </select>
-            </td>
-            <td class="p-3 text-center">
-              <input type="number" min="1" value="20" class="sio-qty-input w-24 text-center border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold">
-            </td>
-            <td class="p-3">
-              <input type="text" placeholder="e.g. Lot notes" class="sio-notes-input w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700">
-            </td>
-            <td class="p-3 text-center">
-              <button type="button" class="sio-remove-row text-slate-400 hover:text-rose-600 font-bold p-1 cursor-pointer">✕</button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-          bindRowEvents(tr);
+      // Initial row binding
+      tbody.querySelectorAll('.sio-line-row').forEach(row => {
+        bindRowEvents(row);
+        updateRowCalculations(row);
+      });
+      updateSummaryTotals();
+
+      if (addRowBtn) {
+        addRowBtn.onclick = () => {
+          const existingIds = new Set(Array.from(tbody.querySelectorAll('.pv-var-input')).map(s => s.value));
+          const nextUnused = variants.find(v => !existingIds.has(v.id)) || variants[0];
+          appendNewRow(nextUnused ? nextUnused.id : null, '', '');
         };
       }
 
-      const form = modalEl.querySelector('#create-sio-form');
-      if (form) {
-        form.onsubmit = (e) => {
-          e.preventDefault();
-          const partyName = modalEl.querySelector('#sio-party-input').value.trim();
-          const referenceNumber = modalEl.querySelector('#sio-ref-input').value.trim();
-          const targetWarehouseId = modalEl.querySelector('#sio-wh-select').value;
-          const notes = modalEl.querySelector('#sio-notes').value.trim();
+      // Form submit
+      modalEl.querySelector('#create-sio-form').onsubmit = (e) => {
+        e.preventDefault();
+        const partyName = modalEl.querySelector('#sio-party-name').value.trim();
+        const vehicleNumber = modalEl.querySelector('#sio-vehicle').value.trim();
+        const driverName = modalEl.querySelector('#sio-driver').value.trim();
+        const driverPhone = modalEl.querySelector('#sio-driver-phone').value.trim();
+        const notes = modalEl.querySelector('#sio-notes').value.trim();
 
-          const lines = [];
-          tbody.querySelectorAll('.sio-line-row').forEach(row => {
-            const variantId = row.querySelector('.sio-var-select').value;
-            const expectedQty = Number(row.querySelector('.sio-qty-input').value) || 0;
-            const lineNotes = row.querySelector('.sio-notes-input').value.trim();
-            if (expectedQty > 0) {
-              lines.push({ variantId, expectedQty, notes: lineNotes });
+        const assignedStaffIds = Array.from(modalEl.querySelectorAll('input[name="assignedStaff"]:checked'))
+          .map(cb => cb.value);
+
+        const rows = tbody.querySelectorAll('.sio-line-row');
+        const lines = [];
+
+        rows.forEach(row => {
+          const varInput = row.querySelector('.pv-var-input');
+          const variantId = varInput ? varInput.value : '';
+          const selectedVariant = variants.find(v => v.id === variantId);
+          const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+          const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+          const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+
+          const warehouseQty = Number(row.querySelector('.sio-wh-qty')?.value) || 0;
+          const officeQty = Number(row.querySelector('.sio-office-qty')?.value) || 0;
+          const totalQty = warehouseQty + officeQty;
+
+          if (variantId && totalQty > 0) {
+            const packagingSelect = row.querySelector('.sio-item-packaging');
+            let packagingName = null;
+            let isRoll = false;
+            let rollSize = null;
+            let totalFeet = null;
+
+            if (isCtl && packagingSelect) {
+              const selectedOpt = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
+              isRoll = selectedOpt?.getAttribute('data-is-roll') === '1';
+              rollSize = Number(selectedOpt?.getAttribute('data-factor')) || 1;
+              packagingName = selectedOpt?.value || baseUnit;
+              totalFeet = isRoll ? totalQty * rollSize : totalQty;
             }
-          });
 
-          if (lines.length === 0) {
-            toast.show('Please enter at least one expected item with quantity.', 'warning');
-            return;
-          }
-
-          try {
-            const sio = inwardOrderService.createInwardOrder({
-              partyName,
-              referenceNumber,
-              targetWarehouseId,
-              notes,
-              lines
+            lines.push({
+              variantId,
+              warehouseQty,
+              officeQty,
+              expectedQty: totalQty,
+              receivedQty: 0,
+              remainingQty: totalQty,
+              unit: isCtl ? (isRoll ? packagingName : baseUnit) : (selectedVariant?.unit || 'PCS'),
+              packagingName: isCtl ? packagingName : null,
+              isRoll,
+              rollSize,
+              totalFeet
             });
-            toast.show(`Inward Order ${sio.orderNumber} created!`, 'success');
-            closeModal();
-            if (onSaved) onSaved();
-          } catch (err) {
-            toast.show(err.message, 'error');
           }
-        };
-      }
+        });
+
+        if (lines.length === 0) {
+          toast.show('Please allocate at least one product with quantity > 0.', 'error');
+          return;
+        }
+
+        try {
+          const io = inwardOrderService.createInwardOrder({
+            partyName,
+            vehicleNumber,
+            driverName,
+            driverPhone,
+            assignedStaffIds,
+            notes,
+            lines,
+            targetWarehouseId: 'wh-1'
+          });
+          toast.show(`Stock Inward ${io.orderNumber} created! This draft GRN can now be converted to GRN.`, 'success');
+          closeModal();
+          if (onSaved) onSaved();
+        } catch (err) {
+          toast.show(err.message, 'error');
+        }
+      };
     }
   });
 }

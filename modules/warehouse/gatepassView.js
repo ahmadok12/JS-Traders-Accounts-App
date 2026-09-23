@@ -10,6 +10,7 @@
 
 import { gatepassService } from '../../services/gatepassService.js';
 import { salesService } from '../../services/salesService.js';
+import { inwardOrderService } from '../../services/inwardOrderService.js';
 import { warehouseService } from '../../services/warehouseService.js';
 import { productService } from '../../services/productService.js';
 import { inventoryService } from '../../services/inventoryService.js';
@@ -24,8 +25,14 @@ import { confirmAction } from '../../components/confirmation.js';
 import { renderProductVariantPicker, bindProductVariantPicker } from '../../components/searchableSelect.js';
 import { toast } from '../../components/toast.js';
 
-export function renderGatepassView() {
-  const gatepasses = gatepassService.getGatepasses();
+export function renderGatepassView(direction = 'all') {
+  let gatepasses = gatepassService.getGatepasses();
+  if (direction === 'outward') {
+    gatepasses = gatepasses.filter(gp => gp.gatepassType !== 'inward');
+  } else if (direction === 'inward') {
+    gatepasses = gatepasses.filter(gp => gp.gatepassType === 'inward');
+  }
+
   const parties = salesService.getParties(true);
   const warehouses = warehouseService.getWarehouses();
   const partyMap = new Map(parties.map(p => [p.id, p.name]));
@@ -34,8 +41,12 @@ export function renderGatepassView() {
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search delivery notes & GRNs by number, party, vehicle...',
-    dropdowns: [
+    searchPlaceholder: direction === 'outward'
+      ? 'Search GDNs by gatepass #, customer, vehicle, driver...'
+      : direction === 'inward'
+      ? 'Search GRNs by document #, supplier, vehicle, driver...'
+      : 'Search delivery notes & GRNs by number, party, vehicle...',
+    dropdowns: direction === 'all' ? [
       {
         id: 'gp-type-filter',
         label: 'Direction',
@@ -46,9 +57,11 @@ export function renderGatepassView() {
           { value: 'inward', label: 'Goods Receipt Notes (Inward)' }
         ]
       }
-    ],
-    primaryAction: { label: '+ Create Delivery Note' },
-    secondaryAction: { label: 'Generate from Sales Invoice', icon: '🧾' }
+    ] : [],
+    primaryAction: {
+      label: direction === 'outward' ? '+ Create GDN' : direction === 'inward' ? '+ Create GRN' : '+ Create Delivery Note'
+    },
+    secondaryAction: direction !== 'inward' ? { label: 'Generate from Sales Invoice', icon: '🧾' } : null
   });
 
   const columns = [
@@ -162,14 +175,19 @@ export function renderGatepassView() {
   ];
 
   const actions = [
-    { label: 'View Draft', variant: 'secondary', onClick: (row) => openGatepassDetailModal(row) }
+    { label: 'View', variant: 'secondary', onClick: (row) => openGatepassDetailModal(row) },
+    { label: row => row.gatepassType === 'inward' ? 'Print GRN' : 'Print Gatepass', variant: 'secondary', onClick: (row) => printGatepassVoucher(row) }
   ];
 
   const tableHtml = renderTable({
     columns,
     data: gatepasses,
     actions,
-    emptyMessage: 'No delivery notes or goods receipt notes issued.'
+    emptyMessage: direction === 'outward'
+      ? 'No goods dispatch notes (GDNs) issued yet.'
+      : direction === 'inward'
+      ? 'No goods received notes (GRNs) issued yet.'
+      : 'No delivery notes or goods receipt notes issued.'
   });
 
   return `
@@ -182,7 +200,7 @@ export function renderGatepassView() {
   `;
 }
 
-export function bindGatepassEvents(container, refreshCallback) {
+export function bindGatepassEvents(container, refreshCallback, direction = 'all') {
   const addBtn = container.querySelector('#filter-primary-btn');
   if (addBtn) {
     addBtn.onclick = () => openCreateGatepassModal(refreshCallback);
@@ -193,9 +211,16 @@ export function bindGatepassEvents(container, refreshCallback) {
     secBtn.onclick = () => openGenerateGatepassFromInvoiceModal(refreshCallback);
   }
 
-  const gatepasses = gatepassService.getGatepasses();
+  let gatepasses = gatepassService.getGatepasses();
+  if (direction === 'outward') {
+    gatepasses = gatepasses.filter(gp => gp.gatepassType !== 'inward');
+  } else if (direction === 'inward') {
+    gatepasses = gatepasses.filter(gp => gp.gatepassType === 'inward');
+  }
+
   const actions = [
-    { label: 'View', variant: 'secondary', onClick: (row) => openGatepassDetailModal(row, refreshCallback) }
+    { label: 'View', variant: 'secondary', onClick: (row) => openGatepassDetailModal(row, refreshCallback) },
+    { label: row => row.gatepassType === 'inward' ? 'Print GRN' : 'Print Gatepass', variant: 'secondary', onClick: (row) => printGatepassVoucher(row) }
   ];
   bindTableActions(container, actions, gatepasses);
 
@@ -204,7 +229,7 @@ export function bindGatepassEvents(container, refreshCallback) {
 
   const applyFilters = () => {
     const q = container.querySelector('#filter-search-input')?.value.toLowerCase().trim() || '';
-    const typeFilter = container.querySelector('#gp-type-filter')?.value || 'all';
+    const typeFilter = container.querySelector('#gp-type-filter')?.value || direction;
 
     const filtered = gatepasses.filter(gp => {
       if (typeFilter === 'outward' && gp.gatepassType === 'inward') return false;
@@ -1369,6 +1394,9 @@ function openGatepassDetailModal(gatepass, onSaved) {
         <button id="gp-detail-close-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors border border-slate-300 cursor-pointer">
           Close
         </button>
+        <button id="gp-detail-print-btn" type="button" class="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-all cursor-pointer shadow-2xs">
+          <span>🖨️ ${gatepass.gatepassType === 'inward' ? 'Print GRN' : 'Print Gatepass'}</span>
+        </button>
         ${!isApproved && gatepass.status !== 'Voided' ? `
           <button id="gp-approve-btn" type="button" class="inline-flex items-center space-x-2 px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm hover:shadow transition-all active:scale-[0.98] cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1398,6 +1426,11 @@ function openGatepassDetailModal(gatepass, onSaved) {
     onOpen: (modalEl) => {
       const closeBtn = modalEl.querySelector('#gp-detail-close-btn');
       if (closeBtn) closeBtn.onclick = () => closeModal();
+
+      const printBtn = modalEl.querySelector('#gp-detail-print-btn');
+      if (printBtn) {
+        printBtn.onclick = () => printGatepassVoucher(gatepass);
+      }
 
       // Edit Gatepass handlers (header and card)
       const handleEdit = () => {
@@ -1544,4 +1577,156 @@ function openPhotoLightbox(dataUrl) {
       el.querySelector('#close-lightbox-btn').onclick = () => closeModal();
     }
   });
+}
+
+export function printGatepassVoucher(gatepass) {
+  const isInward = gatepass.gatepassType === 'inward';
+  const parties = salesService.getParties(true);
+  const partyMap = new Map(parties.map(p => [p.id, p.name]));
+  const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v.name]));
+  const so = gatepass.salesOrderId ? salesService.getSalesOrderById(gatepass.salesOrderId) : null;
+  const io = gatepass.inwardOrderId ? inwardOrderService.getInwardOrderById(gatepass.inwardOrderId) : null;
+
+  const title = isInward ? 'GOODS RECEIPT NOTE (GRN)' : 'GATEPASS';
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    toast.show('Pop-up blocked. Please allow pop-ups to print voucher.', 'warning');
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title} - ${gatepass.gatepassNumber}</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; color: #1e293b; font-size: 13px; line-height: 1.5; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
+        .title { font-size: 24px; font-weight: 900; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
+        .subtitle { font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+        .card-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+        th { background: #0f172a; color: white; font-size: 10px; text-transform: uppercase; padding: 8px 10px; text-align: left; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 8px 10px; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-mono { font-family: monospace; }
+        .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 15px; margin-top: 50px; text-align: center; }
+        .sig-line { border-top: 1px dashed #94a3b8; padding-top: 6px; font-size: 10px; font-weight: 700; color: #475569; }
+        @media print {
+          body { margin: 10mm; }
+          button { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div>
+          <div class="title">JS TRADERS</div>
+          <div class="subtitle">Poultry Equipment &amp; Automation Shed Engineering</div>
+          <div style="font-size: 11px; color: #475569; margin-top: 4px;">Plot 45-B Industrial Area, Multan Road, Lahore • Tel: +92 300 1234567</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 22px; font-weight: 900; color: ${isInward ? '#059669' : '#138FCB'}; letter-spacing: 0.5px;">${title}</div>
+          <div style="font-size: 13px; font-weight: 800; font-family: monospace;">${gatepass.gatepassNumber}</div>
+          <div style="font-size: 11px; color: #64748b;">Date: ${gatepass.date || 'Today'}</div>
+          ${so ? `<div style="font-size: 11px; font-weight: bold; color: #2563eb; margin-top: 2px;">SO Ref: ${so.orderNumber}</div>` : ''}
+          ${io ? `<div style="font-size: 11px; font-weight: bold; color: #059669; margin-top: 2px;">Inward Order Ref: ${io.orderNumber}</div>` : ''}
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="card-label">${isInward ? 'Supplier / Origin Information' : 'Customer / Destination Information'}</div>
+          <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${gatepass.customerName || partyMap.get(gatepass.customerPartyId) || (isInward ? 'Supplier' : 'Customer')}</div>
+          ${gatepass.farmId ? `<div style="font-size: 11px; color: #475569; margin-top: 2px;">Site / Farm: <strong>${gatepass.farmId}</strong></div>` : ''}
+          <div style="font-size: 11px; color: #475569; margin-top: 2px;">Vehicle / Truck #: <strong>${gatepass.vehicleNumber || 'Unassigned'}</strong></div>
+          <div style="font-size: 11px; color: #475569;">Driver: <strong>${gatepass.driverName || 'N/A'}</strong> ${gatepass.driverPhone ? `(${gatepass.driverPhone})` : ''}</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Logistics &amp; Workflow Status</div>
+          <div>Movement Type: <strong>${isInward ? 'Inward Receiving (+ Stock Receipt)' : 'Outward Dispatch (- Stock Issue)'}</strong></div>
+          <div>Status: <strong>${gatepass.status}</strong></div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Verified equipment cargo movement authorization pass.</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Item Description</th>
+            <th class="text-center">${isInward ? 'Receiving WH' : 'Dispatched WH'}</th>
+            <th class="text-center">${isInward ? 'Receiving Office' : 'Dispatched Office'}</th>
+            <th class="text-right">Total Cargo Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(gatepass.lines || []).map((l, i) => {
+            const whQ = Number(l.warehouseQty) || 0;
+            const offQ = Number(l.officeQty) || 0;
+            const totQ = Number(l.quantity) || (whQ + offQ);
+            return `
+              <tr>
+                <td>${i + 1}</td>
+                <td>
+                  <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
+                  ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
+                  ${l.notes ? `<div style="font-size: 10px; color: #64748b;">${l.notes}</div>` : ''}
+                </td>
+                <td class="text-center font-mono">${whQ}</td>
+                <td class="text-center font-mono">${offQ}</td>
+                <td class="text-right font-mono" style="font-weight: 800; font-size: 13px;">${totQ} ${l.unit || 'PCS'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4" class="text-right" style="font-weight: 800; font-size: 12px; padding: 10px;">TOTAL VERIFIED CARGO UNITS:</td>
+            <td class="text-right font-mono" style="font-size: 14px; font-weight: 900; color: #0f172a; padding: 10px;">
+              ${(gatepass.lines || []).reduce((s, l) => s + (Number(l.quantity) || (Number(l.warehouseQty || 0) + Number(l.officeQty || 0))), 0)} Units
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      ${gatepass.notes ? `
+        <div style="margin-bottom: 20px; font-size: 11px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 6px;">
+          <strong>Gate Instructions / Cargo Notes:</strong> ${gatepass.notes}
+        </div>
+      ` : ''}
+
+      <div class="signatures">
+        <div>
+          <div style="height: 40px;"></div>
+          <div class="sig-line">Prepared By (Warehouse Staff)</div>
+        </div>
+        <div>
+          <div style="height: 40px;"></div>
+          <div class="sig-line">Approved By (Warehouse Incharge)</div>
+        </div>
+        <div>
+          <div style="height: 40px;"></div>
+          <div class="sig-line">Security Gate (In/Out Clearance)</div>
+        </div>
+        <div>
+          <div style="height: 40px;"></div>
+          <div class="sig-line">${isInward ? 'Supplier / Carrier Signature' : 'Driver / Receiver Signature'}</div>
+        </div>
+      </div>
+
+      <script>
+        window.onload = function() {
+          window.print();
+        };
+      </script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
 }

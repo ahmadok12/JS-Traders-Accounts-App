@@ -3,30 +3,37 @@
  * 
  * Core Design Principles:
  * 1. Renamed from Gatepass Outward Voucher to Sales Order.
- * 2. Represents the customer's complete requirements (created by Warehouse Manager or Sales).
+ * 2. Represents the customer's complete requirements / draft gatepass (without rate and amount).
  * 3. Does NOT reduce physical warehouse inventory upon creation.
- * 4. Each line tracks independently: Ordered Qty, Delivered Qty, Remaining Delivery Qty, Invoiced Qty, Remaining Invoice Qty.
- * 5. Primary action [Create GDN / Gatepass] creates partial/full GDN with remaining quantities.
- * 6. Full traceability of all linked GDNs per Sales Order.
+ * 4. Each line tracks independently: Ordered Qty, Delivered Qty, Remaining Delivery Qty.
+ * 5. Primary action [Convert to GDN] generates physical Delivery Note / GDN.
+ * 6. In case of partial delivery, multiple GDNs belong to one Sales Order.
+ * 7. The printed document of a GDN is titled "GATEPASS".
  */
 
 import { salesService } from '../../services/salesService.js';
 import { productService } from '../../services/productService.js';
 import { gatepassService } from '../../services/gatepassService.js';
+import { inventoryService } from '../../services/inventoryService.js';
+import { cutToLengthService } from '../../services/cutToLengthService.js';
+import { staffAuthService } from '../../services/staffAuthService.js';
 import { storageService } from '../../services/storageService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
+import { renderProductVariantPicker, bindProductVariantPicker } from '../../components/searchableSelect.js';
 import { toast } from '../../components/toast.js';
 
 export function renderSalesOrdersView() {
   const orders = salesService.getSalesOrders();
   const parties = salesService.getParties(true);
   const partyMap = new Map(parties.map(p => [p.id, p.name]));
+  const users = storageService.getCollection('users') || [];
+  const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search orders by SO #, customer name, notes...',
+    searchPlaceholder: 'Search orders by SO #, customer name, vehicle, notes...',
     dropdowns: [
       {
         id: 'so-status-filter',
@@ -49,7 +56,12 @@ export function renderSalesOrdersView() {
     {
       key: 'orderNumber',
       label: 'Order #',
-      render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>`
+      render: row => `
+        <div>
+          <span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>
+          <div class="text-[9px] font-bold text-slate-400 mt-0.5">DRAFT GATEPASS</div>
+        </div>
+      `
     },
     {
       key: 'customerPartyId',
@@ -57,7 +69,7 @@ export function renderSalesOrdersView() {
       render: row => `
         <div>
           <div class="font-bold text-slate-800">${partyMap.get(row.customerPartyId) || row.customerName || 'Customer'}</div>
-          <div class="text-[10px] text-slate-400 font-mono">Date: ${row.date || 'Today'}</div>
+          <div class="text-[10px] text-slate-400 font-mono">Date: ${row.date || 'Today'} ${row.vehicleNumber ? `• ${row.vehicleNumber}` : ''}</div>
         </div>
       `
     },
@@ -89,28 +101,46 @@ export function renderSalesOrdersView() {
       }
     },
     {
-      key: 'invoicedProgress',
-      label: 'Invoicing',
+      key: 'locationBreakdown',
+      label: 'Demand Breakdown',
       render: row => {
-        let totalOrd = 0;
-        let totalInv = 0;
+        let totalWh = 0;
+        let totalOff = 0;
         (row.lines || []).forEach(l => {
-          totalOrd += (Number(l.orderedQty) || 0);
-          totalInv += (Number(l.invoicedQty) || 0);
+          totalWh += (Number(l.warehouseQty) || 0);
+          totalOff += (Number(l.officeQty) || 0);
         });
         return `
-          <div class="text-center">
-            <span class="px-2 py-0.5 rounded-lg text-[10px] font-semibold ${totalInv >= totalOrd && totalOrd > 0 ? 'bg-emerald-50 text-emerald-700' : totalInv > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}">
-              ${totalInv} / ${totalOrd} Inv
-            </span>
+          <div class="text-xs space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
+            </div>
           </div>
         `;
       }
     },
     {
-      key: 'total',
-      label: 'Contract Total',
-      render: row => `<span class="font-extrabold text-slate-900 font-mono">Rs. ${Number(row.total || 0).toLocaleString()}</span>`
+      key: 'assignedStaff',
+      label: 'Assigned Staff',
+      render: row => {
+        const staffIds = row.assignedStaffIds || [];
+        if (staffIds.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">Unassigned</span>`;
+        }
+        return `
+          <div class="flex flex-wrap gap-1">
+            ${staffIds.map(id => {
+              const staff = userMap.get(id) || 'Staff';
+              return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${staff}</span>`;
+            }).join('')}
+          </div>
+        `;
+      }
     },
     {
       key: 'status',
@@ -131,7 +161,7 @@ export function renderSalesOrdersView() {
 
   const actions = [
     { label: 'View', variant: 'secondary' },
-    { label: 'Create Delivery Note', variant: 'primary' },
+    { label: 'Convert to GDN', variant: 'primary' },
     { label: 'Print Voucher', variant: 'secondary' }
   ];
 
@@ -161,7 +191,7 @@ export function bindSalesOrdersEvents(container, refreshCallback) {
   const orders = salesService.getSalesOrders();
   const actions = [
     { label: 'View', variant: 'secondary', onClick: (row) => openOrderDetailModal(row, refreshCallback) },
-    { label: 'Create Delivery Note', variant: 'primary', onClick: (row) => openCreateDeliveryNoteModal(row, refreshCallback) },
+    { label: 'Convert to GDN', variant: 'primary', onClick: (row) => openCreateDeliveryNoteModal(row, refreshCallback) },
     { label: 'Print Voucher', variant: 'secondary', onClick: (row) => printSalesOrderVoucher(row) }
   ];
   bindTableActions(container, actions, orders);
@@ -175,6 +205,9 @@ export function bindSalesOrdersEvents(container, refreshCallback) {
       const filtered = orders.filter(o =>
         (o.orderNumber && o.orderNumber.toLowerCase().includes(q)) ||
         (o.notes && o.notes.toLowerCase().includes(q)) ||
+        (o.vehicleNumber && o.vehicleNumber.toLowerCase().includes(q)) ||
+        (o.driverName && o.driverName.toLowerCase().includes(q)) ||
+        (o.customerName && o.customerName.toLowerCase().includes(q)) ||
         (partyMap.get(o.customerPartyId) && partyMap.get(o.customerPartyId).toLowerCase().includes(q))
       );
       updateOrdersTable(container, filtered, refreshCallback);
@@ -197,16 +230,27 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
 
   const parties = salesService.getParties(true);
   const partyMap = new Map(parties.map(p => [p.id, p.name]));
+  const users = storageService.getCollection('users') || [];
+  const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const columns = [
-    { key: 'orderNumber', label: 'Order #', render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>` },
+    {
+      key: 'orderNumber',
+      label: 'Order #',
+      render: row => `
+        <div>
+          <span class="font-bold text-[#138FCB] font-mono">${row.orderNumber}</span>
+          <div class="text-[9px] font-bold text-slate-400 mt-0.5">DRAFT GATEPASS</div>
+        </div>
+      `
+    },
     {
       key: 'customerPartyId',
       label: 'Customer / Destination',
       render: row => `
         <div>
           <div class="font-bold text-slate-800">${partyMap.get(row.customerPartyId) || row.customerName || 'Customer'}</div>
-          <div class="text-[10px] text-slate-400 font-mono">Date: ${row.date || 'Today'}</div>
+          <div class="text-[10px] text-slate-400 font-mono">Date: ${row.date || 'Today'} ${row.vehicleNumber ? `• ${row.vehicleNumber}` : ''}</div>
         </div>
       `
     },
@@ -238,25 +282,45 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
       }
     },
     {
-      key: 'invoicedProgress',
-      label: 'Invoicing',
+      key: 'locationBreakdown',
+      label: 'Demand Breakdown',
       render: row => {
-        let totalOrd = 0;
-        let totalInv = 0;
+        let totalWh = 0;
+        let totalOff = 0;
         (row.lines || []).forEach(l => {
-          totalOrd += (Number(l.orderedQty) || 0);
-          totalInv += (Number(l.invoicedQty) || 0);
+          totalWh += (Number(l.warehouseQty) || 0);
+          totalOff += (Number(l.officeQty) || 0);
         });
         return `
-          <div class="text-center">
-            <span class="px-2 py-0.5 rounded-lg text-[10px] font-semibold ${totalInv >= totalOrd && totalOrd > 0 ? 'bg-emerald-50 text-emerald-700' : totalInv > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}">
-              ${totalInv} / ${totalOrd} Inv
-            </span>
+          <div class="text-xs space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
+            </div>
           </div>
         `;
       }
     },
-    { key: 'total', label: 'Contract Total', render: row => `<span class="font-extrabold text-slate-900 font-mono">Rs. ${Number(row.total || 0).toLocaleString()}</span>` },
+    {
+      key: 'assignedStaff',
+      label: 'Assigned Staff',
+      render: row => {
+        const staffIds = row.assignedStaffIds || [];
+        if (staffIds.length === 0) return `<span class="text-slate-400 text-xs italic">Unassigned</span>`;
+        return `
+          <div class="flex flex-wrap gap-1">
+            ${staffIds.map(id => {
+              const staff = userMap.get(id) || 'Staff';
+              return `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${staff}</span>`;
+            }).join('')}
+          </div>
+        `;
+      }
+    },
     {
       key: 'status',
       label: 'Order Status',
@@ -276,7 +340,7 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
 
   const actions = [
     { label: 'View', variant: 'secondary', onClick: (row) => openOrderDetailModal(row, refreshCallback) },
-    { label: 'Create GDN', variant: 'primary', onClick: (row) => openCreateGDNModal(row, refreshCallback) },
+    { label: 'Convert to GDN', variant: 'primary', onClick: (row) => openCreateDeliveryNoteModal(row, refreshCallback) },
     { label: 'Print Voucher', variant: 'secondary', onClick: (row) => printSalesOrderVoucher(row) }
   ];
 
@@ -300,7 +364,7 @@ export function openOrderDetailModal(order, refreshCallback) {
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>📋</span>
-            <span>1. Sales Order Overview</span>
+            <span>1. Sales Order Overview (Draft Gatepass)</span>
           </h3>
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
             order.status === 'Fully Delivered' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
@@ -314,21 +378,21 @@ export function openOrderDetailModal(order, refreshCallback) {
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="p-3 bg-slate-50/70 rounded-xl border border-slate-200/70 space-y-1">
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Party</span>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Destination</span>
             <p class="text-sm font-bold text-slate-900">${party ? party.name : (order.customerName || 'Customer')}</p>
-            <p class="text-[11px] text-slate-500">Farm / Site: ${order.farmId || 'Main Site'}</p>
+            <p class="text-[11px] text-slate-500">Site: ${order.farmId || 'Main Site'}</p>
           </div>
 
           <div class="p-3 bg-slate-50/70 rounded-xl border border-slate-200/70 space-y-1">
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Order Info</span>
-            <p class="text-sm font-bold text-slate-800">${order.orderNumber}</p>
+            <p class="text-sm font-bold text-slate-800 font-mono">${order.orderNumber}</p>
             <p class="text-[11px] text-slate-500">Date: ${order.date || 'Today'}</p>
           </div>
 
-          <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-200/70 space-y-1 text-right">
-            <span class="text-[10px] font-bold text-[#138FCB] uppercase tracking-wider block">Contract Value</span>
-            <p class="text-xl font-black text-slate-900 font-mono">Rs. ${Number(order.total || 0).toLocaleString()}</p>
-            <p class="text-[10px] text-slate-500">Subtotal: Rs. ${Number(order.subtotal || order.total || 0).toLocaleString()}</p>
+          <div class="p-3 bg-blue-50/50 rounded-xl border border-blue-200/70 space-y-1">
+            <span class="text-[10px] font-bold text-[#138FCB] uppercase tracking-wider block">Carrier & Logistics</span>
+            <p class="text-xs font-bold text-slate-800">${order.vehicleNumber || 'Unassigned Vehicle'}</p>
+            <p class="text-[11px] text-slate-500">Driver: ${order.driverName || 'N/A'} ${order.driverPhone ? `(${order.driverPhone})` : ''}</p>
           </div>
         </div>
       </section>
@@ -348,32 +412,29 @@ export function openOrderDetailModal(order, refreshCallback) {
             <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
                 <th class="py-2.5 px-3">Item Variant</th>
-                <th class="py-2.5 px-3 text-center">Ordered</th>
-                <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Delivered</th>
+                <th class="py-2.5 px-3 text-center">WH Qty</th>
+                <th class="py-2.5 px-3 text-center">Office Qty</th>
+                <th class="py-2.5 px-3 text-center font-bold text-slate-800">Ordered Total</th>
+                <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Delivered (GDN)</th>
                 <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
-                <th class="py-2.5 px-3 text-center text-amber-700 font-bold">Invoiced</th>
-                <th class="py-2.5 px-3 text-right">Unit Price</th>
-                <th class="py-2.5 px-3 text-right">Line Total</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
               ${(order.lines || []).map(l => {
                 const ord = Number(l.orderedQty) || 0;
                 const del = Number(l.deliveredQty) || 0;
-                const inv = Number(l.invoicedQty) || 0;
                 const remDel = Math.max(0, ord - del);
                 return `
                   <tr class="hover:bg-slate-50/70">
                     <td class="py-3 px-3 font-semibold text-slate-800">
                       <div>${varMap.get(l.variantId) || 'Item'}</div>
-                      ${l.notes ? `<div class="text-[10px] text-slate-400">${l.notes}</div>` : ''}
+                      ${l.packagingName ? `<div class="text-[10px] text-slate-400">${l.packagingName}</div>` : ''}
                     </td>
-                    <td class="py-3 px-3 text-center font-bold text-slate-800">${ord} ${l.unit || 'PCS'}</td>
+                    <td class="py-3 px-3 text-center text-blue-700 font-bold">${l.warehouseQty || 0}</td>
+                    <td class="py-3 px-3 text-center text-amber-700 font-bold">${l.officeQty || 0}</td>
+                    <td class="py-3 px-3 text-center font-extrabold text-slate-900">${ord} ${l.unit || 'PCS'}</td>
                     <td class="py-3 px-3 text-center text-emerald-600 font-bold">${del}</td>
                     <td class="py-3 px-3 text-center ${remDel > 0 ? 'text-blue-600 font-extrabold' : 'text-slate-400'}">${remDel}</td>
-                    <td class="py-3 px-3 text-center text-amber-600 font-bold">${inv}</td>
-                    <td class="py-3 px-3 text-right font-mono">Rs. ${Number(l.unitPrice || 0).toLocaleString()}</td>
-                    <td class="py-3 px-3 text-right font-extrabold text-slate-900 font-mono">Rs. ${Number(l.lineTotal || (ord * (l.unitPrice || 0))).toLocaleString()}</td>
                   </tr>
                 `;
               }).join('')}
@@ -382,14 +443,14 @@ export function openOrderDetailModal(order, refreshCallback) {
         </div>
       </section>
 
-      <!-- SECTION 3: Linked Dispatches (Delivery Notes / Stock Issues) -->
+      <!-- SECTION 3: Linked Dispatches (Delivery Notes / Gatepasses) -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>🚚</span>
-            <span>3. Linked Delivery Notes (${linkedGDNs.length})</span>
+            <span>3. Linked Delivery Notes / Gatepasses (${linkedGDNs.length})</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-semibold">Physical inventory deducted via Stock Issue upon approval</span>
+          <span class="text-[10px] text-slate-400 font-semibold">Each GDN generates a printed Gatepass</span>
         </div>
 
         ${linkedGDNs.length === 0 ? `
@@ -401,10 +462,10 @@ export function openOrderDetailModal(order, refreshCallback) {
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th class="py-2 px-3">Delivery Note #</th>
+                  <th class="py-2 px-3">Gatepass / GDN #</th>
                   <th class="py-2 px-3">Date</th>
                   <th class="py-2 px-3">Vehicle &amp; Driver</th>
-                  <th class="py-2 px-3 text-center">Items Dispatched</th>
+                  <th class="py-2 px-3 text-center">Dispatched Qty</th>
                   <th class="py-2 px-3 text-right">Status</th>
                 </tr>
               </thead>
@@ -462,7 +523,7 @@ export function openOrderDetailModal(order, refreshCallback) {
         </button>
         ${!isCancelled && remainingLines.length > 0 ? `
           <button id="order-create-gdn-btn" type="button" class="inline-flex items-center space-x-2 px-4 py-2 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all cursor-pointer">
-            <span>🚚 Create Delivery Note</span>
+            <span>🚚 Convert to GDN / Gatepass</span>
           </button>
         ` : ''}
       </div>
@@ -471,7 +532,7 @@ export function openOrderDetailModal(order, refreshCallback) {
 
   openModal({
     title: `Sales Order: ${order.orderNumber}`,
-    subtitle: 'Customer requirements, quantity tracking, and linked outward dispatches',
+    subtitle: 'Demand requirement baseline, fulfillment dispatches, and linked gatepasses',
     badge: order.orderNumber,
     contentHtml,
     footerHtml,
@@ -491,7 +552,7 @@ export function openOrderDetailModal(order, refreshCallback) {
       if (createGdnBtn) {
         createGdnBtn.onclick = () => {
           closeModal();
-          openCreateGDNModal(order, refreshCallback);
+          openCreateDeliveryNoteModal(order, refreshCallback);
         };
       }
 
@@ -530,7 +591,7 @@ export function openCreateDeliveryNoteModal(order, onSaved) {
     <form id="create-gdn-form" class="space-y-4 text-xs">
       <div class="bg-blue-50/70 p-3.5 rounded-2xl border border-blue-200/80 flex justify-between items-center">
         <div>
-          <span class="text-[10px] font-bold uppercase tracking-wider text-blue-600">Originating Demand</span>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-blue-600">Originating Sales Order</span>
           <h4 class="text-sm font-extrabold text-slate-800 font-mono">${order.orderNumber}</h4>
           <span class="text-[11px] text-slate-500 font-medium">Customer: <strong>${order.customerName || 'Customer'}</strong></span>
         </div>
@@ -548,11 +609,11 @@ export function openCreateDeliveryNoteModal(order, onSaved) {
         </div>
         <div>
           <label class="block font-bold text-slate-700 mb-1">Vehicle / Truck #</label>
-          <input type="text" id="gdn-vehicle-input" placeholder="e.g. LES-9412 Hino Truck" value="LES-9412 Truck" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] font-mono text-slate-800 shadow-2xs">
+          <input type="text" id="gdn-vehicle-input" placeholder="e.g. LES-9412 Truck" value="${order.vehicleNumber || 'LES-9412 Truck'}" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] font-mono text-slate-800 shadow-2xs">
         </div>
         <div>
           <label class="block font-bold text-slate-700 mb-1">Driver Name &amp; Phone</label>
-          <input type="text" id="gdn-driver-input" placeholder="e.g. Muhammad Rasheed" value="Muhammad Rasheed" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] text-slate-800 shadow-2xs">
+          <input type="text" id="gdn-driver-input" placeholder="e.g. Muhammad Rasheed" value="${order.driverName || 'Muhammad Rasheed'}" class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] text-slate-800 shadow-2xs">
         </div>
       </div>
 
@@ -565,7 +626,7 @@ export function openCreateDeliveryNoteModal(order, onSaved) {
               <th class="py-2.5 px-3 text-center">Ordered</th>
               <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Delivered</th>
               <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
-              <th class="py-2.5 px-3 text-center w-32 text-indigo-700 font-bold">Deliver Now</th>
+              <th class="py-2.5 px-3 text-center w-32 text-indigo-700 font-bold">Deliver Now (GDN)</th>
             </tr>
           </thead>
           <tbody id="gdn-lines-tbody" class="divide-y divide-slate-100">
@@ -600,22 +661,22 @@ export function openCreateDeliveryNoteModal(order, onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Outward physical movement creates Stock Issue (-Qty) upon approval</span>
+      <span>🛡️ Creates GDN (Printed document will be Gatepass)</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="gdn-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
         Cancel
       </button>
       <button id="gdn-submit-btn" type="button" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>🚚 Issue Delivery Note</span>
+        <span>🚚 Issue GDN / Gatepass</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: `Create Delivery Note: ${order.orderNumber}`,
-    subtitle: 'Generate physical Delivery Note for warehouse dispatch. Stock Issue will deduct inventory upon approval.',
-    badge: 'DELIVERY NOTE',
+    title: `Convert to GDN: ${order.orderNumber}`,
+    subtitle: 'Generate physical Goods Dispatch Note for warehouse dispatch. Printed document is called Gatepass.',
+    badge: 'GDN',
     contentHtml,
     footerHtml,
     size: 'max-w-2xl',
@@ -667,7 +728,7 @@ export function openCreateDeliveryNoteModal(order, onSaved) {
             lines,
             notes
           });
-          toast.show(`Delivery Note ${gp.gatepassNumber} created successfully! Stock Issue will occur upon approval.`, 'success');
+          toast.show(`Goods Dispatch Note ${gp.gatepassNumber} created successfully!`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {
@@ -729,6 +790,7 @@ export function printSalesOrderVoucher(order) {
         </div>
         <div style="text-align: right;">
           <div style="font-size: 20px; font-weight: 900; color: #138FCB;">SALES ORDER</div>
+          <div style="font-size: 11px; font-weight: 800; color: #64748b;">(DRAFT GATEPASS)</div>
           <div style="font-size: 13px; font-weight: 800; font-family: monospace;">${order.orderNumber}</div>
           <div style="font-size: 11px; color: #64748b;">Date: ${order.date || 'Today'}</div>
         </div>
@@ -739,13 +801,14 @@ export function printSalesOrderVoucher(order) {
           <div class="card-label">Customer / Contractee Details</div>
           <div style="font-size: 14px; font-weight: 800; color: #0f172a;">${party ? party.name : (order.customerName || 'Customer')}</div>
           <div style="font-size: 11px; color: #475569; margin-top: 2px;">Farm / Branch: <strong>${order.farmId || 'Main Site'}</strong></div>
-          <div style="font-size: 11px; color: #475569;">Contact: ${party ? (party.phone || party.contactPerson || 'N/A') : 'N/A'}</div>
+          <div style="font-size: 11px; color: #475569;">Vehicle / Carrier: <strong>${order.vehicleNumber || 'Unassigned'}</strong></div>
+          <div style="font-size: 11px; color: #475569;">Driver: <strong>${order.driverName || 'N/A'}</strong> ${order.driverPhone ? `(${order.driverPhone})` : ''}</div>
         </div>
         <div class="card">
-          <div class="card-label">Order Fulfillment Status</div>
+          <div class="card-label">Order Fulfillment &amp; Gatepass Status</div>
           <div>Status: <strong>${order.status}</strong></div>
-          <div>Linked Deliveries: <strong>${linkedGDNs.length} Delivery Note(s)</strong></div>
-          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Note: Stock is deducted upon individual Delivery Note approval (Stock Issue).</div>
+          <div>Issued Gatepasses: <strong>${linkedGDNs.length} GDN(s)</strong></div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Physical stock is deducted only upon Goods Dispatch Note (GDN / Gatepass) approval.</div>
         </div>
       </div>
 
@@ -754,11 +817,11 @@ export function printSalesOrderVoucher(order) {
           <tr>
             <th>#</th>
             <th>Item Description</th>
+            <th class="text-center">Delivered from WH</th>
+            <th class="text-center">Delivered from Office</th>
             <th class="text-center">Ordered Qty</th>
-            <th class="text-center">Delivered Qty</th>
+            <th class="text-center">Dispatched (GDN)</th>
             <th class="text-center">Pending Qty</th>
-            <th class="text-right">Unit Rate</th>
-            <th class="text-right">Total Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -769,27 +832,24 @@ export function printSalesOrderVoucher(order) {
             return `
               <tr>
                 <td>${i + 1}</td>
-                <td><strong>${varMap.get(l.variantId) || 'Product Item'}</strong></td>
-                <td class="text-center"><strong>${ord}</strong> ${l.unit || 'PCS'}</td>
-                <td class="text-center" style="color: #059669; font-weight: 700;">${del}</td>
-                <td class="text-center" style="color: #2563eb; font-weight: 700;">${rem}</td>
-                <td class="text-right font-mono">Rs. ${Number(l.unitPrice || 0).toLocaleString()}</td>
-                <td class="text-right font-mono" style="font-weight: 800;">Rs. ${Number(l.lineTotal || (ord * (l.unitPrice || 0))).toLocaleString()}</td>
+                <td>
+                  <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
+                  ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
+                </td>
+                <td class="text-center font-mono">${l.warehouseQty || 0}</td>
+                <td class="text-center font-mono">${l.officeQty || 0}</td>
+                <td class="text-center font-mono" style="font-weight: 800;">${ord} ${l.unit || 'PCS'}</td>
+                <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${del}</td>
+                <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${rem}</td>
               </tr>
             `;
           }).join('')}
         </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="6" class="text-right" style="font-weight: 800; font-size: 12px; padding: 10px;">TOTAL CONTRACT VALUE:</td>
-            <td class="text-right font-mono" style="font-size: 14px; font-weight: 900; color: #0f172a; padding: 10px;">Rs. ${Number(order.total || 0).toLocaleString()}</td>
-          </tr>
-        </tfoot>
       </table>
 
       ${order.notes ? `
-        <div style="margin-bottom: 20px; font-size: 11px; background: #fffbeb; border: 1px solid #fef3c7; padding: 10px; border-radius: 6px;">
-          <strong>Order Notes / Special Instructions:</strong> ${order.notes}
+        <div style="margin-bottom: 20px; font-size: 11px; background: #f0f9ff; border: 1px solid #bae6fd; padding: 10px; border-radius: 6px;">
+          <strong>Dispatch Instructions / Notes:</strong> ${order.notes}
         </div>
       ` : ''}
 
@@ -800,7 +860,7 @@ export function printSalesOrderVoucher(order) {
         </div>
         <div>
           <div style="height: 40px;"></div>
-          <div class="sig-line">Approved By (Sales Executive)</div>
+          <div class="sig-line">Carrier / Driver Acknowledgment</div>
         </div>
         <div>
           <div style="height: 40px;"></div>
@@ -819,109 +879,289 @@ export function printSalesOrderVoucher(order) {
   printWindow.document.close();
 }
 
+/**
+ * Add Sales Order Dialog
+ * EXACT former "Add Gatepass Outward" dialog without rate or amount.
+ * Represents draft gatepass / demand requirement.
+ */
 function openCreateOrderModal(onSaved) {
-  const customers = salesService.getParties(true);
+  const products = productService.getProducts();
   const variants = productService.getVariants();
+  const staffMembers = staffAuthService.getStaffMembers();
+  const whStaff = staffMembers.filter(s => s.staffType === 'warehouse_staff' || s.activeWarehouseId === 'wh-1');
+  const officeStaff = staffMembers.filter(s => s.staffType === 'office_staff' || s.activeWarehouseId === 'wh-2');
 
-  const selectedCustomer = customers[0];
-  const farms = selectedCustomer ? salesService.getFarmsByCustomer(selectedCustomer.id) : [];
+  const renderRowHtml = (variantId = null, whQty = '', offQty = '', rowIdx = 0, initialPackaging = null) => {
+    let selectedVariant = variantId ? variants.find(v => v.id === variantId) || null : null;
+    let selectedProduct = selectedVariant
+      ? products.find(p => p.id === selectedVariant.productId) || products[0]
+      : products[0];
+
+    const prodVariants = selectedProduct
+      ? variants.filter(v => v.productId === selectedProduct.id)
+      : [];
+
+    if (!selectedVariant) {
+      if (prodVariants.length === 1) {
+        selectedVariant = prodVariants[0];
+      } else {
+        selectedVariant = null;
+      }
+    }
+
+    const vId = selectedVariant ? selectedVariant.id : '';
+    const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+    const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS');
+    const packagingUnits = isCtl ? (selectedProduct.packagingUnits || []) : [];
+    const curPackaging = initialPackaging || (packagingUnits.length > 0 ? packagingUnits[0].name : baseUnit);
+
+    const whStock = vId ? inventoryService.getBalance('wh-1', vId) : 0;
+    const officeStock = vId ? inventoryService.getBalance('wh-2', vId) : 0;
+    const wVal = (whQty !== '' && whQty !== null && whQty !== undefined) ? whQty : '';
+    const oVal = (offQty !== '' && offQty !== null && offQty !== undefined) ? offQty : '';
+    const lineTotal = (Number(wVal) || 0) + (Number(oVal) || 0);
+
+    const pickerHtml = renderProductVariantPicker({
+      rowId: `so-row-${rowIdx}`,
+      selectedProductId: selectedProduct ? selectedProduct.id : null,
+      selectedVariantId: vId || null,
+      products,
+      variants,
+      whStock,
+      officeStock,
+      unit: baseUnit
+    });
+
+    const ctlHtml = `
+      <div class="so-ctl-container ${isCtl ? '' : 'hidden'} mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 p-2 rounded-xl border border-slate-200/60">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Dispatch Mode:</span>
+          <select class="so-item-packaging text-xs font-bold border border-slate-200 rounded-lg px-2.5 py-1 bg-white text-slate-800 focus:outline-none focus:border-[#138FCB] shadow-2xs cursor-pointer">
+            ${packagingUnits.map(p => `
+              <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1" ${curPackaging === p.name ? 'selected' : ''}>
+                Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
+              </option>
+            `).join('')}
+            <option value="${baseUnit}" data-factor="1" data-is-roll="0" ${curPackaging === baseUnit ? 'selected' : ''}>
+              ✂️ ${baseUnit} (Loose Cut)
+            </option>
+          </select>
+        </div>
+        <div class="so-ctl-stock-pill text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
+          <!-- Live physical rolls & loose breakdown -->
+        </div>
+      </div>
+    `;
+
+    return `
+      <tr class="so-line-row hover:bg-slate-50/70 transition-colors" data-row-index="${rowIdx}">
+        <td class="p-2.5 align-top">
+          ${pickerHtml}
+          ${ctlHtml}
+        </td>
+        <td class="p-2.5 text-center align-top">
+          <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded-lg border border-blue-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+            ${vId ? `WH Stock: ${whStock.toLocaleString()} ${baseUnit}` : 'WH Stock: —'}
+          </span>
+          <input type="number" min="0" value="${wVal}" placeholder="0" class="so-wh-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] focus:ring-2 focus:ring-blue-100 py-1.5 px-2 bg-white text-blue-900 shadow-2xs">
+        </td>
+        <td class="p-2.5 text-center align-top">
+          <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded-lg border border-amber-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+            ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${baseUnit}` : 'Office Stock: —'}
+          </span>
+          <input type="number" min="0" value="${oVal}" placeholder="0" class="so-office-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 py-1.5 px-2 bg-white text-amber-900 shadow-2xs">
+        </td>
+        <td class="p-2.5 text-right align-top pt-3.5">
+          <span class="so-total-calc font-black text-slate-900 text-sm">${lineTotal > 0 ? `${lineTotal.toLocaleString()} ${baseUnit}` : '—'}</span>
+        </td>
+        <td class="p-2.5 text-center align-top pt-3">
+          <button type="button" class="so-remove-row-btn w-8 h-8 inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" title="Remove line item">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </td>
+      </tr>
+    `;
+  };
 
   const contentHtml = `
-    <form id="create-so-form" class="space-y-5 text-xs">
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+    <form id="create-so-form" class="space-y-6 text-xs">
+      <!-- SECTION 1: Client & Logistics Configuration -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="client-and-logistics">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>👤</span>
-            <span>1. Customer &amp; Order Information</span>
+            <span>1. Customer &amp; Logistics Details</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-medium">Warehouse creates Sales Order for demand tracking</span>
+          <span class="text-[10px] text-slate-400 font-medium">All fields marked with <span class="text-red-500 font-bold">*</span> are required</span>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="so-customer-select">Customer <span class="text-red-500">*</span></label>
-            <select id="so-customer-select" required class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
-            </select>
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+          <!-- Client / Customer Destination Text Input -->
+          <div class="md:col-span-12 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="so-customer-name">Customer / Farm Name <span class="text-red-500">*</span></label>
+            <input type="text" id="so-customer-name" required placeholder="Enter Customer / Farm Name" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="so-farm-select">Target Farm / Branch</label>
-            <select id="so-farm-select" class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${farms.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
-            </select>
+          <!-- Vehicle Number -->
+          <div class="md:col-span-4 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="so-vehicle">Vehicle Number <span class="text-red-500">*</span></label>
+            <input type="text" id="so-vehicle" required placeholder="e.g. LES-9412 Truck" value="LES-9412 Truck" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
 
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="so-date">Order Date <span class="text-red-500">*</span></label>
-            <input type="date" id="so-date" required value="${new Date().toISOString().split('T')[0]}" class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+          <!-- Driver Name -->
+          <div class="md:col-span-4 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="so-driver">Driver Name <span class="text-red-500">*</span></label>
+            <input type="text" id="so-driver" required placeholder="e.g. Muhammad Rasheed" value="Muhammad Rasheed" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+          </div>
+
+          <!-- Driver Phone -->
+          <div class="md:col-span-4 space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="so-driver-phone">Driver Phone</label>
+            <input type="tel" id="so-driver-phone" placeholder="e.g. +92 345 6789012" value="+92 345 6789012" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
         </div>
       </section>
 
-      <!-- Lines Section -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+      <!-- SECTION 2: Items & Dual-Location Allocation Table -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="line-items-section">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <span>📦</span>
-            <span>2. Order Line Items (Requirements)</span>
-          </h3>
-          <button type="button" id="so-add-line-btn" class="px-3 py-1.5 bg-blue-50 text-[#138FCB] font-bold rounded-xl border border-blue-200 hover:bg-blue-100 text-xs shadow-2xs cursor-pointer">
-            + Add Line Item
-          </button>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <span>📦</span>
+              <span>2. Items &amp; Dual-Location Allocation (No Rates/Amounts)</span>
+            </h3>
+            <span id="so-lines-count-badge" class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 text-slate-600">1 Product</span>
+          </div>
+          <span class="text-[10px] text-slate-400 font-medium">Type to search catalog &amp; pick variants</span>
         </div>
 
-        <div class="border border-slate-200/80 rounded-xl overflow-hidden">
+        <!-- Table Container -->
+        <div class="overflow-visible border border-slate-200/80 rounded-xl">
           <table class="w-full text-left text-xs">
-            <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+            <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200/80">
               <tr>
-                <th class="py-2.5 px-3 w-5/12">Product Variant</th>
-                <th class="py-2.5 px-3 text-center w-2/12">Ordered Qty</th>
-                <th class="py-2.5 px-3 text-center w-2/12">Unit Price (PKR)</th>
-                <th class="py-2.5 px-3 text-right w-2/12">Line Total</th>
-                <th class="py-2.5 px-2 text-center w-1/12"></th>
+                <th class="py-3 px-3 w-[62%] font-semibold">Product &amp; Variant SKU Selection</th>
+                <th class="py-3 px-2 w-[13%] font-semibold text-center">Delivered from WH *</th>
+                <th class="py-3 px-2 w-[13%] font-semibold text-center">Delivered from Office *</th>
+                <th class="py-3 px-3 w-[8%] font-semibold text-right">Cargo Qty</th>
+                <th class="py-3 px-2 w-[4%] font-semibold text-center">Action</th>
               </tr>
             </thead>
-            <tbody id="so-lines-tbody" class="divide-y divide-slate-100">
-              <tr class="so-line-row">
-                <td class="p-3">
-                  <select class="so-var-select w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:border-[#138FCB]">
-                    ${variants.map(v => `<option value="${v.id}" data-price="${v.sellingPrice || 0}">${v.name} (${v.sku})</option>`).join('')}
-                  </select>
-                </td>
-                <td class="p-3 text-center">
-                  <input type="number" min="1" value="10" class="so-qty-input w-20 text-center border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold">
-                </td>
-                <td class="p-3 text-center">
-                  <input type="number" min="0" step="any" value="${variants[0]?.sellingPrice || 1200}" class="so-price-input w-28 text-center border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold">
-                </td>
-                <td class="p-3 text-right font-black text-slate-900 text-xs so-line-total">
-                  Rs. ${((variants[0]?.sellingPrice || 1200) * 10).toLocaleString()}
-                </td>
-                <td class="p-3 text-center">
-                  <button type="button" class="so-remove-row text-slate-400 hover:text-rose-600 font-bold p-1 cursor-pointer">✕</button>
-                </td>
-              </tr>
+            <tbody id="so-items-tbody" class="divide-y divide-slate-100 text-slate-700">
+              ${renderRowHtml(null, '', '', 0)}
             </tbody>
           </table>
         </div>
+
+        <!-- Action Row under Table -->
+        <div class="pt-1">
+          <button type="button" id="add-so-row-btn" class="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-50/80 hover:bg-blue-100 text-[#138FCB] rounded-xl text-xs font-bold border border-blue-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-98">
+            <span class="text-base leading-none font-extrabold">+</span>
+            <span>Add Line Item</span>
+          </button>
+        </div>
       </section>
 
-      <!-- Totals & Notes -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
-          <label class="text-xs font-semibold text-slate-700" for="so-notes">Order Notes / Delivery Terms</label>
-          <textarea id="so-notes" rows="3" placeholder="Contract delivery schedule, partial batch instructions..." class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] p-3 text-slate-800 bg-white shadow-2xs resize-none"></textarea>
-        </section>
+      <!-- SECTION 3: Dedicated Station Staff Assignment -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="staff-assignment-section">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-2">
+            <span>👥</span>
+            <span>3. Assign Station Floor Staff</span>
+          </h3>
+          <span class="text-[10px] text-slate-400">Staff receive instant mobile alert for order preparation</span>
+        </div>
 
-        <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 pb-1 border-b border-slate-100">Order Summary</h3>
-          <div class="flex justify-between items-center text-xs">
-            <span class="text-slate-500">Total Contract Value:</span>
-            <span id="so-total-calc" class="text-xl font-black text-[#138FCB] font-mono">Rs. 0</span>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Warehouse Staff Group (wh-1) -->
+          <div class="p-3.5 bg-blue-50/40 rounded-xl border border-blue-200/70 space-y-2">
+            <div class="flex items-center justify-between pb-1.5 border-b border-blue-200/60">
+              <span class="text-xs font-bold text-blue-800 flex items-center gap-1.5">
+                <span>📦 Warehouse Floor Staff</span>
+              </span>
+              <span class="text-[10px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded-full border border-blue-200">Main Warehouse (wh-1)</span>
+            </div>
+            <div class="space-y-1.5">
+              ${whStaff.map(staff => `
+                <label class="flex items-center justify-between p-2 bg-white hover:bg-blue-50/60 rounded-xl border border-blue-100 hover:border-blue-300 cursor-pointer transition-all shadow-2xs">
+                  <div class="flex items-center gap-2.5">
+                    <input type="checkbox" name="assignedStaff" value="${staff.id}" checked class="w-4 h-4 rounded text-[#138FCB] focus:ring-0">
+                    <div>
+                      <span class="text-xs font-bold text-slate-800">${staff.fullName}</span>
+                      <span class="text-[10px] text-slate-400 block font-mono">PIN: ${staff.pin || '••••'}</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">Active Staff</span>
+                </label>
+              `).join('')}
+            </div>
           </div>
-          <p class="text-[10px] text-slate-400 italic">Does NOT reduce physical stock until a Delivery Note is approved (Stock Issue).</p>
-        </section>
+
+          <!-- Office Staff Group (wh-2) -->
+          <div class="p-3.5 bg-amber-50/40 rounded-xl border border-amber-200/70 space-y-2">
+            <div class="flex items-center justify-between pb-1.5 border-b border-amber-200/60">
+              <span class="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                <span>🏢 Office Floor Staff</span>
+              </span>
+              <span class="text-[10px] font-bold text-amber-700 bg-white px-2 py-0.5 rounded-full border border-amber-200">Office Hub (wh-2)</span>
+            </div>
+            <div class="space-y-1.5">
+              ${officeStaff.map(staff => `
+                <label class="flex items-center justify-between p-2 bg-white hover:bg-amber-50/60 rounded-xl border border-amber-100 hover:border-amber-300 cursor-pointer transition-all shadow-2xs">
+                  <div class="flex items-center gap-2.5">
+                    <input type="checkbox" name="assignedStaff" value="${staff.id}" checked class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+                    <div>
+                      <span class="text-xs font-bold text-slate-800">${staff.fullName}</span>
+                      <span class="text-[10px] text-slate-400 block font-mono">PIN: ${staff.pin || '••••'}</span>
+                    </div>
+                  </div>
+                  <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">Active Staff</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4: Bottom Dual Columns (Notes vs Summary) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <!-- Notes -->
+        <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2" data-purpose="terms-and-notes">
+          <label class="text-xs font-semibold text-slate-700" for="so-notes">Order Notes / Special Instructions</label>
+          <textarea class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 text-slate-700 p-3 resize-none shadow-2xs" id="so-notes" placeholder="Contract delivery schedule, partial dispatch terms, drop-off location..." rows="3"></textarea>
+        </div>
+
+        <!-- Summary Breakdown Card -->
+        <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3" data-purpose="totals-summary-card">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 pb-1 border-b border-slate-100">Cargo Demand Summary</h3>
+          <div class="space-y-2 text-xs">
+            <div class="flex justify-between text-slate-600">
+              <span>From Warehouse (wh-1)</span>
+              <span id="summary-wh-qty" class="font-bold text-blue-700">0 PCS</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>From Office (wh-2)</span>
+              <span id="summary-off-qty" class="font-bold text-amber-700">0 PCS</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>Document Type</span>
+              <span class="text-[#138FCB] font-semibold bg-blue-50 px-2 py-0.5 rounded text-[10px]">Sales Order (Draft Gatepass)</span>
+            </div>
+          </div>
+
+          <!-- Grand Total Highlight Card -->
+          <div class="mt-4 pt-3 bg-blue-50/50 -mx-5 -mb-5 p-5 rounded-b-2xl border-t border-blue-100 flex items-center justify-between">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-[#138FCB]">Total Ordered Cargo</p>
+              <p class="text-[9px] text-slate-400">Does not deduct inventory until GDN approval</p>
+            </div>
+            <div class="text-right">
+              <span id="summary-total-qty" class="text-2xl font-black text-slate-900 tracking-tight">0 PCS</span>
+            </div>
+          </div>
+        </div>
       </div>
     </form>
   `;
@@ -929,145 +1169,353 @@ function openCreateOrderModal(onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Creates Sales Order requirement</span>
+      <span>🛡️ Creates Sales Order (Draft Gatepass)</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="so-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
         Cancel
       </button>
       <button type="submit" form="create-so-form" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>Book Sales Order</span>
+        <span>Save Sales Order</span>
       </button>
     </div>
   `;
 
   openModal({
     title: 'Create Sales Order',
-    subtitle: 'Book customer requirement and establish fulfillment delivery baseline',
-    badge: 'SO-NEW',
+    subtitle: 'Add order demand without rates/amounts. Acts as draft gatepass convertible to physical GDNs.',
+    badge: 'SALES ORDER',
     contentHtml,
     footerHtml,
-    size: 'max-w-4xl',
+    size: 'max-w-5xl',
     onOpen: (modalEl) => {
       const cancelBtn = modalEl.querySelector('#so-cancel-btn');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
-      const tbody = modalEl.querySelector('#so-lines-tbody');
-      const totalDisplay = modalEl.querySelector('#so-total-calc');
+      const tbody = modalEl.querySelector('#so-items-tbody');
+      const addRowBtn = modalEl.querySelector('#add-so-row-btn');
+      const summaryWh = modalEl.querySelector('#summary-wh-qty');
+      const summaryOff = modalEl.querySelector('#summary-off-qty');
+      const summaryTotal = modalEl.querySelector('#summary-total-qty');
+      const lineCountBadge = modalEl.querySelector('#so-lines-count-badge');
+      let rowCounter = 1;
 
-      const recalcTotals = () => {
-        let total = 0;
-        tbody.querySelectorAll('.so-line-row').forEach(row => {
-          const qty = Number(row.querySelector('.so-qty-input')?.value) || 0;
-          const price = Number(row.querySelector('.so-price-input')?.value) || 0;
-          const lineTot = qty * price;
-          total += lineTot;
-          const lineTotEl = row.querySelector('.so-line-total');
-          if (lineTotEl) lineTotEl.textContent = `Rs. ${lineTot.toLocaleString()}`;
+      const updateRowCalculations = (row) => {
+        const varInput = row.querySelector('.pv-var-input');
+        const whIndicator = row.querySelector('.wh-stock-indicator');
+        const offIndicator = row.querySelector('.office-stock-indicator');
+        const whQtyInput = row.querySelector('.so-wh-qty');
+        const offQtyInput = row.querySelector('.so-office-qty');
+        const totalDisplay = row.querySelector('.so-total-calc');
+        const ctlContainer = row.querySelector('.so-ctl-container');
+        const packagingSelect = row.querySelector('.so-item-packaging');
+        const ctlStockPill = row.querySelector('.so-ctl-stock-pill');
+
+        const vId = varInput ? varInput.value : '';
+        if (!vId) {
+          if (whIndicator) whIndicator.textContent = 'WH Stock: —';
+          if (offIndicator) offIndicator.textContent = 'Office Stock: —';
+          if (totalDisplay) totalDisplay.textContent = '—';
+          if (ctlContainer) ctlContainer.classList.add('hidden');
+          return;
+        }
+
+        const selectedVariant = variants.find(v => v.id === vId);
+        const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+        const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+        const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+
+        if (isCtl && ctlContainer && packagingSelect) {
+          ctlContainer.classList.remove('hidden');
+
+          const packagingUnits = selectedProduct.packagingUnits || [];
+          const currentVal = packagingSelect.value;
+          const existingOptions = Array.from(packagingSelect.options).map(o => o.value);
+          const expectedValues = [...packagingUnits.map(p => p.name), baseUnit];
+          const isSame = existingOptions.length === expectedValues.length && existingOptions.every((v, idx) => v === expectedValues[idx]);
+
+          if (!isSame) {
+            packagingSelect.innerHTML = `
+              ${packagingUnits.map(p => `
+                <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1">
+                  Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
+                </option>
+              `).join('')}
+              <option value="${baseUnit}" data-factor="1" data-is-roll="0">
+                ✂️ ${baseUnit} (Loose Cut)
+              </option>
+            `;
+            if (currentVal && expectedValues.includes(currentVal)) {
+              packagingSelect.value = currentVal;
+            }
+          }
+
+          const selectedOption = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
+          const isRoll = selectedOption?.getAttribute('data-is-roll') === '1';
+          const rollFactor = Number(selectedOption?.getAttribute('data-factor')) || 1;
+          const packName = selectedOption?.value || baseUnit;
+
+          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1', vId);
+          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2', vId);
+
+          if (ctlStockPill && whSummary) {
+            ctlStockPill.innerHTML = `
+              <span class="font-bold text-[#138FCB]">WH:</span> ${whSummary.fullRollsCount} rolls + ${whSummary.loosePiecesFootage.toLocaleString()} ${baseUnit} loose | <span class="font-bold text-amber-700">Office:</span> ${offSummary?.fullRollsCount || 0} rolls + ${(offSummary?.loosePiecesFootage || 0).toLocaleString()} ${baseUnit}
+            `;
+          }
+
+          if (isRoll) {
+            const whRollMatch = (whSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
+            const offRollMatch = (offSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
+            const whRollCount = whRollMatch ? whRollMatch.count : 0;
+            const offRollCount = offRollMatch ? offRollMatch.count : 0;
+
+            if (whIndicator) whIndicator.textContent = `WH: ${whRollCount} Full Rolls (${packName})`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offRollCount} Full Rolls (${packName})`;
+            if (whQtyInput) whQtyInput.placeholder = '0 Rolls';
+            if (offQtyInput) offQtyInput.placeholder = '0 Rolls';
+          } else {
+            const whLoose = whSummary ? whSummary.loosePiecesFootage : 0;
+            const whTotal = whSummary ? whSummary.totalFootage : 0;
+            const offLoose = offSummary ? offSummary.loosePiecesFootage : 0;
+            const offTotal = offSummary ? offSummary.totalFootage : 0;
+
+            if (whIndicator) whIndicator.textContent = `WH: ${whLoose.toLocaleString()} ${baseUnit} Loose (${whTotal.toLocaleString()} ${baseUnit} Total)`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offLoose.toLocaleString()} ${baseUnit} Loose (${offTotal.toLocaleString()} ${baseUnit} Total)`;
+            if (whQtyInput) whQtyInput.placeholder = `0 ${baseUnit}`;
+            if (offQtyInput) offQtyInput.placeholder = `0 ${baseUnit}`;
+          }
+
+          const rawW = whQtyInput ? whQtyInput.value.trim() : '';
+          const rawO = offQtyInput ? offQtyInput.value.trim() : '';
+          const wQty = Number(rawW) || 0;
+          const oQty = Number(rawO) || 0;
+          const lineTotal = wQty + oQty;
+
+          if (!rawW && !rawO) {
+            if (totalDisplay) totalDisplay.textContent = '—';
+          } else {
+            if (isRoll) {
+              const totalFeet = lineTotal * rollFactor;
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal} Roll${lineTotal > 1 ? 's' : ''}</span> <span class="text-[10px] text-slate-500 font-semibold block">(${totalFeet.toLocaleString()} ${baseUnit})</span>`;
+            } else {
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(Loose Cut)</span>`;
+            }
+          }
+        } else {
+          if (ctlContainer) ctlContainer.classList.add('hidden');
+          const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : 'PCS';
+          const wStock = inventoryService.getBalance('wh-1', vId);
+          const oStock = inventoryService.getBalance('wh-2', vId);
+
+          if (whIndicator) whIndicator.textContent = `WH Stock: ${wStock.toLocaleString()} ${unit}`;
+          if (offIndicator) offIndicator.textContent = `Office Stock: ${oStock.toLocaleString()} ${unit}`;
+          if (whQtyInput) whQtyInput.placeholder = '0';
+          if (offQtyInput) offQtyInput.placeholder = '0';
+
+          const rawW = whQtyInput ? whQtyInput.value.trim() : '';
+          const rawO = offQtyInput ? offQtyInput.value.trim() : '';
+          const wQty = Number(rawW) || 0;
+          const oQty = Number(rawO) || 0;
+          const lineTotal = wQty + oQty;
+          if (!rawW && !rawO) {
+            if (totalDisplay) totalDisplay.textContent = '—';
+          } else {
+            if (totalDisplay) totalDisplay.textContent = `${lineTotal.toLocaleString()} ${unit}`;
+          }
+        }
+      };
+
+      const updateSummaryTotals = () => {
+        const rows = tbody.querySelectorAll('.so-line-row');
+        let totalWh = 0;
+        let totalOff = 0;
+
+        rows.forEach(row => {
+          const whQty = Number(row.querySelector('.so-wh-qty')?.value) || 0;
+          const offQty = Number(row.querySelector('.so-office-qty')?.value) || 0;
+          totalWh += whQty;
+          totalOff += offQty;
         });
-        if (totalDisplay) totalDisplay.textContent = `Rs. ${total.toLocaleString()}`;
+
+        const grandTotal = totalWh + totalOff;
+        if (summaryWh) summaryWh.textContent = totalWh > 0 ? `${totalWh.toLocaleString()} Cargo Units` : '0 Units';
+        if (summaryOff) summaryOff.textContent = totalOff > 0 ? `${totalOff.toLocaleString()} Cargo Units` : '0 Units';
+        if (summaryTotal) summaryTotal.textContent = grandTotal > 0 ? `${grandTotal.toLocaleString()} Cargo Units` : '0 Units';
+        if (lineCountBadge) lineCountBadge.textContent = `${rows.length} Product${rows.length > 1 ? 's' : ''}`;
+
+        const removeBtns = tbody.querySelectorAll('.so-remove-row-btn');
+        removeBtns.forEach(btn => {
+          if (rows.length <= 1) {
+            btn.classList.add('opacity-30', 'cursor-not-allowed');
+            btn.setAttribute('disabled', 'true');
+          } else {
+            btn.classList.remove('opacity-30', 'cursor-not-allowed');
+            btn.removeAttribute('disabled');
+          }
+        });
       };
 
       const bindRowEvents = (row) => {
-        const select = row.querySelector('.so-var-select');
-        const priceInput = row.querySelector('.so-price-input');
-        const qtyInput = row.querySelector('.so-qty-input');
-        const removeBtn = row.querySelector('.so-remove-row');
+        const pickerContainer = row.querySelector('.pv-picker-container');
+        if (pickerContainer) {
+          bindProductVariantPicker(pickerContainer, {
+            products,
+            variants,
+            onVariantChanged: () => {
+              updateRowCalculations(row);
+              updateSummaryTotals();
+            }
+          });
+        }
 
-        if (select && priceInput) {
-          select.onchange = () => {
-            const opt = select.options[select.selectedIndex];
-            priceInput.value = opt.getAttribute('data-price') || 0;
-            recalcTotals();
+        const packagingSelect = row.querySelector('.so-item-packaging');
+        if (packagingSelect) {
+          packagingSelect.onchange = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
           };
         }
-        if (qtyInput) qtyInput.oninput = recalcTotals;
-        if (priceInput) priceInput.oninput = recalcTotals;
+
+        const whQtyInput = row.querySelector('.so-wh-qty');
+        const offQtyInput = row.querySelector('.so-office-qty');
+        const removeBtn = row.querySelector('.so-remove-row-btn');
+
+        if (whQtyInput) {
+          whQtyInput.oninput = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
+          };
+        }
+
+        if (offQtyInput) {
+          offQtyInput.oninput = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
+          };
+        }
+
         if (removeBtn) {
           removeBtn.onclick = () => {
-            if (tbody.querySelectorAll('.so-line-row').length > 1) {
+            const rows = tbody.querySelectorAll('.so-line-row');
+            if (rows.length > 1) {
               row.remove();
-              recalcTotals();
-            } else {
-              toast.show('An order must have at least one line item.', 'warning');
+              updateSummaryTotals();
             }
           };
         }
       };
 
-      tbody.querySelectorAll('.so-line-row').forEach(bindRowEvents);
-      recalcTotals();
+      const appendNewRow = (variantId = null, whQty = '', offQty = '') => {
+        rowCounter++;
+        const tempDiv = document.createElement('tbody');
+        tempDiv.innerHTML = renderRowHtml(variantId, whQty, offQty, rowCounter);
+        const newRow = tempDiv.firstElementChild;
+        tbody.appendChild(newRow);
+        bindRowEvents(newRow);
+        updateRowCalculations(newRow);
+        updateSummaryTotals();
+        return newRow;
+      };
 
-      const addLineBtn = modalEl.querySelector('#so-add-line-btn');
-      if (addLineBtn) {
-        addLineBtn.onclick = () => {
-          const tr = document.createElement('tr');
-          tr.className = 'so-line-row';
-          tr.innerHTML = `
-            <td class="p-3">
-              <select class="so-var-select w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-semibold focus:border-[#138FCB]">
-                ${variants.map(v => `<option value="${v.id}" data-price="${v.sellingPrice || 0}">${v.name} (${v.sku})</option>`).join('')}
-              </select>
-            </td>
-            <td class="p-3 text-center">
-              <input type="number" min="1" value="1" class="so-qty-input w-20 text-center border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold">
-            </td>
-            <td class="p-3 text-center">
-              <input type="number" min="0" step="any" value="${variants[0]?.sellingPrice || 0}" class="so-price-input w-28 text-center border border-slate-200 rounded-xl px-2 py-1.5 text-xs font-bold">
-            </td>
-            <td class="p-3 text-right font-black text-slate-900 text-xs so-line-total">
-              Rs. ${(variants[0]?.sellingPrice || 0).toLocaleString()}
-            </td>
-            <td class="p-3 text-center">
-              <button type="button" class="so-remove-row text-slate-400 hover:text-rose-600 font-bold p-1 cursor-pointer">✕</button>
-            </td>
-          `;
-          tbody.appendChild(tr);
-          bindRowEvents(tr);
-          recalcTotals();
+      // Initial row binding
+      tbody.querySelectorAll('.so-line-row').forEach(row => {
+        bindRowEvents(row);
+        updateRowCalculations(row);
+      });
+      updateSummaryTotals();
+
+      if (addRowBtn) {
+        addRowBtn.onclick = () => {
+          const existingIds = new Set(Array.from(tbody.querySelectorAll('.pv-var-input')).map(s => s.value));
+          const nextUnused = variants.find(v => !existingIds.has(v.id)) || variants[0];
+          appendNewRow(nextUnused ? nextUnused.id : null, '', '');
         };
       }
 
-      const form = modalEl.querySelector('#create-so-form');
-      if (form) {
-        form.onsubmit = (e) => {
-          e.preventDefault();
-          const customerPartyId = modalEl.querySelector('#so-customer-select').value;
-          const farmId = modalEl.querySelector('#so-farm-select').value;
-          const date = modalEl.querySelector('#so-date').value;
-          const notes = modalEl.querySelector('#so-notes').value.trim();
+      // Form submit
+      modalEl.querySelector('#create-so-form').onsubmit = (e) => {
+        e.preventDefault();
+        const customerName = modalEl.querySelector('#so-customer-name').value.trim();
+        const vehicleNumber = modalEl.querySelector('#so-vehicle').value.trim();
+        const driverName = modalEl.querySelector('#so-driver').value.trim();
+        const driverPhone = modalEl.querySelector('#so-driver-phone').value.trim();
+        const notes = modalEl.querySelector('#so-notes').value.trim();
 
-          const lines = [];
-          tbody.querySelectorAll('.so-line-row').forEach(row => {
-            const variantId = row.querySelector('.so-var-select').value;
-            const orderedQty = Number(row.querySelector('.so-qty-input').value) || 0;
-            const unitPrice = Number(row.querySelector('.so-price-input').value) || 0;
-            if (orderedQty > 0) {
-              lines.push({ variantId, orderedQty, unitPrice });
+        const assignedStaffIds = Array.from(modalEl.querySelectorAll('input[name="assignedStaff"]:checked'))
+          .map(cb => cb.value);
+
+        const rows = tbody.querySelectorAll('.so-line-row');
+        const lines = [];
+
+        rows.forEach(row => {
+          const varInput = row.querySelector('.pv-var-input');
+          const variantId = varInput ? varInput.value : '';
+          const selectedVariant = variants.find(v => v.id === variantId);
+          const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+          const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+          const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+
+          const warehouseQty = Number(row.querySelector('.so-wh-qty')?.value) || 0;
+          const officeQty = Number(row.querySelector('.so-office-qty')?.value) || 0;
+          const totalQty = warehouseQty + officeQty;
+
+          if (variantId && totalQty > 0) {
+            const packagingSelect = row.querySelector('.so-item-packaging');
+            let packagingName = null;
+            let isRoll = false;
+            let rollSize = null;
+            let totalFeet = null;
+
+            if (isCtl && packagingSelect) {
+              const selectedOpt = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
+              isRoll = selectedOpt?.getAttribute('data-is-roll') === '1';
+              rollSize = Number(selectedOpt?.getAttribute('data-factor')) || 1;
+              packagingName = selectedOpt?.value || baseUnit;
+              totalFeet = isRoll ? totalQty * rollSize : totalQty;
             }
-          });
 
-          if (lines.length === 0) {
-            toast.show('Please add at least one line item with quantity.', 'warning');
-            return;
-          }
-
-          try {
-            const so = salesService.createSalesOrder({
-              customerPartyId,
-              farmId,
-              date,
-              notes,
-              lines
+            lines.push({
+              variantId,
+              warehouseQty,
+              officeQty,
+              orderedQty: totalQty,
+              deliveredQty: 0,
+              remainingDeliveryQty: totalQty,
+              unit: isCtl ? (isRoll ? packagingName : baseUnit) : (selectedVariant?.unit || 'PCS'),
+              packagingName: isCtl ? packagingName : null,
+              isRoll,
+              rollSize,
+              totalFeet,
+              unitPrice: 0,
+              lineTotal: 0
             });
-            toast.show(`Sales Order ${so.orderNumber} booked successfully!`, 'success');
-            closeModal();
-            if (onSaved) onSaved();
-          } catch (err) {
-            toast.show(err.message, 'error');
           }
-        };
-      }
+        });
+
+        if (lines.length === 0) {
+          toast.show('Please allocate at least one product with quantity > 0.', 'error');
+          return;
+        }
+
+        try {
+          const so = salesService.createSalesOrder({
+            customerName,
+            vehicleNumber,
+            driverName,
+            driverPhone,
+            assignedStaffIds,
+            notes,
+            lines,
+            total: 0
+          });
+          toast.show(`Sales Order ${so.orderNumber} created! This draft gatepass can now be converted to GDN.`, 'success');
+          closeModal();
+          if (onSaved) onSaved();
+        } catch (err) {
+          toast.show(err.message, 'error');
+        }
+      };
     }
   });
 }

@@ -72,7 +72,7 @@ export function renderTable({
                           }"
                           data-action-index="${actIdx}"
                           data-row-id="${row.id || rowIdx}">
-                          ${act.label}
+                          ${typeof act.label === 'function' ? act.label(row) : act.label}
                         </button>
                       `).join('')}
                     </div>

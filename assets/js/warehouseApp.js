@@ -108,13 +108,26 @@ class WarehouseAppController {
       case 'sales-orders':
         html = renderSalesOrdersView();
         bindFn = bindSalesOrdersEvents;
-        breadcrumbs = ['Operations', 'Sales Orders (Outgoing Demand)'];
+        breadcrumbs = ['Operations', 'Sales Orders'];
         break;
 
+      case 'warehouse-gdn':
+        html = renderGatepassView('outward');
+        bindFn = (container, cb) => bindGatepassEvents(container, cb, 'outward');
+        breadcrumbs = ['Operations', 'GDN (Goods Dispatch Note)'];
+        break;
+
+      case 'stock-inwards':
       case 'inward-orders':
         html = renderInwardOrdersView();
         bindFn = bindInwardOrdersEvents;
-        breadcrumbs = ['Operations', 'Stock Inward Orders (Incoming Demand)'];
+        breadcrumbs = ['Operations', 'Stock Inwards'];
+        break;
+
+      case 'warehouse-grn':
+        html = renderGatepassView('inward');
+        bindFn = (container, cb) => bindGatepassEvents(container, cb, 'inward');
+        breadcrumbs = ['Operations', 'GRN (Good Received Note)'];
         break;
 
       case 'warehouse-gatepasses':

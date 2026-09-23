@@ -33,6 +33,10 @@ class InwardOrderService {
   createInwardOrder({
     partyName = 'Generic Supplier / Origin',
     referenceNumber = '',
+    vehicleNumber = '',
+    driverName = '',
+    driverPhone = '',
+    assignedStaffIds = [],
     date = new Date().toISOString().split('T')[0],
     expectedArrivalDate = '',
     targetWarehouseId = 'wh-1',
@@ -60,9 +64,17 @@ class InwardOrderService {
       return {
         id: `siol-${Date.now()}-${idx}`,
         variantId: l.variantId,
+        warehouseQty: Number(l.warehouseQty) || 0,
+        officeQty: Number(l.officeQty) || 0,
         expectedQty: expQty,
         receivedQty: 0,
+        remainingQty: expQty,
+        pendingQty: expQty,
         unit: l.unit || variant.unit || 'PCS',
+        isRoll: Boolean(l.isRoll),
+        rollSize: l.rollSize || null,
+        packagingName: l.packagingName || null,
+        totalFeet: l.totalFeet || null,
         notes: l.notes || ''
       };
     });
@@ -74,6 +86,10 @@ class InwardOrderService {
       orderNumber,
       partyName: partyName.trim(),
       referenceNumber: referenceNumber.trim(),
+      vehicleNumber: vehicleNumber.trim(),
+      driverName: driverName.trim(),
+      driverPhone: driverPhone.trim(),
+      assignedStaffIds,
       date,
       expectedArrivalDate: expectedArrivalDate || date,
       targetWarehouseId,
@@ -146,7 +162,9 @@ class InwardOrderService {
       totalReceived += newRec;
       return {
         ...line,
-        receivedQty: newRec
+        receivedQty: newRec,
+        remainingQty: Math.max(0, exp - newRec),
+        pendingQty: Math.max(0, exp - newRec)
       };
     });
 
@@ -195,7 +213,9 @@ class InwardOrderService {
       totalReceived += newRec;
       return {
         ...line,
-        receivedQty: newRec
+        receivedQty: newRec,
+        remainingQty: Math.max(0, exp - newRec),
+        pendingQty: Math.max(0, exp - newRec)
       };
     });
 

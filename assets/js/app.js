@@ -196,7 +196,23 @@ class AppController {
         breadcrumbs = ['Inventory', 'Roll / Cut-to-Length'];
         break;
 
-      // Warehouse
+      // Warehouse & Operations Flow
+      case 'warehouse-gdn':
+        html = renderGatepassView('outward');
+        bindFn = (container, cb) => bindGatepassEvents(container, cb, 'outward');
+        breadcrumbs = ['Operations', 'GDN (Goods Dispatch Note)'];
+        break;
+      case 'stock-inwards':
+      case 'inward-orders':
+        html = renderInwardOrdersView();
+        bindFn = bindInwardOrdersEvents;
+        breadcrumbs = ['Operations', 'Stock Inwards'];
+        break;
+      case 'warehouse-grn':
+        html = renderGatepassView('inward');
+        bindFn = (container, cb) => bindGatepassEvents(container, cb, 'inward');
+        breadcrumbs = ['Operations', 'GRN (Good Received Note)'];
+        break;
       case 'warehouse-gatepasses':
         html = renderGatepassView();
         bindFn = bindGatepassEvents;
