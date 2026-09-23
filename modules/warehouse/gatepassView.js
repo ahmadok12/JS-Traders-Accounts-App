@@ -35,7 +35,8 @@ export function renderGatepassView() {
 
   const filterBarHtml = renderFilterBar({
     searchPlaceholder: 'Search gatepasses by number, customer, vehicle...',
-    primaryAction: { label: 'Create Draft Gatepass Outward' }
+    primaryAction: { label: 'Create Draft Gatepass Outward' },
+    secondaryAction: { label: 'Generate from Sales Invoice', icon: '🧾' }
   });
 
   const columns = [
@@ -168,11 +169,97 @@ export function bindGatepassEvents(container, refreshCallback) {
     addBtn.onclick = () => openCreateGatepassModal(refreshCallback);
   }
 
+  const secBtn = container.querySelector('#filter-secondary-btn');
+  if (secBtn) {
+    secBtn.onclick = () => openGenerateGatepassFromInvoiceModal(refreshCallback);
+  }
+
   const gatepasses = gatepassService.getGatepasses();
   const actions = [
     { label: 'View', variant: 'secondary', onClick: (row) => openGatepassDetailModal(row, refreshCallback) }
   ];
   bindTableActions(container, actions, gatepasses);
+}
+
+function openGenerateGatepassFromInvoiceModal(onSaved) {
+  const invoices = salesService.getSalesInvoices().filter(i => i.status !== 'Voided' && i.status !== 'Cancelled');
+  const parties = salesService.getParties(true);
+  const partyMap = new Map(parties.map(p => [p.id, p.name]));
+
+  const contentHtml = `
+    <div class="space-y-4 text-xs">
+      <div class="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-blue-900">
+        🧾 <strong>Automatic Bundle Expansion:</strong> Generating a Gate Pass from a Sales Invoice automatically unpacks all Poultry Systems and Fixed Sets into their exact physical component items (e.g. Hangers, Feed Pans, Galvanized Pipes, Handles) with extra quantities preserved!
+      </div>
+
+      <div class="space-y-2">
+        <label class="block font-bold text-slate-700">Select Sales Invoice to Fulfill *</label>
+        <div class="max-h-60 overflow-y-auto space-y-2 border border-slate-200 rounded-xl p-2 bg-slate-50/50">
+          ${invoices.map(inv => {
+            const hasBundle = (inv.lines || []).some(l => l.bundleId || l.bundleComponents?.length);
+            return `
+              <label class="flex items-center justify-between p-3 bg-white hover:bg-blue-50/50 rounded-xl border border-slate-200 cursor-pointer transition-all shadow-2xs">
+                <div class="flex items-center gap-3">
+                  <input type="radio" name="sel-invoice-id" value="${inv.id}" class="w-4 h-4 text-[#138FCB] focus:ring-0">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-[#138FCB] text-xs">${inv.invoiceNumber}</span>
+                      <span class="text-slate-700 font-semibold">${partyMap.get(inv.customerPartyId) || 'Customer'}</span>
+                      ${hasBundle ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700">🧩 Poultry System Bundle</span>' : ''}
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">
+                      Date: ${inv.date} • Total: Rs. ${Number(inv.total || 0).toLocaleString()} • ${(inv.lines || []).length} line items
+                    </div>
+                  </div>
+                </div>
+                <span class="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-700">${inv.status}</span>
+              </label>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-3 border-t border-slate-200">
+        <button type="button" id="btn-cancel-gen-gp" class="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold cursor-pointer">Cancel</button>
+        <button type="button" id="btn-confirm-gen-gp" class="px-5 py-2 bg-[#138FCB] hover:bg-[#0E78AC] text-white rounded-xl font-bold shadow-xs cursor-pointer">
+          Generate Gatepass Outward
+        </button>
+      </div>
+    </div>
+  `;
+
+  openModal({
+    title: 'Generate Gatepass Outward from Invoice',
+    subtitle: 'Automatically expands bundled systems into physical components for floor staff picking',
+    badge: 'Logistics Fulfillment',
+    contentHtml,
+    size: 'max-w-2xl',
+    onOpen: (modalEl) => {
+      modalEl.querySelector('#btn-cancel-gen-gp').onclick = () => closeModal();
+
+      modalEl.querySelector('#btn-confirm-gen-gp').onclick = () => {
+        const selectedRadio = modalEl.querySelector('input[name="sel-invoice-id"]:checked');
+        if (!selectedRadio) {
+          toast.show('Please select a sales invoice to generate the gate pass from.', 'error');
+          return;
+        }
+
+        const invoiceId = selectedRadio.value;
+        try {
+          const gp = gatepassService.createGatepassFromInvoice(invoiceId, {
+            assignedStaffIds: ['user-wh-alitoor'],
+            userId: authService.getCurrentUser()?.id || 'user-admin'
+          });
+
+          toast.show(`Gatepass ${gp.gatepassNumber} created with ${gp.lines.length} physical line items!`, 'success');
+          closeModal();
+          if (onSaved) onSaved();
+        } catch (err) {
+          toast.show(err.message, 'error');
+        }
+      };
+    }
+  });
 }
 
 function openCreateGatepassModal(onSaved, gatepassToEdit = null) {

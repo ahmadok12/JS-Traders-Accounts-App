@@ -1855,6 +1855,45 @@ class StorageService {
       merged[col] = Array.from(map.values());
     }
 
+    // Guarantee essential seed entities exist in merged db
+    if (Array.isArray(SEED_DATABASE.products)) {
+      if (!Array.isArray(merged.products)) merged.products = [];
+      const pIds = new Set(merged.products.map(p => p.id));
+      SEED_DATABASE.products.forEach(sp => {
+        if (!pIds.has(sp.id)) merged.products.push(JSON.parse(JSON.stringify(sp)));
+      });
+    }
+    if (Array.isArray(SEED_DATABASE.variants)) {
+      if (!Array.isArray(merged.variants)) merged.variants = [];
+      const vIds = new Set(merged.variants.map(v => v.id));
+      SEED_DATABASE.variants.forEach(sv => {
+        if (!vIds.has(sv.id)) merged.variants.push(JSON.parse(JSON.stringify(sv)));
+      });
+    }
+    if (Array.isArray(SEED_DATABASE.parties)) {
+      if (!Array.isArray(merged.parties)) merged.parties = [];
+      const partyIds = new Set(merged.parties.map(p => p.id));
+      SEED_DATABASE.parties.forEach(sp => {
+        if (!partyIds.has(sp.id)) merged.parties.push(JSON.parse(JSON.stringify(sp)));
+      });
+    }
+    if (Array.isArray(SEED_DATABASE.chartOfAccounts)) {
+      if (!Array.isArray(merged.chartOfAccounts)) merged.chartOfAccounts = [];
+      const coaIds = new Set(merged.chartOfAccounts.map(c => c.id));
+      SEED_DATABASE.chartOfAccounts.forEach(sc => {
+        if (!coaIds.has(sc.id)) merged.chartOfAccounts.push(JSON.parse(JSON.stringify(sc)));
+      });
+    }
+    if (Array.isArray(SEED_DATABASE.assemblyRecipes) && (!merged.assemblyRecipes || !merged.assemblyRecipes.length)) {
+      merged.assemblyRecipes = JSON.parse(JSON.stringify(SEED_DATABASE.assemblyRecipes));
+    }
+    if (Array.isArray(SEED_DATABASE.bundleDefinitions) && (!merged.bundleDefinitions || !merged.bundleDefinitions.length)) {
+      merged.bundleDefinitions = JSON.parse(JSON.stringify(SEED_DATABASE.bundleDefinitions));
+    }
+    if (Array.isArray(SEED_DATABASE.disassemblyTemplates) && (!merged.disassemblyTemplates || !merged.disassemblyTemplates.length)) {
+      merged.disassemblyTemplates = JSON.parse(JSON.stringify(SEED_DATABASE.disassemblyTemplates));
+    }
+
     this.db = merged;
     this.syncVersion = Math.max(this.syncVersion, incomingVersion || 0);
 

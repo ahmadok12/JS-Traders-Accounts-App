@@ -14,6 +14,7 @@ import { productService } from '../../services/productService.js';
 import { warehouseService } from '../../services/warehouseService.js';
 import { inventoryService } from '../../services/inventoryService.js';
 import { accountingService } from '../../services/accountingService.js';
+import { bundleService } from '../../services/bundleService.js';
 import { authService } from '../../services/authService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
@@ -21,11 +22,14 @@ import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
 import { toast } from '../../components/toast.js';
 
-let activeTab = 'assembly'; // 'assembly' | 'disassembly' | 'boms' | 'payables' | 'reports'
+let activeTab = 'assembly'; // 'assembly' | 'disassembly' | 'boms' | 'bundles' | 'payables' | 'reports'
 let activeReportSubTab = 'register'; // 'register' | 'costing' | 'labor' | 'consumption' | 'disassembly_reg'
 let assemblyStatusFilter = 'ALL';
 
-export function renderAssemblyView() {
+export function renderAssemblyView(initialTab = null) {
+  if (initialTab) {
+    activeTab = initialTab;
+  }
   const warehouses = warehouseService.getWarehouses();
   const variants = productService.getVariants();
   const whMap = new Map(warehouses.map(w => [w.id, w.name]));
@@ -55,6 +59,9 @@ export function renderAssemblyView() {
         <button id="tab-btn-boms" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'boms' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
           📋 BOMs &amp; Templates
         </button>
+        <button id="tab-btn-bundles" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'bundles' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
+          🧩 Bundles &amp; Systems
+        </button>
         <button id="tab-btn-payables" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'payables' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
           💰 Labor Payables
         </button>
@@ -72,6 +79,8 @@ export function renderAssemblyView() {
     contentHtml = renderDisassemblyTab(whMap, varMap, canViewCost);
   } else if (activeTab === 'boms') {
     contentHtml = renderBomsTab(whMap, varMap);
+  } else if (activeTab === 'bundles') {
+    contentHtml = renderBundlesTab(whMap, varMap);
   } else if (activeTab === 'payables') {
     contentHtml = renderLaborPayablesTab();
   } else if (activeTab === 'reports') {
@@ -452,6 +461,71 @@ function renderBomsTab(whMap, varMap) {
                     <strong class="text-slate-800">${c.defaultRecoveryRatio}x (${c.costAllocationPercentage || 0}%)</strong>
                   </div>
                 `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================================
+// TAB: BUNDLES & SYSTEMS MASTER
+// ============================================================================
+
+function renderBundlesTab(whMap, varMap) {
+  const bundles = bundleService.getBundleDefinitions();
+
+  return `
+    <div class="space-y-6">
+      <div class="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
+        <span>🧩</span>
+        <span><strong>Decoupled Bundle &amp; Poultry Systems Architecture:</strong> Products define physical inventory; Bundle definitions define assembly ratios, group math (e.g. 1 handle per 5 lines), and component calculations without polluting the Product Master.</span>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-sm font-bold text-slate-800">Predefined Bundles &amp; Complete Poultry Systems</h3>
+            <p class="text-xs text-slate-400">Fixed sets and variable proportional rule-based packages</p>
+          </div>
+          <span class="text-xs font-bold px-3 py-1 rounded-full bg-blue-50 text-[#138FCB] border border-blue-200">
+            ${bundles.length} Configured Systems
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${bundles.map(b => `
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4.5 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-xs font-bold text-[#138FCB]">${b.bundleCode || b.id}</span>
+                  <h4 class="text-sm font-extrabold text-slate-800">${b.name}</h4>
+                </div>
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${b.bundleType === 'VARIABLE_SYSTEM' ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}">
+                  ${b.bundleType === 'VARIABLE_SYSTEM' ? 'VARIABLE SYSTEM' : 'FIXED SET'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-500">${b.description || ''}</p>
+
+              <div class="border-t border-slate-200 pt-2 space-y-1.5">
+                <span class="text-[11px] font-bold text-slate-600 block mb-1">Component Calculation Formulas:</span>
+                ${(b.components || []).map(c => `
+                  <div class="text-xs flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200/80 shadow-2xs">
+                    <span class="font-medium text-slate-800">• ${varMap.get(c.componentVariantId) || c.componentVariantId}</span>
+                    <span class="text-[11px] font-mono text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded font-bold">
+                      ${c.ruleType === 'PER_LINE' ? `${c.baseFactor} / line` :
+                        c.ruleType === 'PER_GROUP_CEIL' ? `1 per ${c.groupSize || 5} lines (ceil)` :
+                        c.ruleType === 'FIXED_QTY' ? `Fixed ${c.baseFactor}` : c.ruleType}
+                    </span>
+                  </div>
+                `).join('')}
+              </div>
+
+              <div class="border-t border-slate-200 pt-2 flex items-center justify-between text-xs text-slate-500 font-medium">
+                <span>Base Unit: <strong class="text-slate-800">${b.baseUnit || 'Line'}</strong></span>
+                <span>Pricing: <strong class="text-slate-800">${b.pricingRule || 'Fixed'}</strong></span>
               </div>
             </div>
           `).join('')}

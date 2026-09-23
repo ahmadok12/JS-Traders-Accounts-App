@@ -170,18 +170,24 @@ class AppController {
         breadcrumbs = ['Inventory', 'Stock Adjustments'];
         break;
       case 'inventory-assembly':
-        html = renderAssemblyView();
+        html = renderAssemblyView('assembly');
         bindFn = bindAssemblyEvents;
-        breadcrumbs = ['Assembly & Disassembly', 'Assembly'];
+        breadcrumbs = ['Manufacturing', 'Assembly Orders'];
         break;
       case 'inventory-disassembly':
-        html = renderAssemblyView();
-        bindFn = (container, cb) => {
-          bindAssemblyEvents(container, cb);
-          const disBtn = container.querySelector('#filter-secondary-btn');
-          if (disBtn) disBtn.click();
-        };
-        breadcrumbs = ['Assembly & Disassembly', 'Disassembly'];
+        html = renderAssemblyView('disassembly');
+        bindFn = bindAssemblyEvents;
+        breadcrumbs = ['Manufacturing', 'Disassembly & Breakdown'];
+        break;
+      case 'inventory-boms':
+        html = renderAssemblyView('boms');
+        bindFn = bindAssemblyEvents;
+        breadcrumbs = ['Manufacturing', 'BOMs & Templates'];
+        break;
+      case 'inventory-bundles':
+        html = renderAssemblyView('bundles');
+        bindFn = bindAssemblyEvents;
+        breadcrumbs = ['Manufacturing', 'Bundles & Systems'];
         break;
       case 'inventory-rolls':
         html = renderRollInventoryView();

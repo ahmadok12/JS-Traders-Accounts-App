@@ -152,15 +152,27 @@ class WarehouseAppController {
         break;
 
       case 'inventory-assembly':
-        html = renderAssemblyView();
+        html = renderAssemblyView('assembly');
         bindFn = bindAssemblyEvents;
         breadcrumbs = ['Production', 'Assembly Orders'];
         break;
 
       case 'inventory-disassembly':
-        html = renderAssemblyView();
+        html = renderAssemblyView('disassembly');
         bindFn = bindAssemblyEvents;
         breadcrumbs = ['Production', 'Disassembly Orders'];
+        break;
+
+      case 'inventory-boms':
+        html = renderAssemblyView('boms');
+        bindFn = bindAssemblyEvents;
+        breadcrumbs = ['Production', 'BOMs & Templates'];
+        break;
+
+      case 'inventory-bundles':
+        html = renderAssemblyView('bundles');
+        bindFn = bindAssemblyEvents;
+        breadcrumbs = ['Production', 'Bundles & Systems'];
         break;
 
       case 'warehouse-warehouses':

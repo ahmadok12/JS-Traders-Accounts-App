@@ -13,6 +13,7 @@ import { renderFilterBar } from '../../components/filters.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
 import { toast } from '../../components/toast.js';
+import { openTrackingGraphicsModal } from '../../components/trackingGraphicsModal.js';
 
 export function renderImportShipmentsView() {
   const shipments = purchasingService.getImportShipments();
@@ -96,8 +97,9 @@ export function renderImportShipmentsView() {
 
   const actions = [
     { label: 'View', variant: 'secondary' },
+    { label: 'Map', variant: 'primary' },
     { label: 'Landed Cost', variant: 'secondary' },
-    { label: 'Tracktainer Sync', variant: 'primary' }
+    { label: 'Tracktainer Sync', variant: 'secondary' }
   ];
 
   const tableHtml = renderTable({
@@ -121,8 +123,9 @@ export function bindImportShipmentsEvents(container, refreshCallback) {
   const shipments = purchasingService.getImportShipments();
   const actions = [
     { label: 'View', variant: 'secondary', onClick: (row) => openShipmentDetailModal(row, refreshCallback) },
+    { label: 'Map', variant: 'primary', onClick: (row) => openTrackingGraphicsModal(row) },
     { label: 'Landed Cost', variant: 'secondary', onClick: (row) => openLandedCostModal(row, refreshCallback) },
-    { label: 'Tracktainer Sync', onClick: (row) => handleTracktainerSync(row, refreshCallback) }
+    { label: 'Tracktainer Sync', variant: 'secondary', onClick: (row) => handleTracktainerSync(row, refreshCallback) }
   ];
   bindTableActions(container, actions, shipments);
 
@@ -199,8 +202,9 @@ function updateShipmentsTable(container, filteredData, refreshCallback) {
 
   const actions = [
     { label: 'View', variant: 'secondary', onClick: (row) => openShipmentDetailModal(row, refreshCallback) },
+    { label: 'Map', variant: 'primary', onClick: (row) => openTrackingGraphicsModal(row) },
     { label: 'Landed Cost', variant: 'secondary', onClick: (row) => openLandedCostModal(row, refreshCallback) },
-    { label: 'Tracktainer Sync', onClick: (row) => handleTracktainerSync(row, refreshCallback) }
+    { label: 'Tracktainer Sync', variant: 'secondary', onClick: (row) => handleTracktainerSync(row, refreshCallback) }
   ];
 
   tableContainer.innerHTML = renderTable({ columns, data: filteredData, actions });
@@ -531,6 +535,9 @@ export function openShipmentDetailModal(shipment, refreshCallback) {
         <button id="ship-close-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
           Close
         </button>
+        <button id="ship-map-btn" type="button" class="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-all cursor-pointer">
+          <span>🗺️ View Tracking Map</span>
+        </button>
         <button id="ship-lc-btn" type="button" class="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs">
           <span>⚙️ Landed Cost</span>
         </button>
@@ -567,6 +574,14 @@ export function openShipmentDetailModal(shipment, refreshCallback) {
               if (refreshCallback) refreshCallback();
             }
           });
+        };
+      }
+
+      const mapBtn = modalEl.querySelector('#ship-map-btn');
+      if (mapBtn) {
+        mapBtn.onclick = () => {
+          closeModal();
+          openTrackingGraphicsModal(shipment);
         };
       }
 

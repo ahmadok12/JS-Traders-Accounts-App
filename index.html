@@ -13,6 +13,10 @@
   <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+  <!-- Leaflet CSS & JS for Ocean Tracking Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
   <!-- Tailwind Custom Brand Config -->
   <script>
     tailwind.config = {
@@ -217,12 +221,20 @@
               </a>
               <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-rolls" href="#/inventory-rolls">
                 <span>📏 Roll / Cut-to-Length</span>
-              </a>
               <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-assembly" href="#/inventory-assembly">
-                <span>⚙ Assembly & Production</span>
+                <span>⚙ Assembly &amp; Production</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-disassembly" href="#/inventory-disassembly">
+                <span>🔄 Disassembly / Breakdown</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-boms" href="#/inventory-boms">
+                <span>📋 BOMs &amp; Templates</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-bundles" href="#/inventory-bundles">
+                <span>🧩 Bundles &amp; Systems</span>
               </a>
               <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-warehouses" href="#/warehouse-warehouses">
-                <span>🏢 Facilities & Locations</span>
+                <span>🏢 Facilities &amp; Locations</span>
               </a>
             </div>
           </div>
