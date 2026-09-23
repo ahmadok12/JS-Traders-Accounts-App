@@ -39,6 +39,8 @@ export function renderGatepassView(direction = 'all') {
   const whMap = new Map(warehouses.map(w => [w.id, w.name]));
   const users = storageService.getCollection('users');
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
+  const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v.name]));
 
   const filterBarHtml = renderFilterBar({
     searchPlaceholder: direction === 'outward'
@@ -98,25 +100,51 @@ export function renderGatepassView(direction = 'all') {
       `
     },
     {
-      key: 'locationBreakdown',
-      label: 'Dispatch Breakdown',
+      key: 'productsAndAllocation',
+      label: 'Products & Allocation (WH / Office)',
       render: row => {
-        let totalWh = 0;
-        let totalOff = 0;
-        (row.lines || []).forEach(l => {
-          totalWh += (Number(l.warehouseQty) || 0);
-          totalOff += (Number(l.officeQty) || 0);
-        });
+        const lines = row.lines || [];
+        if (lines.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">No items</span>`;
+        }
+        const shownLines = lines.slice(0, 4);
+        const remainingCount = lines.length - shownLines.length;
+        const isInward = row.gatepassType === 'inward';
+
         return `
-          <div class="text-xs space-y-0.5">
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
-            </div>
+          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+            ${shownLines.map(l => {
+              const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+              const wh = Number(l.warehouseQty) || 0;
+              const off = Number(l.officeQty) || 0;
+              const qty = Number(l.quantity !== undefined ? l.quantity : (wh + off)) || 0;
+              const unit = l.packagingName || l.unit || 'PCS';
+              return `
+                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
+                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
+                      isInward ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-blue-700 bg-blue-50 border border-blue-200'
+                    }">
+                      ${isInward ? 'Rec' : 'Disp'}: ${qty} ${unit}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
+                    </span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            ${remainingCount > 0 ? `
+              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+                +${remainingCount} more product(s) in this document
+              </div>
+            ` : ''}
           </div>
         `;
       }
@@ -251,6 +279,8 @@ export function bindGatepassEvents(container, refreshCallback, direction = 'all'
       const whMap = new Map(warehouses.map(w => [w.id, w.name]));
       const users = storageService.getCollection('users');
       const userMap = new Map(users.map(u => [u.id, u.fullName]));
+      const variants = productService.getVariants();
+      const varMap = new Map(variants.map(v => [v.id, v.name]));
 
       const columns = [
         {
@@ -282,33 +312,51 @@ export function bindGatepassEvents(container, refreshCallback, direction = 'all'
           `
         },
         {
-          key: 'locationBreakdown',
-          label: 'Cargo Breakdown',
+          key: 'productsAndAllocation',
+          label: 'Products & Allocation (WH / Office)',
           render: row => {
-            let totalWh = 0;
-            let totalOff = 0;
-            (row.lines || []).forEach(l => {
-              totalWh += (Number(l.warehouseQty) || 0);
-              totalOff += (Number(l.officeQty) || 0);
-            });
-            const total = (row.lines || []).reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+            const lines = row.lines || [];
+            if (lines.length === 0) {
+              return `<span class="text-slate-400 text-xs italic">No items</span>`;
+            }
+            const shownLines = lines.slice(0, 4);
+            const remainingCount = lines.length - shownLines.length;
+            const isInward = row.gatepassType === 'inward';
+
             return `
-              <div class="text-xs space-y-0.5">
-                ${row.gatepassType === 'inward' ? `
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span class="text-slate-700">Receipt: <strong>${total}</strong> units</span>
+              <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+                ${shownLines.map(l => {
+                  const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+                  const wh = Number(l.warehouseQty) || 0;
+                  const off = Number(l.officeQty) || 0;
+                  const qty = Number(l.quantity !== undefined ? l.quantity : (wh + off)) || 0;
+                  const unit = l.packagingName || l.unit || 'PCS';
+                  return `
+                    <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
+                      <div class="flex items-center justify-between gap-1.5">
+                        <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
+                        <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
+                          isInward ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-blue-700 bg-blue-50 border border-blue-200'
+                        }">
+                          ${isInward ? 'Rec' : 'Disp'}: ${qty} ${unit}
+                        </span>
+                      </div>
+                      <div class="flex items-center gap-2 text-[10px]">
+                        <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
+                          <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
+                        </span>
+                        <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
+                          <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
+                        </span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+                ${remainingCount > 0 ? `
+                  <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+                    +${remainingCount} more product(s) in this document
                   </div>
-                ` : `
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                    <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
-                  </div>
-                `}
+                ` : ''}
               </div>
             `;
           }

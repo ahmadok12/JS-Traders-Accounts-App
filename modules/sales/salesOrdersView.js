@@ -31,6 +31,8 @@ export function renderSalesOrdersView() {
   const partyMap = new Map(parties.map(p => [p.id, p.name]));
   const users = storageService.getCollection('users') || [];
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
+  const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v.name]));
 
   const filterBarHtml = renderFilterBar({
     searchPlaceholder: 'Search orders by SO #, customer name, vehicle, notes...',
@@ -74,52 +76,56 @@ export function renderSalesOrdersView() {
       `
     },
     {
-      key: 'deliveryProgress',
-      label: 'Delivery Progress (Dispatches)',
+      key: 'productsAndAllocation',
+      label: 'Products & Allocation (WH / Office)',
       render: row => {
-        let totalOrd = 0;
-        let totalDel = 0;
-        (row.lines || []).forEach(l => {
-          totalOrd += (Number(l.orderedQty) || 0);
-          totalDel += (Number(l.deliveredQty) || 0);
-        });
-        const remaining = Math.max(0, totalOrd - totalDel);
-        const pct = totalOrd > 0 ? Math.min(100, Math.round((totalDel / totalOrd) * 100)) : 0;
+        const lines = row.lines || [];
+        if (lines.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">No items</span>`;
+        }
+        const shownLines = lines.slice(0, 4);
+        const remainingCount = lines.length - shownLines.length;
+
         return `
-          <div class="space-y-1 min-w-[130px]">
-            <div class="flex items-center justify-between text-[11px] font-bold">
-              <span class="text-emerald-700">${totalDel} del</span>
-              <span class="text-slate-400 font-normal">/</span>
-              <span class="text-slate-800">${totalOrd} ord</span>
-              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} left)</span>` : ''}
-            </div>
-            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-              <div class="h-full ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'}" style="width: ${pct}%"></div>
-            </div>
-          </div>
-        `;
-      }
-    },
-    {
-      key: 'locationBreakdown',
-      label: 'Demand Breakdown',
-      render: row => {
-        let totalWh = 0;
-        let totalOff = 0;
-        (row.lines || []).forEach(l => {
-          totalWh += (Number(l.warehouseQty) || 0);
-          totalOff += (Number(l.officeQty) || 0);
-        });
-        return `
-          <div class="text-xs space-y-0.5">
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
-            </div>
+          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+            ${shownLines.map(l => {
+              const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+              const wh = Number(l.warehouseQty) || 0;
+              const off = Number(l.officeQty) || 0;
+              const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (wh + off)) || 0;
+              const del = Number(l.deliveredQty) || 0;
+              const pending = Math.max(0, ord - del);
+              const unit = l.packagingName || l.unit || 'PCS';
+              const isDone = del >= ord && ord > 0;
+              return `
+                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
+                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
+                      isDone ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' :
+                      del > 0 ? 'text-blue-700 bg-blue-50 border border-blue-200' :
+                      'text-slate-600 bg-white border border-slate-200'
+                    }">
+                      ${del}/${ord} del ${isDone ? '✓' : `(${pending} left)`}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
+                    </span>
+                    <span class="text-slate-400 font-medium ml-auto">${unit}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            ${remainingCount > 0 ? `
+              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+                +${remainingCount} more product(s) in this order
+              </div>
+            ` : ''}
           </div>
         `;
       }
@@ -232,6 +238,8 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
   const partyMap = new Map(parties.map(p => [p.id, p.name]));
   const users = storageService.getCollection('users') || [];
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
+  const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v.name]));
 
   const columns = [
     {
@@ -255,52 +263,56 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
       `
     },
     {
-      key: 'deliveryProgress',
-      label: 'Delivery Progress (Dispatches)',
+      key: 'productsAndAllocation',
+      label: 'Products & Allocation (WH / Office)',
       render: row => {
-        let totalOrd = 0;
-        let totalDel = 0;
-        (row.lines || []).forEach(l => {
-          totalOrd += (Number(l.orderedQty) || 0);
-          totalDel += (Number(l.deliveredQty) || 0);
-        });
-        const remaining = Math.max(0, totalOrd - totalDel);
-        const pct = totalOrd > 0 ? Math.min(100, Math.round((totalDel / totalOrd) * 100)) : 0;
+        const lines = row.lines || [];
+        if (lines.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">No items</span>`;
+        }
+        const shownLines = lines.slice(0, 4);
+        const remainingCount = lines.length - shownLines.length;
+
         return `
-          <div class="space-y-1 min-w-[130px]">
-            <div class="flex items-center justify-between text-[11px] font-bold">
-              <span class="text-emerald-700">${totalDel} del</span>
-              <span class="text-slate-400 font-normal">/</span>
-              <span class="text-slate-800">${totalOrd} ord</span>
-              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} left)</span>` : ''}
-            </div>
-            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-              <div class="h-full ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'}" style="width: ${pct}%"></div>
-            </div>
-          </div>
-        `;
-      }
-    },
-    {
-      key: 'locationBreakdown',
-      label: 'Demand Breakdown',
-      render: row => {
-        let totalWh = 0;
-        let totalOff = 0;
-        (row.lines || []).forEach(l => {
-          totalWh += (Number(l.warehouseQty) || 0);
-          totalOff += (Number(l.officeQty) || 0);
-        });
-        return `
-          <div class="text-xs space-y-0.5">
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
-            </div>
+          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+            ${shownLines.map(l => {
+              const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+              const wh = Number(l.warehouseQty) || 0;
+              const off = Number(l.officeQty) || 0;
+              const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (wh + off)) || 0;
+              const del = Number(l.deliveredQty) || 0;
+              const pending = Math.max(0, ord - del);
+              const unit = l.packagingName || l.unit || 'PCS';
+              const isDone = del >= ord && ord > 0;
+              return `
+                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
+                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
+                      isDone ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' :
+                      del > 0 ? 'text-blue-700 bg-blue-50 border border-blue-200' :
+                      'text-slate-600 bg-white border border-slate-200'
+                    }">
+                      ${del}/${ord} del ${isDone ? '✓' : `(${pending} left)`}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
+                    </span>
+                    <span class="text-slate-400 font-medium ml-auto">${unit}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            ${remainingCount > 0 ? `
+              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+                +${remainingCount} more product(s) in this order
+              </div>
+            ` : ''}
           </div>
         `;
       }

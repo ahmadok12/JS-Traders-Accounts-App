@@ -28,6 +28,8 @@ export function renderInwardOrdersView() {
   const orders = inwardOrderService.getInwardOrders();
   const users = storageService.getCollection('users') || [];
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
+  const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v.name]));
 
   const filterBarHtml = renderFilterBar({
     searchPlaceholder: 'Search stock inwards by IO #, supplier/origin, vehicle, notes...',
@@ -71,52 +73,56 @@ export function renderInwardOrdersView() {
       `
     },
     {
-      key: 'receiptProgress',
-      label: 'Receipt Progress (GRNs)',
+      key: 'productsAndAllocation',
+      label: 'Expected Products & Allocation (WH / Office)',
       render: row => {
-        let totalExp = 0;
-        let totalRec = 0;
-        (row.lines || []).forEach(l => {
-          totalExp += (Number(l.expectedQty) || 0);
-          totalRec += (Number(l.receivedQty) || 0);
-        });
-        const remaining = Math.max(0, totalExp - totalRec);
-        const pct = totalExp > 0 ? Math.min(100, Math.round((totalRec / totalExp) * 100)) : 0;
+        const lines = row.lines || [];
+        if (lines.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">No items</span>`;
+        }
+        const shownLines = lines.slice(0, 4);
+        const remainingCount = lines.length - shownLines.length;
+
         return `
-          <div class="space-y-1 min-w-[130px]">
-            <div class="flex items-center justify-between text-[11px] font-bold">
-              <span class="text-emerald-700">${totalRec} rec</span>
-              <span class="text-slate-400 font-normal">/</span>
-              <span class="text-slate-800">${totalExp} exp</span>
-              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} left)</span>` : ''}
-            </div>
-            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-              <div class="h-full ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'}" style="width: ${pct}%"></div>
-            </div>
-          </div>
-        `;
-      }
-    },
-    {
-      key: 'locationBreakdown',
-      label: 'Receiving Allocation',
-      render: row => {
-        let totalWh = 0;
-        let totalOff = 0;
-        (row.lines || []).forEach(l => {
-          totalWh += (Number(l.warehouseQty) || 0);
-          totalOff += (Number(l.officeQty) || 0);
-        });
-        return `
-          <div class="text-xs space-y-0.5">
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
-            </div>
+          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+            ${shownLines.map(l => {
+              const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+              const wh = Number(l.warehouseQty) || 0;
+              const off = Number(l.officeQty) || 0;
+              const exp = Number(l.expectedQty !== undefined ? l.expectedQty : (wh + off)) || 0;
+              const rec = Number(l.receivedQty) || 0;
+              const pending = Math.max(0, exp - rec);
+              const unit = l.packagingName || l.unit || 'PCS';
+              const isDone = rec >= exp && exp > 0;
+              return `
+                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
+                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
+                      isDone ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' :
+                      rec > 0 ? 'text-blue-700 bg-blue-50 border border-blue-200' :
+                      'text-slate-600 bg-white border border-slate-200'
+                    }">
+                      ${rec}/${exp} rec ${isDone ? '✓' : `(${pending} left)`}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
+                    </span>
+                    <span class="text-slate-400 font-medium ml-auto">${unit}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            ${remainingCount > 0 ? `
+              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+                +${remainingCount} more product(s) in this order
+              </div>
+            ` : ''}
           </div>
         `;
       }
@@ -224,6 +230,8 @@ function updateInwardOrdersTable(container, filteredData, refreshCallback) {
 
   const users = storageService.getCollection('users') || [];
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
+  const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v.name]));
 
   const columns = [
     {
@@ -247,52 +255,56 @@ function updateInwardOrdersTable(container, filteredData, refreshCallback) {
       `
     },
     {
-      key: 'receiptProgress',
-      label: 'Receipt Progress (GRNs)',
+      key: 'productsAndAllocation',
+      label: 'Expected Products & Allocation (WH / Office)',
       render: row => {
-        let totalExp = 0;
-        let totalRec = 0;
-        (row.lines || []).forEach(l => {
-          totalExp += (Number(l.expectedQty) || 0);
-          totalRec += (Number(l.receivedQty) || 0);
-        });
-        const remaining = Math.max(0, totalExp - totalRec);
-        const pct = totalExp > 0 ? Math.min(100, Math.round((totalRec / totalExp) * 100)) : 0;
+        const lines = row.lines || [];
+        if (lines.length === 0) {
+          return `<span class="text-slate-400 text-xs italic">No items</span>`;
+        }
+        const shownLines = lines.slice(0, 4);
+        const remainingCount = lines.length - shownLines.length;
+
         return `
-          <div class="space-y-1 min-w-[130px]">
-            <div class="flex items-center justify-between text-[11px] font-bold">
-              <span class="text-emerald-700">${totalRec} rec</span>
-              <span class="text-slate-400 font-normal">/</span>
-              <span class="text-slate-800">${totalExp} exp</span>
-              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} left)</span>` : ''}
-            </div>
-            <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-              <div class="h-full ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'}" style="width: ${pct}%"></div>
-            </div>
-          </div>
-        `;
-      }
-    },
-    {
-      key: 'locationBreakdown',
-      label: 'Receiving Allocation',
-      render: row => {
-        let totalWh = 0;
-        let totalOff = 0;
-        (row.lines || []).forEach(l => {
-          totalWh += (Number(l.warehouseQty) || 0);
-          totalOff += (Number(l.officeQty) || 0);
-        });
-        return `
-          <div class="text-xs space-y-0.5">
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-              <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
-              <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
-            </div>
+          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+            ${shownLines.map(l => {
+              const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+              const wh = Number(l.warehouseQty) || 0;
+              const off = Number(l.officeQty) || 0;
+              const exp = Number(l.expectedQty !== undefined ? l.expectedQty : (wh + off)) || 0;
+              const rec = Number(l.receivedQty) || 0;
+              const pending = Math.max(0, exp - rec);
+              const unit = l.packagingName || l.unit || 'PCS';
+              const isDone = rec >= exp && exp > 0;
+              return `
+                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
+                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
+                      isDone ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' :
+                      rec > 0 ? 'text-blue-700 bg-blue-50 border border-blue-200' :
+                      'text-slate-600 bg-white border border-slate-200'
+                    }">
+                      ${rec}/${exp} rec ${isDone ? '✓' : `(${pending} left)`}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
+                    </span>
+                    <span class="text-slate-400 font-medium ml-auto">${unit}</span>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+            ${remainingCount > 0 ? `
+              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+                +${remainingCount} more product(s) in this order
+              </div>
+            ` : ''}
           </div>
         `;
       }
