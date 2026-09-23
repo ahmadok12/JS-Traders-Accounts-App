@@ -11,6 +11,7 @@
 import { storageService } from './storageService.js';
 import { productService } from './productService.js';
 import { inventoryService } from './inventoryService.js';
+import { cutToLengthService } from './cutToLengthService.js';
 
 class GatepassService {
   getGatepasses() {
@@ -86,6 +87,10 @@ class GatepassService {
         officeQty: oQty,
         quantity: total,
         unit: l.unit || 'PCS',
+        packagingName: l.packagingName || null,
+        isRoll: Boolean(l.isRoll),
+        rollSize: l.rollSize ? Number(l.rollSize) : null,
+        totalFeet: l.totalFeet ? Number(l.totalFeet) : null,
         negotiatedRate: Number(l.negotiatedRate) || null
       };
     });
@@ -184,7 +189,9 @@ class GatepassService {
         const name = v ? v.name : 'Equipment Item';
         const qty = isOfficeStaff ? (Number(line.officeQty) || 0) : (Number(line.warehouseQty) || 0);
         if (qty > 0) {
-          itemsToFetch.push(`${qty} ${line.unit || 'PCS'} ${name}`);
+          const unitStr = line.packagingName || line.unit || 'PCS';
+          const rollDetail = line.isRoll ? ` (${(qty * Number(line.rollSize)).toLocaleString()} ft)` : (line.unit === 'ft' ? ' [Loose Cut]' : '');
+          itemsToFetch.push(`${qty} ${unitStr}${rollDetail} ${name}`);
         }
       }
 
@@ -296,28 +303,76 @@ class GatepassService {
     const warehouseLines = [];
     const officeLines = [];
 
+    const variants = productService.getVariants();
+    const varMap = new Map(variants.map(v => [v.id, v]));
+
     for (const line of gp.lines) {
-      if (line.warehouseQty > 0) {
-        warehouseLines.push({
-          variantId: line.variantId,
-          quantity: -Math.abs(line.warehouseQty), // negative for deduction
-          unitRate: line.negotiatedRate || 0,
-          unit: line.unit,
-          notes: `Gatepass Outward ${gp.gatepassNumber} (Warehouse)`
-        });
-      }
-      if (line.officeQty > 0) {
-        officeLines.push({
-          variantId: line.variantId,
-          quantity: -Math.abs(line.officeQty), // negative for deduction
-          unitRate: line.negotiatedRate || 0,
-          unit: line.unit,
-          notes: `Gatepass Outward ${gp.gatepassNumber} (Office)`
-        });
+      const v = varMap.get(line.variantId);
+      const product = v ? productService.getProductById(v.productId) : null;
+      const isCtl = Boolean(product && (product.cut_to_length || product.enableRollTracking));
+
+      if (isCtl) {
+        // Warehouse dispatch (wh-1)
+        if (line.warehouseQty > 0) {
+          const plan = cutToLengthService.planAllocation({
+            productId: product.id,
+            warehouseId: 'wh-1',
+            requestedQty: line.warehouseQty,
+            unit: line.packagingName || line.unit || 'ft',
+            allowMultiPieces: true
+          });
+          if (plan && plan.canFulfill) {
+            cutToLengthService.commitAllocation(plan, {
+              referenceDocType: 'gatepass',
+              referenceDocId: gp.id,
+              userId: approvedByUserId,
+              notes: `Outward dispatch approved on ${gp.gatepassNumber} (Warehouse)`
+            });
+          }
+        }
+
+        // Office dispatch (wh-2)
+        if (line.officeQty > 0) {
+          const plan = cutToLengthService.planAllocation({
+            productId: product.id,
+            warehouseId: 'wh-2',
+            requestedQty: line.officeQty,
+            unit: line.packagingName || line.unit || 'ft',
+            allowMultiPieces: true
+          });
+          if (plan && plan.canFulfill) {
+            cutToLengthService.commitAllocation(plan, {
+              referenceDocType: 'gatepass',
+              referenceDocId: gp.id,
+              userId: approvedByUserId,
+              notes: `Outward dispatch approved on ${gp.gatepassNumber} (Office)`
+            });
+          }
+        }
+      } else {
+        // Standard piece-based product
+        if (line.warehouseQty > 0) {
+          warehouseLines.push({
+            variantId: line.variantId,
+            quantity: -Math.abs(line.warehouseQty),
+            unitRate: line.negotiatedRate || 0,
+            unit: line.unit,
+            notes: `Gatepass Outward ${gp.gatepassNumber} (Warehouse)`
+          });
+        }
+        if (line.officeQty > 0) {
+          officeLines.push({
+            variantId: line.variantId,
+            quantity: -Math.abs(line.officeQty),
+            unitRate: line.negotiatedRate || 0,
+            unit: line.unit,
+            notes: `Gatepass Outward ${gp.gatepassNumber} (Office)`
+          });
+        }
       }
     }
 
-    // Post to Warehouse (wh-1)
+    // Post standard movements to Warehouse (wh-1)
     if (warehouseLines.length > 0) {
       inventoryService.postStockMovement({
         movementType: 'delivery',
@@ -330,7 +385,7 @@ class GatepassService {
       });
     }
 
-    // Post to Office (wh-2)
+    // Post standard movements to Office (wh-2)
     if (officeLines.length > 0) {
       inventoryService.postStockMovement({
         movementType: 'delivery',
@@ -393,6 +448,10 @@ class GatepassService {
           officeQty: offQty,
           quantity: totalQty,
           unit: line.unit || 'PCS',
+          packagingName: line.packagingName || null,
+          isRoll: Boolean(line.isRoll),
+          rollSize: line.rollSize ? Number(line.rollSize) : null,
+          totalFeet: line.totalFeet ? Number(line.totalFeet) : null,
           negotiatedRate: line.negotiatedRate || 0
         };
       });
@@ -432,6 +491,13 @@ class GatepassService {
   voidGatepass(gatepassId, voidedByUserId = 'user-wh-mgr') {
     const gp = this.getGatepassById(gatepassId);
     if (!gp) throw new Error('Gatepass not found.');
+
+    // Rollback any cut-to-length allocations made for this gatepass
+    try {
+      cutToLengthService.rollbackAllocation('gatepass', gp.id, voidedByUserId);
+    } catch (e) {
+      console.warn('Cut to length rollback error:', e);
+    }
 
     const updated = storageService.update('gatepasses', gatepassId, {
       status: 'Voided',

@@ -13,6 +13,7 @@ import { salesService } from '../../services/salesService.js';
 import { warehouseService } from '../../services/warehouseService.js';
 import { productService } from '../../services/productService.js';
 import { inventoryService } from '../../services/inventoryService.js';
+import { cutToLengthService } from '../../services/cutToLengthService.js';
 import { staffAuthService } from '../../services/staffAuthService.js';
 import { authService } from '../../services/authService.js';
 import { storageService } from '../../services/storageService.js';
@@ -182,7 +183,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
   const whStaff = staffMembers.filter(s => s.staffType === 'warehouse_staff' || s.activeWarehouseId === 'wh-1');
   const officeStaff = staffMembers.filter(s => s.staffType === 'office_staff' || s.activeWarehouseId === 'wh-2');
 
-  const renderRowHtml = (variantId = null, whQty = '', offQty = '', rowIdx = 0) => {
+  const renderRowHtml = (variantId = null, whQty = '', offQty = '', rowIdx = 0, initialPackaging = null) => {
     let selectedVariant = variantId ? variants.find(v => v.id === variantId) || null : null;
     let selectedProduct = selectedVariant
       ? products.find(p => p.id === selectedVariant.productId) || products[0]
@@ -192,9 +193,6 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
       ? variants.filter(v => v.productId === selectedProduct.id)
       : [];
 
-    // If no variant explicitly requested:
-    // - Single variant: auto-select
-    // - Multi variants: keep null (empty by default)
     if (!selectedVariant) {
       if (prodVariants.length === 1) {
         selectedVariant = prodVariants[0];
@@ -204,7 +202,11 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
     }
 
     const vId = selectedVariant ? selectedVariant.id : '';
-    const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (selectedProduct?.baseUnitId || 'PCS');
+    const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+    const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS');
+    const packagingUnits = isCtl ? (selectedProduct.packagingUnits || []) : [];
+    const curPackaging = initialPackaging || (packagingUnits.length > 0 ? packagingUnits[0].name : baseUnit);
+
     const whStock = vId ? inventoryService.getBalance('wh-1', vId) : 0;
     const officeStock = vId ? inventoryService.getBalance('wh-2', vId) : 0;
     const wVal = (whQty !== '' && whQty !== null && whQty !== undefined) ? whQty : '';
@@ -219,28 +221,50 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
       variants,
       whStock,
       officeStock,
-      unit
+      unit: baseUnit
     });
+
+    const ctlHtml = `
+      <div class="gp-ctl-container ${isCtl ? '' : 'hidden'} mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 p-2 rounded-xl border border-slate-200/60">
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Dispatch Mode:</span>
+          <select class="gp-item-packaging text-xs font-bold border border-slate-200 rounded-lg px-2.5 py-1 bg-white text-slate-800 focus:outline-none focus:border-[#138FCB] shadow-2xs cursor-pointer">
+            ${packagingUnits.map(p => `
+              <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1" ${curPackaging === p.name ? 'selected' : ''}>
+                Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
+              </option>
+            `).join('')}
+            <option value="${baseUnit}" data-factor="1" data-is-roll="0" ${curPackaging === baseUnit ? 'selected' : ''}>
+              ✂️ ${baseUnit} (Loose Cut)
+            </option>
+          </select>
+        </div>
+        <div class="gp-ctl-stock-pill text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
+          <!-- Live physical rolls & loose breakdown -->
+        </div>
+      </div>
+    `;
 
     return `
       <tr class="gp-line-row hover:bg-slate-50/70 transition-colors" data-row-index="${rowIdx}">
         <td class="p-2.5 align-top">
           ${pickerHtml}
+          ${ctlHtml}
         </td>
         <td class="p-2.5 text-center align-top">
           <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded-lg border border-blue-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
-            ${vId ? `WH Stock: ${whStock.toLocaleString()} ${unit}` : 'WH Stock: —'}
+            ${vId ? `WH Stock: ${whStock.toLocaleString()} ${baseUnit}` : 'WH Stock: —'}
           </span>
           <input type="number" min="0" value="${wVal}" placeholder="0" class="gp-wh-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] focus:ring-2 focus:ring-blue-100 py-1.5 px-2 bg-white text-blue-900 shadow-2xs">
         </td>
         <td class="p-2.5 text-center align-top">
           <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded-lg border border-amber-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
-            ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${unit}` : 'Office Stock: —'}
+            ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${baseUnit}` : 'Office Stock: —'}
           </span>
           <input type="number" min="0" value="${oVal}" placeholder="0" class="gp-office-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 py-1.5 px-2 bg-white text-amber-900 shadow-2xs">
         </td>
         <td class="p-2.5 text-right align-top pt-3.5">
-          <span class="gp-total-calc font-black text-slate-900 text-sm">${lineTotal > 0 ? `${lineTotal.toLocaleString()} ${unit}` : '—'}</span>
+          <span class="gp-total-calc font-black text-slate-900 text-sm">${lineTotal > 0 ? `${lineTotal.toLocaleString()} ${baseUnit}` : '—'}</span>
         </td>
         <td class="p-2.5 text-center align-top pt-3">
           <button type="button" class="gp-remove-row-btn w-8 h-8 inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" title="Remove line item">
@@ -319,7 +343,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
             </thead>
             <tbody id="gp-items-tbody" class="divide-y divide-slate-100 text-slate-700">
               ${isEdit && (gatepassToEdit.lines || []).length > 0
-                ? gatepassToEdit.lines.map((l, idx) => renderRowHtml(l.variantId, l.warehouseQty, l.officeQty, idx)).join('')
+                ? gatepassToEdit.lines.map((l, idx) => renderRowHtml(l.variantId, l.warehouseQty, l.officeQty, idx, l.packagingName || l.unit)).join('')
                 : renderRowHtml(null, '', '', 0)}
             </tbody>
           </table>
@@ -485,32 +509,130 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
         const whQtyInput = row.querySelector('.gp-wh-qty');
         const offQtyInput = row.querySelector('.gp-office-qty');
         const totalDisplay = row.querySelector('.gp-total-calc');
+        const ctlContainer = row.querySelector('.gp-ctl-container');
+        const packagingSelect = row.querySelector('.gp-item-packaging');
+        const ctlStockPill = row.querySelector('.gp-ctl-stock-pill');
 
         const vId = varInput ? varInput.value : '';
         if (!vId) {
           if (whIndicator) whIndicator.textContent = 'WH Stock: —';
           if (offIndicator) offIndicator.textContent = 'Office Stock: —';
           if (totalDisplay) totalDisplay.textContent = '—';
+          if (ctlContainer) ctlContainer.classList.add('hidden');
           return;
         }
 
         const selectedVariant = variants.find(v => v.id === vId);
-        const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (varInput?.getAttribute('data-unit') || 'PCS');
-        const wStock = inventoryService.getBalance('wh-1', vId);
-        const oStock = inventoryService.getBalance('wh-2', vId);
+        const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+        const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+        const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
 
-        if (whIndicator) whIndicator.textContent = `WH Stock: ${wStock.toLocaleString()} ${unit}`;
-        if (offIndicator) offIndicator.textContent = `Office Stock: ${oStock.toLocaleString()} ${unit}`;
+        if (isCtl && ctlContainer && packagingSelect) {
+          ctlContainer.classList.remove('hidden');
 
-        const rawW = whQtyInput ? whQtyInput.value.trim() : '';
-        const rawO = offQtyInput ? offQtyInput.value.trim() : '';
-        const wQty = Number(rawW) || 0;
-        const oQty = Number(rawO) || 0;
-        const lineTotal = wQty + oQty;
-        if (!rawW && !rawO) {
-          if (totalDisplay) totalDisplay.textContent = '—';
+          const packagingUnits = selectedProduct.packagingUnits || [];
+          const currentVal = packagingSelect.value;
+          const existingOptions = Array.from(packagingSelect.options).map(o => o.value);
+          const expectedValues = [...packagingUnits.map(p => p.name), baseUnit];
+          const isSame = existingOptions.length === expectedValues.length && existingOptions.every((v, idx) => v === expectedValues[idx]);
+
+          if (!isSame) {
+            packagingSelect.innerHTML = `
+              ${packagingUnits.map(p => `
+                <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1">
+                  Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
+                </option>
+              `).join('')}
+              <option value="${baseUnit}" data-factor="1" data-is-roll="0">
+                ✂️ ${baseUnit} (Loose Cut)
+              </option>
+            `;
+            if (currentVal && expectedValues.includes(currentVal)) {
+              packagingSelect.value = currentVal;
+            }
+          }
+
+          const selectedOption = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
+          const isRoll = selectedOption?.getAttribute('data-is-roll') === '1';
+          const rollFactor = Number(selectedOption?.getAttribute('data-factor')) || 1;
+          const packName = selectedOption?.value || baseUnit;
+
+          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1');
+          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2');
+
+          if (ctlStockPill && whSummary) {
+            ctlStockPill.innerHTML = `
+              <span class="font-bold text-[#138FCB]">WH:</span> ${whSummary.fullRollsCount} rolls + ${whSummary.loosePiecesFootage.toLocaleString()} ${baseUnit} loose | <span class="font-bold text-amber-700">Office:</span> ${offSummary?.fullRollsCount || 0} rolls + ${(offSummary?.loosePiecesFootage || 0).toLocaleString()} ${baseUnit}
+            `;
+          }
+
+          if (isRoll) {
+            const whRollMatch = (whSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
+            const offRollMatch = (offSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
+            const whRollCount = whRollMatch ? whRollMatch.count : 0;
+            const offRollCount = offRollMatch ? offRollMatch.count : 0;
+
+            if (whIndicator) {
+              whIndicator.textContent = `WH: ${whRollCount} Full Rolls (${packName})`;
+            }
+            if (offIndicator) {
+              offIndicator.textContent = `Office: ${offRollCount} Full Rolls (${packName})`;
+            }
+            if (whQtyInput) whQtyInput.placeholder = '0 Rolls';
+            if (offQtyInput) offQtyInput.placeholder = '0 Rolls';
+          } else {
+            const whLoose = whSummary ? whSummary.loosePiecesFootage : 0;
+            const whTotal = whSummary ? whSummary.totalFootage : 0;
+            const offLoose = offSummary ? offSummary.loosePiecesFootage : 0;
+            const offTotal = offSummary ? offSummary.totalFootage : 0;
+
+            if (whIndicator) {
+              whIndicator.textContent = `WH: ${whLoose.toLocaleString()} ${baseUnit} Loose (${whTotal.toLocaleString()} ${baseUnit} Total)`;
+            }
+            if (offIndicator) {
+              offIndicator.textContent = `Office: ${offLoose.toLocaleString()} ${baseUnit} Loose (${offTotal.toLocaleString()} ${baseUnit} Total)`;
+            }
+            if (whQtyInput) whQtyInput.placeholder = `0 ${baseUnit}`;
+            if (offQtyInput) offQtyInput.placeholder = `0 ${baseUnit}`;
+          }
+
+          const rawW = whQtyInput ? whQtyInput.value.trim() : '';
+          const rawO = offQtyInput ? offQtyInput.value.trim() : '';
+          const wQty = Number(rawW) || 0;
+          const oQty = Number(rawO) || 0;
+          const lineTotal = wQty + oQty;
+
+          if (!rawW && !rawO) {
+            if (totalDisplay) totalDisplay.textContent = '—';
+          } else {
+            if (isRoll) {
+              const totalFeet = lineTotal * rollFactor;
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal} Roll${lineTotal > 1 ? 's' : ''}</span> <span class="text-[10px] text-slate-500 font-semibold block">(${totalFeet.toLocaleString()} ${baseUnit})</span>`;
+            } else {
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(Loose Cut)</span>`;
+            }
+          }
         } else {
-          if (totalDisplay) totalDisplay.textContent = `${lineTotal.toLocaleString()} ${unit}`;
+          if (ctlContainer) ctlContainer.classList.add('hidden');
+          const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : 'PCS';
+          const wStock = inventoryService.getBalance('wh-1', vId);
+          const oStock = inventoryService.getBalance('wh-2', vId);
+
+          if (whIndicator) whIndicator.textContent = `WH Stock: ${wStock.toLocaleString()} ${unit}`;
+          if (offIndicator) offIndicator.textContent = `Office Stock: ${oStock.toLocaleString()} ${unit}`;
+          if (whQtyInput) whQtyInput.placeholder = '0';
+          if (offQtyInput) offQtyInput.placeholder = '0';
+
+          const rawW = whQtyInput ? whQtyInput.value.trim() : '';
+          const rawO = offQtyInput ? offQtyInput.value.trim() : '';
+          const wQty = Number(rawW) || 0;
+          const oQty = Number(rawO) || 0;
+          const lineTotal = wQty + oQty;
+          if (!rawW && !rawO) {
+            if (totalDisplay) totalDisplay.textContent = '—';
+          } else {
+            if (totalDisplay) totalDisplay.textContent = `${lineTotal.toLocaleString()} ${unit}`;
+          }
         }
       };
 
@@ -527,9 +649,9 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
         });
 
         const grandTotal = totalWh + totalOff;
-        if (summaryWh) summaryWh.textContent = totalWh > 0 ? `${totalWh.toLocaleString()} PCS` : '0 PCS';
-        if (summaryOff) summaryOff.textContent = totalOff > 0 ? `${totalOff.toLocaleString()} PCS` : '0 PCS';
-        if (summaryTotal) summaryTotal.textContent = grandTotal > 0 ? `${grandTotal.toLocaleString()} PCS` : '0 PCS';
+        if (summaryWh) summaryWh.textContent = totalWh > 0 ? `${totalWh.toLocaleString()} Cargo Units` : '0 Units';
+        if (summaryOff) summaryOff.textContent = totalOff > 0 ? `${totalOff.toLocaleString()} Cargo Units` : '0 Units';
+        if (summaryTotal) summaryTotal.textContent = grandTotal > 0 ? `${grandTotal.toLocaleString()} Cargo Units` : '0 Units';
         if (lineCountBadge) lineCountBadge.textContent = `${rows.length} Product${rows.length > 1 ? 's' : ''}`;
 
         // Update remove button state
@@ -556,6 +678,14 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
               updateSummaryTotals();
             }
           });
+        }
+
+        const packagingSelect = row.querySelector('.gp-item-packaging');
+        if (packagingSelect) {
+          packagingSelect.onchange = () => {
+            updateRowCalculations(row);
+            updateSummaryTotals();
+          };
         }
 
         const whQtyInput = row.querySelector('.gp-wh-qty');
@@ -634,7 +764,10 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           const varInput = row.querySelector('.gp-item-var');
           const variantId = varInput ? varInput.value : '';
           const selectedVariant = variants.find(v => v.id === variantId);
-          const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (varInput?.getAttribute('data-unit') || 'PCS');
+          const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+          const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
+          const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+
           const warehouseQty = Number(row.querySelector('.gp-wh-qty')?.value) || 0;
           const officeQty = Number(row.querySelector('.gp-office-qty')?.value) || 0;
 
@@ -643,12 +776,30 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           }
 
           if (variantId && (warehouseQty > 0 || officeQty > 0)) {
+            const packagingSelect = row.querySelector('.gp-item-packaging');
+            let packagingName = null;
+            let isRoll = false;
+            let rollSize = null;
+            let totalFeet = null;
+
+            if (isCtl && packagingSelect) {
+              const selectedOpt = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
+              isRoll = selectedOpt?.getAttribute('data-is-roll') === '1';
+              rollSize = Number(selectedOpt?.getAttribute('data-factor')) || 1;
+              packagingName = selectedOpt?.value || baseUnit;
+              totalFeet = isRoll ? (warehouseQty + officeQty) * rollSize : (warehouseQty + officeQty);
+            }
+
             lines.push({
               variantId,
               warehouseQty,
               officeQty,
               quantity: warehouseQty + officeQty,
-              unit
+              unit: isCtl ? (isRoll ? packagingName : baseUnit) : (selectedVariant?.unit || 'PCS'),
+              packagingName: isCtl ? packagingName : null,
+              isRoll,
+              rollSize,
+              totalFeet
             });
           }
         });
@@ -800,24 +951,36 @@ function openGatepassDetailModal(gatepass, onSaved) {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 text-slate-700">
-              ${(gatepass.lines || []).map(l => `
-                <tr class="hover:bg-slate-50/70 transition-colors">
-                  <td class="p-3 font-semibold text-slate-800">${varMap.get(l.variantId) || 'Feed Pan 16"'}</td>
-                  <td class="p-3 text-center">
-                    <span class="inline-block px-2.5 py-1 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200 text-xs">
-                      ${l.warehouseQty || 0} ${l.unit}
-                    </span>
-                  </td>
-                  <td class="p-3 text-center">
-                    <span class="inline-block px-2.5 py-1 rounded bg-amber-50 text-amber-700 font-bold border border-amber-200 text-xs">
-                      ${l.officeQty || 0} ${l.unit}
-                    </span>
-                  </td>
-                  <td class="p-3 text-right font-black text-slate-900 text-sm">
-                    ${l.quantity} ${l.unit}
-                  </td>
-                </tr>
-              `).join('')}
+              ${(gatepass.lines || []).map(l => {
+                const varName = varMap.get(l.variantId) || 'Item';
+                const isRoll = Boolean(l.isRoll);
+                const isLoose = l.unit === 'ft';
+                const packLabel = l.packagingName || l.unit;
+                return `
+                  <tr class="hover:bg-slate-50/70 transition-colors">
+                    <td class="p-3 font-semibold text-slate-800">
+                      <div>${varName}</div>
+                      ${isRoll ? `<span class="inline-block mt-0.5 text-[10px] font-bold text-[#138FCB] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">📦 Full Roll (${packLabel})</span>` : (isLoose ? `<span class="inline-block mt-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">✂️ Loose Continuous Cut</span>` : '')}
+                    </td>
+                    <td class="p-3 text-center">
+                      <span class="inline-block px-2.5 py-1 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200 text-xs">
+                        ${l.warehouseQty || 0} ${packLabel}
+                        ${isRoll ? `<span class="block text-[10px] font-normal text-blue-600">(${(Number(l.warehouseQty) * Number(l.rollSize)).toLocaleString()} ft)</span>` : ''}
+                      </span>
+                    </td>
+                    <td class="p-3 text-center">
+                      <span class="inline-block px-2.5 py-1 rounded bg-amber-50 text-amber-700 font-bold border border-amber-200 text-xs">
+                        ${l.officeQty || 0} ${packLabel}
+                        ${isRoll ? `<span class="block text-[10px] font-normal text-amber-600">(${(Number(l.officeQty) * Number(l.rollSize)).toLocaleString()} ft)</span>` : ''}
+                      </span>
+                    </td>
+                    <td class="p-3 text-right font-black text-slate-900 text-sm">
+                      ${l.quantity} ${packLabel}
+                      ${isRoll ? `<span class="block text-[10px] font-normal text-slate-500">(${Number(l.totalFeet || (l.quantity * l.rollSize)).toLocaleString()} ft)</span>` : (isLoose ? '<span class="block text-[10px] font-normal text-amber-600">Loose Cut</span>' : '')}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
             <tfoot class="bg-slate-50/80 border-t-2 border-slate-200" data-purpose="assigned-staff-tfoot">
               <tr>

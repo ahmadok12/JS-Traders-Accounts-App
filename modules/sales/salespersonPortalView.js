@@ -147,8 +147,11 @@ function openRateEntryModal(gatepass, onSaved) {
           return `
             <div class="p-3 bg-white rounded-xl border border-slate-200 space-y-2 rate-line-box" data-index="${idx}">
               <div class="flex justify-between items-center">
-                <span class="font-bold text-slate-800">${varMap.get(line.variantId) || 'Feed Pan 16"'}</span>
-                <span class="text-slate-500 font-semibold">Qty: <strong>${line.quantity} ${line.unit || 'PCS'}</strong></span>
+                <div>
+                  <span class="font-bold text-slate-800">${varMap.get(line.variantId) || 'Item'}</span>
+                  ${line.isRoll ? `<span class="block text-[10px] font-bold text-[#138FCB]">📦 Roll Packaging: ${line.packagingName}</span>` : (line.unit === 'ft' ? `<span class="block text-[10px] font-bold text-amber-700">✂️ Loose Continuous Cut</span>` : '')}
+                </div>
+                <span class="text-slate-500 font-semibold text-right">Qty: <strong class="text-slate-900">${line.quantity} ${line.packagingName || line.unit || 'PCS'}</strong>${line.isRoll ? `<span class="block text-[10px] text-slate-400">(${(Number(line.quantity) * Number(line.rollSize)).toLocaleString()} ft)</span>` : ''}</span>
               </div>
 
               <div class="grid grid-cols-12 gap-3 items-center pt-1">

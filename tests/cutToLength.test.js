@@ -27,6 +27,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 import { storageService } from '../services/storageService.js';
 import { productService } from '../services/productService.js';
 import { cutToLengthService } from '../services/cutToLengthService.js';
+import { gatepassService } from '../services/gatepassService.js';
 
 let passedTests = 0;
 let failedTests = 0;
@@ -277,6 +278,79 @@ async function runTests() {
   assertEquals(augerSummary.fullRollsCount, 8, 'Auger has 8 full rolls (5x 450 ft + 3x 400 ft)');
   assertEquals(augerSummary.loosePiecesCount, 1, 'Auger has 1 loose piece (250 ft)');
   assertEquals(augerSummary.totalFootage, 3700, 'Auger total continuous stock is 3,700 ft');
+  console.log('');
+
+  // --------------------------------------------------------------------------
+  console.log('TEST 9: Gatepass Outward with Full Roll & Loose Cut Integration');
+  console.log('(Verify Gatepass dispatches full rolls, cuts loose continuous ft, and notifies staff)');
+  // --------------------------------------------------------------------------
+  const initialWireSummary = cutToLengthService.getSummary('prod-4', 'wh-1');
+  const initialAugerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+
+  // Create Gatepass Outward
+  const gp = gatepassService.createGatepass({
+    customerName: 'Fatima Poultry Farm',
+    assignedStaffIds: ['user-wh-alitoor'],
+    vehicleNumber: 'LHR-8821',
+    driverName: 'Muhammad Akram',
+    lines: [
+      {
+        variantId: 'var-5', // 3mm Steel Wire
+        warehouseQty: 1,
+        officeQty: 0,
+        unit: 'Roll (5,000 ft)',
+        packagingName: 'Roll (5,000 ft)',
+        isRoll: true,
+        rollSize: 5000,
+        totalFeet: 5000
+      },
+      {
+        variantId: 'var-9', // Auger 45mm
+        warehouseQty: 600,
+        officeQty: 0,
+        unit: 'ft',
+        packagingName: 'ft',
+        isRoll: false,
+        rollSize: 1,
+        totalFeet: 600
+      }
+    ],
+    notes: 'Urgent shed installation dispatch'
+  });
+
+  assert(gp !== null, 'Gatepass created successfully');
+  assertEquals(gp.lines.length, 2, 'Gatepass has 2 line items');
+  assertEquals(gp.lines[0].isRoll, true, 'Line 1 is flagged as intact roll');
+  assertEquals(gp.lines[1].unit, 'ft', 'Line 2 is loose ft cut');
+
+  // Verify staff notification format
+  const notifs = storageService.getCollection('staffNotifications') || [];
+  const staffNotif = notifs.find(n => n.gatepassId === gp.id && n.staffId === 'user-wh-alitoor');
+  assert(staffNotif !== undefined, 'Staff notification generated for Ali Toor');
+  assert(staffNotif.message.includes('Roll (5,000 ft)'), 'Staff notification contains roll packaging name');
+  assert(staffNotif.message.includes('[Loose Cut]'), 'Staff notification clearly flags loose cut');
+
+  // Approve Gatepass
+  gatepassService.approveGatepass(gp.id, 'user-wh-mgr');
+
+  // Verify physical stock deduction
+  const afterWireSummary = cutToLengthService.getSummary('prod-4', 'wh-1');
+  const afterAugerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+
+  assertEquals(afterWireSummary.fullRollsCount, initialWireSummary.fullRollsCount - 1, 'Full roll deducted intact (count - 1)');
+  assertEquals(afterWireSummary.loosePiecesCount, initialWireSummary.loosePiecesCount, 'Loose pieces count unchanged for full roll dispatch');
+  assertEquals(afterWireSummary.totalFootage, initialWireSummary.totalFootage - 5000, 'Total wire footage reduced by 5,000 ft');
+
+  assertEquals(afterAugerSummary.totalFootage, initialAugerSummary.totalFootage - 600, 'Total auger continuous footage reduced by 600 ft');
+
+  // Void Gatepass & test rollback
+  gatepassService.voidGatepass(gp.id, 'user-wh-mgr');
+
+  const restoredWireSummary = cutToLengthService.getSummary('prod-4', 'wh-1');
+  const restoredAugerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+
+  assertEquals(restoredWireSummary.totalFootage, initialWireSummary.totalFootage, 'Wire footage 100% restored on gatepass void');
+  assertEquals(restoredAugerSummary.totalFootage, initialAugerSummary.totalFootage, 'Auger footage 100% restored on gatepass void');
   console.log('');
 
   console.log('===============================================================');
