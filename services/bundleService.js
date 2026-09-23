@@ -25,6 +25,10 @@ class BundleService {
     return storageService.getCollection('bundleDefinitions') || [];
   }
 
+  getBundleDefinitions() {
+    return this.getBundles();
+  }
+
   getBundleById(id) {
     return storageService.getById('bundleDefinitions', id);
   }

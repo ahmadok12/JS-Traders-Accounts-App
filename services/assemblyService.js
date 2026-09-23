@@ -151,12 +151,21 @@ class AssemblyService {
     return { isAvailable, shortfalls };
   }
 
+  createAssemblyOrder(payload) {
+    return this.createAssemblyDraft({
+      ...payload,
+      quantity: payload.quantity || payload.finishedQuantity,
+      date: payload.date || payload.assemblyDate
+    });
+  }
+
   // Create Draft Assembly Order (No stock movement, No payable, No accounting)
   createAssemblyDraft({
     recipeId = null,
     assemblyType = 'MANUFACTURING',
     finishedVariantId,
     quantity,
+    finishedQuantity,
     sourceWarehouseId = 'wh-1',
     outputWarehouseId = 'wh-1',
     laborPartyId = null,
@@ -165,10 +174,11 @@ class AssemblyService {
     lines = [], // { componentVariantId, recipeQuantity, actualQuantity, unitCost, isAdditional, unit }
     notes = '',
     date = null,
+    assemblyDate = null,
     userId = 'user-admin',
     status = 'Draft'
   }) {
-    const finishedQty = Number(quantity);
+    const finishedQty = Number(quantity || finishedQuantity);
     if (finishedQty <= 0) throw new Error('Quantity to assemble must be greater than zero.');
     if (!finishedVariantId) throw new Error('Target finished product must be specified.');
     if (!lines || lines.length === 0) throw new Error('At least one component must be specified for assembly.');
@@ -709,18 +719,30 @@ class AssemblyService {
     return storageService.getById('disassemblies', id);
   }
 
+  createDisassemblyOrder(payload) {
+    return this.createDisassemblyDraft({
+      ...payload,
+      sourceQuantity: payload.sourceQuantity || payload.disassembledQuantity,
+      lines: payload.lines || payload.recoveredComponents,
+      date: payload.date || payload.disassemblyDate
+    });
+  }
+
   createDisassemblyDraft({
     warehouseId = 'wh-1',
     sourceVariantId,
     sourceQuantity = 1,
+    disassembledQuantity = null,
     templateId = null,
     lines = [], // Array of { componentVariantId, actualQuantity, unitCost, unit }
+    recoveredComponents = null,
     notes = '',
     date = null,
+    disassemblyDate = null,
     userId = 'user-admin',
     status = 'Draft'
   }) {
-    const qty = Number(sourceQuantity);
+    const qty = Number(sourceQuantity || disassembledQuantity);
     if (qty <= 0) throw new Error('Quantity to disassemble must be greater than zero.');
     if (!sourceVariantId) throw new Error('Source item to disassemble must be specified.');
     if (!lines || lines.length === 0) throw new Error('At least one component must be selected for recovery.');
@@ -1051,6 +1073,12 @@ class AssemblyService {
     return [...list].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   }
 
+  getLaborPayments(filters = {}) {
+    let list = storageService.getCollection('assemblyPayments') || [];
+    if (filters.laborPartyId) list = list.filter(p => p.laborPartyId === filters.laborPartyId);
+    return [...list].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  }
+
   getLaborPartySummary(laborPartyId = null) {
     const payables = this.getLaborPayables({ laborPartyId: laborPartyId || undefined });
     const assemblies = this.getAssemblies({ laborPartyId: laborPartyId || undefined, status: 'Completed' });
@@ -1066,6 +1094,15 @@ class AssemblyService {
       totalLabor,
       paid,
       outstanding
+    };
+  }
+
+  getLaborPartyBalance(laborPartyId) {
+    const summary = this.getLaborPartySummary(laborPartyId);
+    return {
+      outstandingBalance: summary.outstanding,
+      totalLabor: summary.totalLabor,
+      paid: summary.paid
     };
   }
 
