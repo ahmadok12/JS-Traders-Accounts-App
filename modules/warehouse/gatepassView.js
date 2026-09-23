@@ -183,12 +183,30 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
   const officeStaff = staffMembers.filter(s => s.staffType === 'office_staff' || s.activeWarehouseId === 'wh-2');
 
   const renderRowHtml = (variantId = null, whQty = '', offQty = '', rowIdx = 0) => {
-    const selectedVariant = variantId ? variants.find(v => v.id === variantId) || variants[0] : variants[0];
+    let selectedVariant = variantId ? variants.find(v => v.id === variantId) || null : null;
+    let selectedProduct = selectedVariant
+      ? products.find(p => p.id === selectedVariant.productId) || products[0]
+      : products[0];
+
+    const prodVariants = selectedProduct
+      ? variants.filter(v => v.productId === selectedProduct.id)
+      : [];
+
+    // If no variant explicitly requested:
+    // - Single variant: auto-select
+    // - Multi variants: keep null (empty by default)
+    if (!selectedVariant) {
+      if (prodVariants.length === 1) {
+        selectedVariant = prodVariants[0];
+      } else {
+        selectedVariant = null;
+      }
+    }
+
     const vId = selectedVariant ? selectedVariant.id : '';
-    const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) || products[0] : products[0];
-    const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : 'PCS';
-    const whStock = inventoryService.getBalance('wh-1', vId);
-    const officeStock = inventoryService.getBalance('wh-2', vId);
+    const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (selectedProduct?.baseUnitId || 'PCS');
+    const whStock = vId ? inventoryService.getBalance('wh-1', vId) : 0;
+    const officeStock = vId ? inventoryService.getBalance('wh-2', vId) : 0;
     const wVal = (whQty !== '' && whQty !== null && whQty !== undefined) ? whQty : '';
     const oVal = (offQty !== '' && offQty !== null && offQty !== undefined) ? offQty : '';
     const lineTotal = (Number(wVal) || 0) + (Number(oVal) || 0);
@@ -196,7 +214,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
     const pickerHtml = renderProductVariantPicker({
       rowId: `gp-row-${rowIdx}`,
       selectedProductId: selectedProduct ? selectedProduct.id : null,
-      selectedVariantId: vId,
+      selectedVariantId: vId || null,
       products,
       variants,
       whStock,
@@ -211,13 +229,13 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
         </td>
         <td class="p-3 text-center align-top">
           <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-2 py-1 rounded-lg border border-blue-200/80 font-bold mb-2">
-            WH Stock: ${whStock.toLocaleString()} ${unit}
+            ${vId ? `WH Stock: ${whStock.toLocaleString()} ${unit}` : 'WH Stock: —'}
           </span>
           <input type="number" min="0" value="${wVal}" placeholder="0" class="gp-wh-qty w-28 text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] focus:ring-2 focus:ring-blue-100 py-2 px-2 bg-white text-blue-900 shadow-2xs">
         </td>
         <td class="p-3 text-center align-top">
           <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/80 font-bold mb-2">
-            Office Stock: ${officeStock.toLocaleString()} ${unit}
+            ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${unit}` : 'Office Stock: —'}
           </span>
           <input type="number" min="0" value="${oVal}" placeholder="0" class="gp-office-qty w-28 text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 py-2 px-2 bg-white text-amber-900 shadow-2xs">
         </td>
@@ -292,9 +310,9 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200/80">
               <tr>
-                <th class="py-3 px-3 w-5/12 font-semibold">Item &amp; Description</th>
-                <th class="py-3 px-2 w-[22%] font-semibold text-center">Delivered from WH *</th>
-                <th class="py-3 px-2 w-[22%] font-semibold text-center">Delivered from Office *</th>
+                <th class="py-3 px-3 w-[48%] font-semibold">Product &amp; Variant SKU Selection</th>
+                <th class="py-3 px-2 w-[19%] font-semibold text-center">Delivered from WH *</th>
+                <th class="py-3 px-2 w-[19%] font-semibold text-center">Delivered from Office *</th>
                 <th class="py-3 px-3 w-[10%] font-semibold text-right">Cargo Qty</th>
                 <th class="py-3 px-2 w-[4%] font-semibold text-center">Action</th>
               </tr>
@@ -302,7 +320,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
             <tbody id="gp-items-tbody" class="divide-y divide-slate-100 text-slate-700">
               ${isEdit && (gatepassToEdit.lines || []).length > 0
                 ? gatepassToEdit.lines.map((l, idx) => renderRowHtml(l.variantId, l.warehouseQty, l.officeQty, idx)).join('')
-                : renderRowHtml(variants[0]?.id, '', '', 0)}
+                : renderRowHtml(null, '', '', 0)}
             </tbody>
           </table>
         </div>
@@ -469,6 +487,13 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
         const totalDisplay = row.querySelector('.gp-total-calc');
 
         const vId = varInput ? varInput.value : '';
+        if (!vId) {
+          if (whIndicator) whIndicator.textContent = 'WH Stock: —';
+          if (offIndicator) offIndicator.textContent = 'Office Stock: —';
+          if (totalDisplay) totalDisplay.textContent = '—';
+          return;
+        }
+
         const selectedVariant = variants.find(v => v.id === vId);
         const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (varInput?.getAttribute('data-unit') || 'PCS');
         const wStock = inventoryService.getBalance('wh-1', vId);
@@ -604,6 +629,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
         const rows = tbody.querySelectorAll('.gp-line-row');
         const lines = [];
 
+        let hasQuantityWithoutVariant = false;
         rows.forEach(row => {
           const varInput = row.querySelector('.gp-item-var');
           const variantId = varInput ? varInput.value : '';
@@ -611,6 +637,10 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (varInput?.getAttribute('data-unit') || 'PCS');
           const warehouseQty = Number(row.querySelector('.gp-wh-qty')?.value) || 0;
           const officeQty = Number(row.querySelector('.gp-office-qty')?.value) || 0;
+
+          if ((warehouseQty > 0 || officeQty > 0) && !variantId) {
+            hasQuantityWithoutVariant = true;
+          }
 
           if (variantId && (warehouseQty > 0 || officeQty > 0)) {
             lines.push({
@@ -623,8 +653,13 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           }
         });
 
+        if (hasQuantityWithoutVariant) {
+          toast.show('Please select a Variant / SKU for each entered product item to avoid dispatch errors.', 'warning');
+          return;
+        }
+
         if (lines.length === 0) {
-          toast.show('Please specify quantity to be delivered from Warehouse or Office for at least one product.', 'warning');
+          toast.show('Please select a product variant and enter quantity from Warehouse or Office for at least one item.', 'warning');
           return;
         }
 
