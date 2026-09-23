@@ -219,9 +219,9 @@ class AppController {
         breadcrumbs = ['Warehouse', 'Gatepasses'];
         break;
       case 'warehouse-deliveries':
-        html = renderDeliveryView();
-        bindFn = bindDeliveryEvents;
-        breadcrumbs = ['Warehouse', 'Deliveries'];
+        html = renderGatepassView('outward');
+        bindFn = (container, cb) => bindGatepassEvents(container, cb, 'outward');
+        breadcrumbs = ['Operations', 'GDN (Goods Dispatch Note)'];
         break;
       case 'warehouse-warehouses':
         html = renderWarehousesView();

@@ -137,9 +137,9 @@ class WarehouseAppController {
         break;
 
       case 'warehouse-deliveries':
-        html = renderDeliveryView();
-        bindFn = bindDeliveryEvents;
-        breadcrumbs = ['Operations', 'Deliveries & Dispatch'];
+        html = renderGatepassView('outward');
+        bindFn = (container, cb) => bindGatepassEvents(container, cb, 'outward');
+        breadcrumbs = ['Operations', 'GDN (Goods Dispatch Note)'];
         break;
 
       case 'inventory-stock':
