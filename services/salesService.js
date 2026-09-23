@@ -167,7 +167,13 @@ class SalesService {
       const lineTotal = qty * price;
       subtotal += lineTotal;
       return {
-        variantId: l.variantId,
+        variantId: l.variantId || null,
+        bundleId: l.bundleId || null,
+        bundleName: l.bundleName || null,
+        isBundle: Boolean(l.isBundle || l.bundleId),
+        bundleType: l.bundleType || null,
+        bundleQuantity: l.isBundle || l.bundleId ? qty : null,
+        bundleComponents: l.bundleComponents || null,
         quantity: qty,
         unitPrice: price,
         lineTotal,

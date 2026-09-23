@@ -202,6 +202,201 @@ const SEED_DATABASE = {
       negativeStockAllowed: 'disallow',
       description: 'Turnkey broiler shed feeding line bundle (Drive motor + Hopper + Auger + 100 Pans + Tubing).',
       isActive: true
+    },
+    {
+      id: 'prod-cooler-body',
+      code: 'PROD-00010',
+      businessName: 'AC-BODY-18',
+      customerName: 'Cooler Body + Accessories 18"',
+      urduName: 'کولر باڈی بمعہ فٹنگ',
+      categoryId: 'cat-4',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 10,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Heavy duty composite industrial evaporative air cooler housing frame and louvers.',
+      isActive: true
+    },
+    {
+      id: 'prod-cooling-pad',
+      code: 'PROD-00011',
+      businessName: 'PAD-100MM',
+      customerName: 'Cellulose Cooling Pad 100mm',
+      urduName: 'کولنگ پیڈ 100 ایم ایم',
+      categoryId: 'cat-4',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 50,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'High water absorption evaporative cooling media pad for shed walls and industrial coolers.',
+      isActive: true
+    },
+    {
+      id: 'prod-fan-imp',
+      code: 'PROD-00012',
+      businessName: 'FAN-50-IMP',
+      customerName: 'Imported Complete Fan 50-inch',
+      urduName: 'امپورٹڈ فین 50 انچ مکمل',
+      categoryId: 'cat-3',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 10,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Direct imported 50" heavy-duty exhaust fan unit complete with motor, shutter and cone.',
+      isActive: true
+    },
+    {
+      id: 'prod-fan-asm',
+      code: 'PROD-00013',
+      businessName: 'FAN-50-ASM',
+      customerName: 'Assembled Cone Fan 50-inch',
+      urduName: 'تیار شدہ کون فین 50 انچ',
+      categoryId: 'cat-3',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 5,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Finished workshop assembled 50-inch cone ventilation fan calibrated with safety guard.',
+      isActive: true
+    },
+    {
+      id: 'prod-pulley',
+      code: 'PROD-00014',
+      businessName: 'PUL-FAN-50',
+      customerName: 'Cast Iron Fan Pulley & Belt Hub',
+      urduName: 'پنکھا پلی اور ہب',
+      categoryId: 'cat-3',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 20,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'CNC machined cast iron drive pulley for 50-inch exhaust fan motors.',
+      isActive: true
+    },
+    {
+      id: 'prod-fan-body',
+      code: 'PROD-00015',
+      businessName: 'BDY-FAN-50',
+      customerName: 'Galvanized Fan Cone & Shutter Body',
+      urduName: 'فین باڈی بمعہ شٹر',
+      categoryId: 'cat-3',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 10,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Hot dip galvanized sheet housing cone and centrifugal shutter box for 50-inch fan.',
+      isActive: true
+    },
+    {
+      id: 'prod-hanger',
+      code: 'PROD-00016',
+      businessName: 'HNG-FEED-LINE',
+      customerName: 'Ceiling Suspension Hanger Bracket',
+      urduName: 'فیڈنگ لائن ہینگر بریکٹ',
+      categoryId: 'cat-1',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 100,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Galvanized drop cable clamping hanger bracket for automated feeding and drinking lines.',
+      isActive: true
+    },
+    {
+      id: 'prod-pipe-galv',
+      code: 'PROD-00017',
+      businessName: 'PIP-GALV-45',
+      customerName: 'Galvanized Feeder Seam Pipe 45mm',
+      urduName: 'فیڈر پائپ 45 ایم ایم (فٹ)',
+      categoryId: 'cat-6',
+      baseUnitId: 'u-3', // Feet
+      productType: 'Stock',
+      lowStockLevel: 500,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Zinc coated steel seamed pipe for automatic auger feed transmission.',
+      isActive: true
+    },
+    {
+      id: 'prod-handle',
+      code: 'PROD-00018',
+      businessName: 'HDL-WINCH-MAN',
+      customerName: 'Manual Winch Lifting Handle',
+      urduName: 'ونچ ہینڈل',
+      categoryId: 'cat-1',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 15,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Removable heavy-duty turning crank handle for line height winching systems.',
+      isActive: true
+    },
+    {
+      id: 'prod-regulator',
+      code: 'PROD-00019',
+      businessName: 'REG-DRINK-WTR',
+      customerName: 'Water Pressure Regulator Unit',
+      urduName: 'پریشر ریگولیٹر یونٹ',
+      categoryId: 'cat-2',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 10,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Single/double outlet shed water pressure regulator with flushing tube.',
+      isActive: true
+    },
+    {
+      id: 'prod-inverter',
+      code: 'PROD-00020',
+      businessName: 'INV-CTRL-3P',
+      customerName: 'Variable Speed Inverter Drive Panel',
+      urduName: 'انورٹر پینل',
+      categoryId: 'cat-5',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 5,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: '3-phase variable frequency inverter controller for fan motor speed modulation.',
+      isActive: true
+    },
+    {
+      id: 'prod-remote',
+      code: 'PROD-00021',
+      businessName: 'REM-INV-WLS',
+      customerName: 'Wireless Digital Inverter Remote',
+      urduName: 'وائرلیس ریموٹ کنٹرولر',
+      categoryId: 'cat-5',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 10,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Handheld RF remote for variable drive speed control and shed overrides.',
+      isActive: true
+    },
+    {
+      id: 'prod-display',
+      code: 'PROD-00022',
+      businessName: 'LCD-DISP-MOD',
+      customerName: 'Digital Shed Climate LCD Display',
+      urduName: 'ڈیجیٹل ڈسپلے یونٹ',
+      categoryId: 'cat-5',
+      baseUnitId: 'u-1',
+      productType: 'Stock',
+      lowStockLevel: 10,
+      enableRollTracking: false,
+      negativeStockAllowed: 'disallow',
+      description: 'Wall mounted 7-inch LED/LCD telemetry monitor for shed climate automation.',
+      isActive: true
     }
   ],
 
@@ -318,6 +513,149 @@ const SEED_DATABASE = {
       rollSize: 400,
       packagingName: 'Roll (400 ft)',
       attributes: { Origin: 'South Africa', Material: 'Spring Steel', Size: '45mm', Packaging: '400 ft Roll' },
+      isActive: true
+    },
+    {
+      id: 'var-cooler-body',
+      productId: 'prod-cooler-body',
+      code: 'VAR-00010',
+      sku: 'AC-BODY-18',
+      name: 'Cooler Body + Accessories 18"',
+      costPrice: 4000,
+      sellingPrice: 6000,
+      attributes: { Origin: 'Pakistan', Size: '18-inch' },
+      isActive: true
+    },
+    {
+      id: 'var-pad-100',
+      productId: 'prod-cooling-pad',
+      code: 'VAR-00011',
+      sku: 'PAD-100MM',
+      name: 'Cellulose Cooling Pad 100mm',
+      costPrice: 800,
+      sellingPrice: 1400,
+      attributes: { Origin: 'Pakistan', Size: '100mm' },
+      isActive: true
+    },
+    {
+      id: 'var-fan-imported',
+      productId: 'prod-fan-imp',
+      code: 'VAR-00012',
+      sku: 'FAN-50-IMP',
+      name: 'Imported Complete Fan 50-inch',
+      costPrice: 9500,
+      sellingPrice: 13500,
+      attributes: { Origin: 'China', Size: '50-inch' },
+      isActive: true
+    },
+    {
+      id: 'var-fan-assembled',
+      productId: 'prod-fan-asm',
+      code: 'VAR-00013',
+      sku: 'FAN-50-ASM',
+      name: 'Assembled Cone Fan 50-inch',
+      costPrice: 9650,
+      sellingPrice: 14800,
+      attributes: { Origin: 'Pakistan', Size: '50-inch' },
+      isActive: true
+    },
+    {
+      id: 'var-pulley',
+      productId: 'prod-pulley',
+      code: 'VAR-00014',
+      sku: 'PUL-FAN-50',
+      name: 'Cast Iron Fan Pulley & Belt Hub',
+      costPrice: 1200,
+      sellingPrice: 1900,
+      attributes: { Origin: 'Pakistan', Size: '50-inch' },
+      isActive: true
+    },
+    {
+      id: 'var-fan-body',
+      productId: 'prod-fan-body',
+      code: 'VAR-00015',
+      sku: 'BDY-FAN-50',
+      name: 'Galvanized Fan Cone & Shutter Body',
+      costPrice: 3500,
+      sellingPrice: 5200,
+      attributes: { Origin: 'Pakistan', Size: '50-inch' },
+      isActive: true
+    },
+    {
+      id: 'var-hanger',
+      productId: 'prod-hanger',
+      code: 'VAR-00016',
+      sku: 'HNG-FEED-LINE',
+      name: 'Ceiling Suspension Hanger Bracket',
+      costPrice: 80,
+      sellingPrice: 120,
+      attributes: { Origin: 'Pakistan', Type: 'Hanger' },
+      isActive: true
+    },
+    {
+      id: 'var-pipe-galv',
+      productId: 'prod-pipe-galv',
+      code: 'VAR-00017',
+      sku: 'PIP-GALV-45',
+      name: 'Galvanized Feeder Seam Pipe 45mm (ft)',
+      costPrice: 35, // Per ft
+      sellingPrice: 55,
+      attributes: { Origin: 'Pakistan', Size: '45mm' },
+      isActive: true
+    },
+    {
+      id: 'var-handle',
+      productId: 'prod-handle',
+      code: 'VAR-00018',
+      sku: 'HDL-WINCH-MAN',
+      name: 'Manual Winch Lifting Handle',
+      costPrice: 450,
+      sellingPrice: 750,
+      attributes: { Origin: 'Pakistan', Type: 'Handle' },
+      isActive: true
+    },
+    {
+      id: 'var-regulator',
+      productId: 'prod-regulator',
+      code: 'VAR-00019',
+      sku: 'REG-DRINK-WTR',
+      name: 'Water Pressure Regulator Unit',
+      costPrice: 1800,
+      sellingPrice: 2600,
+      attributes: { Origin: 'China', Type: 'Regulator' },
+      isActive: true
+    },
+    {
+      id: 'var-inverter',
+      productId: 'prod-inverter',
+      code: 'VAR-00020',
+      sku: 'INV-CTRL-3P',
+      name: 'Variable Speed Inverter Drive Panel',
+      costPrice: 28000,
+      sellingPrice: 38000,
+      attributes: { Origin: 'China', Power: '3-Phase' },
+      isActive: true
+    },
+    {
+      id: 'var-remote',
+      productId: 'prod-remote',
+      code: 'VAR-00021',
+      sku: 'REM-INV-WLS',
+      name: 'Wireless Digital Inverter Remote',
+      costPrice: 1500,
+      sellingPrice: 2500,
+      attributes: { Origin: 'China' },
+      isActive: true
+    },
+    {
+      id: 'var-display',
+      productId: 'prod-display',
+      code: 'VAR-00022',
+      sku: 'LCD-DISP-MOD',
+      name: 'Digital Shed Climate LCD Display',
+      costPrice: 3200,
+      sellingPrice: 5000,
+      attributes: { Origin: 'China', Size: '7-inch' },
       isActive: true
     }
   ],
@@ -447,7 +785,35 @@ const SEED_DATABASE = {
     { id: 'bal-wh2-var5', warehouseId: 'wh-2', variantId: 'var-5', quantity: 5000, averageCost: 20, unit: 'FT' },
     { id: 'bal-wh2-var6', warehouseId: 'wh-2', variantId: 'var-6', quantity: 5, averageCost: 18500, unit: 'PCS' },
     { id: 'bal-wh2-var7', warehouseId: 'wh-2', variantId: 'var-7', quantity: 6, averageCost: 9500, unit: 'PCS' },
-    { id: 'bal-wh2-var8', warehouseId: 'wh-2', variantId: 'var-8', quantity: 15, averageCost: 3800, unit: 'PCS' }
+    { id: 'bal-wh2-var8', warehouseId: 'wh-2', variantId: 'var-8', quantity: 15, averageCost: 3800, unit: 'PCS' },
+    // Assembly components & products (wh-1)
+    { id: 'bal-wh1-var-cooler-body', warehouseId: 'wh-1', variantId: 'var-cooler-body', quantity: 150, averageCost: 4000, unit: 'PCS' },
+    { id: 'bal-wh1-var-pad-100', warehouseId: 'wh-1', variantId: 'var-pad-100', quantity: 200, averageCost: 800, unit: 'PCS' },
+    { id: 'bal-wh1-var-fan-imported', warehouseId: 'wh-1', variantId: 'var-fan-imported', quantity: 80, averageCost: 9500, unit: 'PCS' },
+    { id: 'bal-wh1-var-fan-assembled', warehouseId: 'wh-1', variantId: 'var-fan-assembled', quantity: 10, averageCost: 9650, unit: 'PCS' },
+    { id: 'bal-wh1-var-pulley', warehouseId: 'wh-1', variantId: 'var-pulley', quantity: 120, averageCost: 1200, unit: 'PCS' },
+    { id: 'bal-wh1-var-fan-body', warehouseId: 'wh-1', variantId: 'var-fan-body', quantity: 60, averageCost: 3500, unit: 'PCS' },
+    { id: 'bal-wh1-var-hanger', warehouseId: 'wh-1', variantId: 'var-hanger', quantity: 1200, averageCost: 80, unit: 'PCS' },
+    { id: 'bal-wh1-var-pipe-galv', warehouseId: 'wh-1', variantId: 'var-pipe-galv', quantity: 15000, averageCost: 35, unit: 'FT' },
+    { id: 'bal-wh1-var-handle', warehouseId: 'wh-1', variantId: 'var-handle', quantity: 50, averageCost: 450, unit: 'PCS' },
+    { id: 'bal-wh1-var-regulator', warehouseId: 'wh-1', variantId: 'var-regulator', quantity: 30, averageCost: 1800, unit: 'PCS' },
+    { id: 'bal-wh1-var-inverter', warehouseId: 'wh-1', variantId: 'var-inverter', quantity: 12, averageCost: 28000, unit: 'PCS' },
+    { id: 'bal-wh1-var-remote', warehouseId: 'wh-1', variantId: 'var-remote', quantity: 25, averageCost: 1500, unit: 'PCS' },
+    { id: 'bal-wh1-var-display', warehouseId: 'wh-1', variantId: 'var-display', quantity: 18, averageCost: 3200, unit: 'PCS' },
+    // Assembly components & products (wh-2)
+    { id: 'bal-wh2-var-cooler-body', warehouseId: 'wh-2', variantId: 'var-cooler-body', quantity: 20, averageCost: 4000, unit: 'PCS' },
+    { id: 'bal-wh2-var-pad-100', warehouseId: 'wh-2', variantId: 'var-pad-100', quantity: 30, averageCost: 800, unit: 'PCS' },
+    { id: 'bal-wh2-var-fan-imported', warehouseId: 'wh-2', variantId: 'var-fan-imported', quantity: 15, averageCost: 9500, unit: 'PCS' },
+    { id: 'bal-wh2-var-fan-assembled', warehouseId: 'wh-2', variantId: 'var-fan-assembled', quantity: 5, averageCost: 9650, unit: 'PCS' },
+    { id: 'bal-wh2-var-pulley', warehouseId: 'wh-2', variantId: 'var-pulley', quantity: 20, averageCost: 1200, unit: 'PCS' },
+    { id: 'bal-wh2-var-fan-body', warehouseId: 'wh-2', variantId: 'var-fan-body', quantity: 10, averageCost: 3500, unit: 'PCS' },
+    { id: 'bal-wh2-var-hanger', warehouseId: 'wh-2', variantId: 'var-hanger', quantity: 300, averageCost: 80, unit: 'PCS' },
+    { id: 'bal-wh2-var-pipe-galv', warehouseId: 'wh-2', variantId: 'var-pipe-galv', quantity: 3000, averageCost: 35, unit: 'FT' },
+    { id: 'bal-wh2-var-handle', warehouseId: 'wh-2', variantId: 'var-handle', quantity: 10, averageCost: 450, unit: 'PCS' },
+    { id: 'bal-wh2-var-regulator', warehouseId: 'wh-2', variantId: 'var-regulator', quantity: 8, averageCost: 1800, unit: 'PCS' },
+    { id: 'bal-wh2-var-inverter', warehouseId: 'wh-2', variantId: 'var-inverter', quantity: 3, averageCost: 28000, unit: 'PCS' },
+    { id: 'bal-wh2-var-remote', warehouseId: 'wh-2', variantId: 'var-remote', quantity: 5, averageCost: 1500, unit: 'PCS' },
+    { id: 'bal-wh2-var-display', warehouseId: 'wh-2', variantId: 'var-display', quantity: 4, averageCost: 3200, unit: 'PCS' }
   ],
 
   stockMovements: [
@@ -549,6 +915,54 @@ const SEED_DATABASE = {
       country: 'China',
       currency: 'USD',
       paymentTerms: 'EXW Factory / LC at sight',
+      isActive: true
+    },
+    {
+      id: 'pty-labor-1',
+      code: 'PTY-L001',
+      name: 'ABC Assembly Workshop',
+      businessName: 'ABC Assembly Works (Haji Rafiq)',
+      isCustomer: false,
+      isSupplier: true,
+      isLaborParty: true,
+      partyType: 'Assembly Labor',
+      contactPerson: 'Haji Rafiq',
+      phone: '+92 300 4567891',
+      city: 'Lahore',
+      address: 'Shed 4, Multan Road Workshop Area, Lahore',
+      currency: 'PKR',
+      isActive: true
+    },
+    {
+      id: 'pty-labor-2',
+      code: 'PTY-L002',
+      name: 'XYZ Fan Assembly',
+      businessName: 'XYZ Industrial Assembly Co.',
+      isCustomer: false,
+      isSupplier: true,
+      isLaborParty: true,
+      partyType: 'Assembly Labor',
+      contactPerson: 'Tariq Mehmood',
+      phone: '+92 321 8899776',
+      city: 'Gujranwala',
+      address: 'Small Industrial Estate, Gujranwala',
+      currency: 'PKR',
+      isActive: true
+    },
+    {
+      id: 'pty-labor-3',
+      code: 'PTY-L003',
+      name: 'Ali Workshop',
+      businessName: 'Ali Mechanics & Assembly Services',
+      isCustomer: false,
+      isSupplier: true,
+      isLaborParty: true,
+      partyType: 'Assembly Labor',
+      contactPerson: 'Ali Hassan',
+      phone: '+92 333 1122334',
+      city: 'Lahore',
+      address: 'Band Road Industrial Area, Lahore',
+      currency: 'PKR',
       isActive: true
     }
   ],
@@ -690,23 +1104,321 @@ const SEED_DATABASE = {
     }
   ],
 
+  // Assembly Recipes / BOMs
+  assemblyRecipes: [
+    {
+      id: 'rec-1',
+      recipeNumber: 'REC-00001',
+      name: 'Air Cooler 18" Assembly',
+      assemblyType: 'MANUFACTURING',
+      finishedVariantId: 'var-4', // Air Cooler 1.5 kW + With Pad
+      defaultOutputQuantity: 100,
+      defaultLaborRate: 500,
+      laborRateType: 'per_unit',
+      defaultLaborPartyId: 'pty-labor-1', // ABC Assembly Workshop
+      defaultSourceWarehouseId: 'wh-1',
+      defaultOutputWarehouseId: 'wh-1',
+      isActive: true,
+      version: 1,
+      notes: 'Standard 18" Industrial Air Cooler BOM: 1 Body, 1 Motor, 1 Cooling Pad + Rs. 500 labor per unit',
+      components: [
+        { id: 'rc-1', componentVariantId: 'var-cooler-body', quantityPerUnit: 1, sequence: 1, unit: 'PCS' },
+        { id: 'rc-2', componentVariantId: 'var-6', quantityPerUnit: 1, sequence: 2, unit: 'PCS' }, // Motor
+        { id: 'rc-3', componentVariantId: 'var-pad-100', quantityPerUnit: 1, sequence: 3, unit: 'PCS' } // Pad
+      ],
+      createdAt: '2025-09-01T08:00:00Z',
+      createdBy: 'user-admin'
+    },
+    {
+      id: 'rec-2',
+      recipeNumber: 'REC-00002',
+      name: 'Assembled Fan 50" Finishing',
+      assemblyType: 'FINISHING',
+      finishedVariantId: 'var-fan-assembled',
+      defaultOutputQuantity: 50,
+      defaultLaborRate: 150,
+      laborRateType: 'per_unit',
+      defaultLaborPartyId: 'pty-labor-2', // XYZ Fan Assembly
+      defaultSourceWarehouseId: 'wh-1',
+      defaultOutputWarehouseId: 'wh-1',
+      isActive: true,
+      version: 1,
+      notes: 'Single-product finishing: Imported Complete Fan x 1 + Rs. 150 labor -> Assembled Fan',
+      components: [
+        { id: 'rc-4', componentVariantId: 'var-fan-imported', quantityPerUnit: 1, sequence: 1, unit: 'PCS' }
+      ],
+      createdAt: '2025-09-01T08:00:00Z',
+      createdBy: 'user-admin'
+    }
+  ],
+
+  // Disassembly Templates / Salvage BOMs
+  disassemblyTemplates: [
+    {
+      id: 'dt-1',
+      templateNumber: 'DT-00001',
+      name: 'Fan 50" Standard Breakdown Template',
+      sourceVariantId: 'var-fan-imported',
+      notes: 'Standard salvage breakdown for 50-inch fan into motor, blades, pulley, and body',
+      isActive: true,
+      components: [
+        { id: 'dtc-1', componentVariantId: 'var-6', defaultQuantity: 1, unit: 'PCS', allocatedCost: 5500 }, // Motor
+        { id: 'dtc-2', componentVariantId: 'var-7', defaultQuantity: 1, unit: 'PCS', allocatedCost: 2000 }, // Blades
+        { id: 'dtc-3', componentVariantId: 'var-pulley', defaultQuantity: 1, unit: 'PCS', allocatedCost: 800 }, // Pulley
+        { id: 'dtc-4', componentVariantId: 'var-fan-body', defaultQuantity: 1, unit: 'PCS', allocatedCost: 1200 } // Body
+      ]
+    },
+    {
+      id: 'dt-2',
+      templateNumber: 'DT-00002',
+      name: 'Air Cooler Salvage Breakdown',
+      sourceVariantId: 'var-4',
+      notes: 'Salvage recovered motor, blades, and pump from damaged cooler',
+      isActive: true,
+      components: [
+        { id: 'dtc-5', componentVariantId: 'var-6', defaultQuantity: 1, unit: 'PCS', allocatedCost: 18500 },
+        { id: 'dtc-6', componentVariantId: 'var-7', defaultQuantity: 1, unit: 'PCS', allocatedCost: 9500 },
+        { id: 'dtc-7', componentVariantId: 'var-8', defaultQuantity: 1, unit: 'PCS', allocatedCost: 3800 }
+      ]
+    }
+  ],
+
   // Assemblies
   assemblies: [
     {
       id: 'asm-1',
       assemblyNumber: 'ASM-00001',
+      recipeId: 'rec-1',
+      assemblyType: 'MANUFACTURING',
       warehouseId: 'wh-1',
+      sourceWarehouseId: 'wh-1',
+      outputWarehouseId: 'wh-1',
       finishedVariantId: 'var-4', // Air Cooler 1.5 kW + With Pad
+      quantity: 2,
       finishedQuantity: 2,
       assemblyDate: '2025-09-12',
-      status: 'Confirmed',
+      status: 'Completed',
+      laborPartyId: 'pty-labor-1',
+      laborRate: 500,
+      laborRateType: 'per_unit',
+      laborQuantity: 2,
+      materialCost: 62600,
+      laborCost: 1000,
       totalCost: 63600,
       unitFinishedCost: 31800,
       notes: 'Assembled 2 Industrial Evaporative Coolers using China motors and axial blades',
+      completedBy: 'user-admin',
+      completedAt: '2025-09-12T14:00:00Z',
       lines: [
-        { componentVariantId: 'var-6', quantityConsumed: 2, unit: 'PCS', unitCost: 18500, totalCost: 37000 }, // 2 Motors
-        { componentVariantId: 'var-7', quantityConsumed: 2, unit: 'PCS', unitCost: 9500, totalCost: 19000 },   // 2 Fan blades
-        { componentVariantId: 'var-8', quantityConsumed: 2, unit: 'PCS', unitCost: 3800, totalCost: 7600 }     // 2 Submersible pumps
+        { componentVariantId: 'var-6', recipeQuantity: 2, actualQuantity: 2, quantityConsumed: 2, unit: 'PCS', unitCost: 18500, totalCost: 37000 },
+        { componentVariantId: 'var-7', recipeQuantity: 2, actualQuantity: 2, quantityConsumed: 2, unit: 'PCS', unitCost: 9500, totalCost: 19000 },
+        { componentVariantId: 'var-8', recipeQuantity: 2, actualQuantity: 2, quantityConsumed: 2, unit: 'PCS', unitCost: 3800, totalCost: 7600 }
+      ]
+    }
+  ],
+
+  // Disassemblies
+  disassemblies: [
+    {
+      id: 'dis-1',
+      disassemblyNumber: 'DIS-00001',
+      warehouseId: 'wh-1',
+      sourceVariantId: 'var-fan-imported',
+      sourceQuantity: 1,
+      finishedVariantId: 'var-fan-imported',
+      finishedQuantity: 1,
+      disassemblyDate: '2025-09-15',
+      status: 'Completed',
+      totalSourceCost: 9500,
+      totalRecoveredCost: 9500,
+      notes: 'Salvaged motor and blades for farm replacement call',
+      completedBy: 'user-admin',
+      completedAt: '2025-09-15T11:30:00Z',
+      lines: [
+        { componentVariantId: 'var-6', quantityRestored: 1, actualQuantity: 1, unitCost: 5500, totalCost: 5500, unit: 'PCS' },
+        { componentVariantId: 'var-7', quantityRestored: 1, actualQuantity: 1, unitCost: 2000, totalCost: 2000, unit: 'PCS' },
+        { componentVariantId: 'var-pulley', quantityRestored: 1, actualQuantity: 1, unitCost: 800, totalCost: 800, unit: 'PCS' },
+        { componentVariantId: 'var-fan-body', quantityRestored: 1, actualQuantity: 1, unitCost: 1200, totalCost: 1200, unit: 'PCS' }
+      ]
+    }
+  ],
+
+  // Assembly Labor Payables
+  assemblyPayables: [
+    {
+      id: 'alp-1',
+      payableNumber: 'ALP-00001',
+      assemblyId: 'asm-1',
+      assemblyNumber: 'ASM-00001',
+      laborPartyId: 'pty-labor-1', // ABC Assembly Workshop
+      date: '2025-09-12',
+      amount: 1000,
+      paidAmount: 0,
+      remainingAmount: 1000,
+      status: 'Unpaid',
+      createdAt: '2025-09-12T14:00:00Z'
+    }
+  ],
+
+  // Assembly Labor Payments
+  assemblyPayments: [],
+
+  // Bundle Definitions (Sets & Variable Systems)
+  bundleDefinitions: [
+    {
+      id: 'bnd-feed-line',
+      code: 'BND-FEED',
+      name: 'Automatic Feeding Line',
+      bundleType: 'VARIABLE_SYSTEM',
+      allowComponentAdjustment: true,
+      sellingPrice: 185000, // Per line
+      notes: 'Complete automated broiler feeding line. Components calculated by individual quantity rules.',
+      components: [
+        {
+          id: 'bc-1',
+          componentVariantId: 'var-hanger',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 40 },
+          ruleDescription: '40 hangers per line',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-2',
+          componentVariantId: 'var-1', // Feed Pan
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 40 },
+          ruleDescription: '40 pans per line',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-3',
+          componentVariantId: 'var-pipe-galv', // Galvanized Pipe
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 400 },
+          ruleDescription: '400 ft per line',
+          unit: 'FT'
+        },
+        {
+          id: 'bc-4',
+          componentVariantId: 'var-handle', // Winch Handle
+          quantityRule: 'PER_GROUP_CEIL',
+          parameters: { linesPerGroup: 5, quantityPerGroup: 1 },
+          ruleDescription: '1 handle per 5 lines (Round Up)',
+          unit: 'PCS'
+        }
+      ]
+    },
+    {
+      id: 'bnd-drink-line',
+      code: 'BND-DRINK',
+      name: 'Automatic Drinking Line',
+      bundleType: 'VARIABLE_SYSTEM',
+      allowComponentAdjustment: true,
+      sellingPrice: 95000,
+      notes: 'Poultry nipple drinking line system. Handle required per 6 lines.',
+      components: [
+        {
+          id: 'bc-5',
+          componentVariantId: 'var-3', // Nipple 360
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 50 },
+          ruleDescription: '50 nipples per line',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-6',
+          componentVariantId: 'var-pipe-galv',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 400 },
+          ruleDescription: '400 ft per line',
+          unit: 'FT'
+        },
+        {
+          id: 'bc-7',
+          componentVariantId: 'var-regulator',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 1 },
+          ruleDescription: '1 pressure regulator per line',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-8',
+          componentVariantId: 'var-handle',
+          quantityRule: 'PER_GROUP_CEIL',
+          parameters: { linesPerGroup: 6, quantityPerGroup: 1 },
+          ruleDescription: '1 handle per 6 lines (Round Up)',
+          unit: 'PCS'
+        }
+      ]
+    },
+    {
+      id: 'bnd-pulley-set',
+      code: 'BND-PULLEY-SET',
+      name: 'Pulley Set',
+      bundleType: 'FIXED_SET',
+      allowComponentAdjustment: false,
+      sellingPrice: 10800,
+      notes: 'Directly proportional set: Pulley x 1 + 3-Blade Fan x 1 per set',
+      components: [
+        {
+          id: 'bc-9',
+          componentVariantId: 'var-pulley',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 1 },
+          ruleDescription: '1 pulley per set',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-10',
+          componentVariantId: 'var-7', // Fan Blade
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 1 },
+          ruleDescription: '1 fan blade per set',
+          unit: 'PCS'
+        }
+      ]
+    },
+    {
+      id: 'bnd-inverter-set',
+      code: 'BND-INVERTER-SET',
+      name: 'Complete Inverter Set',
+      bundleType: 'FIXED_SET',
+      allowComponentAdjustment: false,
+      sellingPrice: 46000,
+      notes: 'Complete Inverter Set: Inverter x 1, Remote x 1, Display x 1, Wire x 50 ft',
+      components: [
+        {
+          id: 'bc-11',
+          componentVariantId: 'var-inverter',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 1 },
+          ruleDescription: '1 inverter panel per set',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-12',
+          componentVariantId: 'var-remote',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 1 },
+          ruleDescription: '1 remote per set',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-13',
+          componentVariantId: 'var-display',
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 1 },
+          ruleDescription: '1 LCD display per set',
+          unit: 'PCS'
+        },
+        {
+          id: 'bc-14',
+          componentVariantId: 'var-5', // Wire
+          quantityRule: 'PER_LINE',
+          parameters: { quantityPerLine: 50 },
+          ruleDescription: '50 ft wire per set',
+          unit: 'FT'
+        }
       ]
     }
   ],
@@ -741,6 +1453,69 @@ const SEED_DATABASE = {
         { name: 'Port to Lahore Multan Rd Trucking', amountPkr: 145000, isLandedCostEligible: true }
       ],
       allocationMethod: 'Value' // Value, Quantity, Weight, Volume
+    },
+    {
+      id: 'imp-txgu6848701',
+      shipmentNumber: 'IMP-00002',
+      supplierPartyId: 'pty-4',
+      shippingTerm: 'FOB',
+      originCountry: 'China',
+      originPort: 'Qingdao',
+      destinationPort: 'Karachi',
+      polCode: 'CNTAO',
+      podCode: 'PKKHI',
+      containerNumber: 'TXGU6848701',
+      blNumber: 'BL-TXGU6848701',
+      carrierName: 'TS Lines',
+      vesselName: 'KMTC CHENNAI',
+      vesselImo: '9375513',
+      voyage: '2605W',
+      etd: '2026-08-31',
+      eta: '2026-10-03',
+      transitTime: 33,
+      delayDays: 0,
+      containerCount: 1,
+      transshipmentCount: 0,
+      co2: 0.93,
+      trackingProvider: 'Tracktainer',
+      trackingNumber: 'TXGU6848701',
+      trackingMode: 'Automatic',
+      shipmentStatus: 'IN_TRANSIT',
+      currentStatus: 'Departed · Qingdao, China',
+      currentLocation: 'Malacca Strait (Lat 3.5°N, Lon 100.5°E)',
+      status: 'Shipped',
+      remainingCredits: 14,
+      containers: [
+        {
+          container_number: 'TXGU6848701',
+          container_size: 20,
+          container_type: 'HC',
+          latest_movement: {
+            event: 'DEPA',
+            classifier: 'ACT',
+            date: '2026-08-31',
+            location: { name: 'Qingdao', code: 'CNTAO', country: { name: 'China', code: 'CN' } },
+            vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' },
+            voyage: '2605W',
+            transport_mode: 'VESSEL'
+          },
+          movements: [
+            { event: 'EMSH', classifier: 'ACT', date: '2026-08-24', location: { name: 'Qingdao', code: 'CNTAO', country: { name: 'China', code: 'CN' } }, vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' }, voyage: '2605W', transport_mode: 'VESSEL' },
+            { event: 'GTIN', classifier: 'ACT', date: '2026-08-27', location: { name: 'Qingdao', code: 'CNTAO', country: { name: 'China', code: 'CN' } }, vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' }, voyage: '2605W', transport_mode: 'VESSEL' },
+            { event: 'GTIN', classifier: 'ACT', date: '2026-08-31', location: { name: 'Qingdao', code: 'CNTAO', country: { name: 'China', code: 'CN' } }, vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' }, voyage: '2605W', transport_mode: 'VESSEL' },
+            { event: 'LOAD', classifier: 'ACT', date: '2026-08-31', location: { name: 'Qingdao', code: 'CNTAO', country: { name: 'China', code: 'CN' } }, vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' }, voyage: '2605W', transport_mode: 'VESSEL' },
+            { event: 'DEPA', classifier: 'ACT', date: '2026-08-31', location: { name: 'Qingdao', code: 'CNTAO', country: { name: 'China', code: 'CN' } }, vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' }, voyage: '2605W', transport_mode: 'VESSEL' },
+            { event: 'ARRI', classifier: 'EST', date: '2026-10-03', location: { name: 'Karachi', code: 'PKKHI', country: { name: 'Pakistan', code: 'PK' } }, vessel: { name: 'KMTC CHENNAI', imo: 9375513, call_sign: 'D7KC' }, voyage: '2605W', transport_mode: 'VESSEL' }
+          ]
+        }
+      ],
+      expenses: [
+        { name: 'Ocean Freight (40HQ Container)', amountPkr: 720000, isLandedCostEligible: true },
+        { name: 'Import Customs Duty & FBR Taxes', amountPkr: 380000, isLandedCostEligible: true },
+        { name: 'Port Clearance & Documentation', amountPkr: 95000, isLandedCostEligible: true },
+        { name: 'Port to Lahore Multan Rd Trucking', amountPkr: 160000, isLandedCostEligible: true }
+      ],
+      allocationMethod: 'Value'
     }
   ],
 
@@ -774,6 +1549,7 @@ const SEED_DATABASE = {
     { id: 'coa-7', code: '2000', name: 'Liabilities', type: 'Liability', level: 1, parentId: null },
     { id: 'coa-8', code: '2100', name: 'Current Liabilities', type: 'Liability', level: 2, parentId: 'coa-7' },
     { id: 'coa-9', code: '2110', name: 'Accounts Payable (Trade Creditors)', type: 'Liability', level: 3, parentId: 'coa-8' },
+    { id: 'coa-assembly-payable', code: '2120', name: 'Assembly Labor Payable', type: 'Liability', level: 3, parentId: 'coa-8' },
 
     { id: 'coa-10', code: '3000', name: 'Equity', type: 'Equity', level: 1, parentId: null },
     { id: 'coa-11', code: '3100', name: 'Owner Capital & Retained Earnings', type: 'Equity', level: 2, parentId: 'coa-10' },
@@ -783,6 +1559,7 @@ const SEED_DATABASE = {
 
     { id: 'coa-14', code: '5000', name: 'Cost of Goods Sold', type: 'Expense', level: 1, parentId: null },
     { id: 'coa-15', code: '5100', name: 'Cost of Sales - Equipment & Parts', type: 'Expense', level: 2, parentId: 'coa-14' },
+    { id: 'coa-disassembly-variance', code: '5150', name: 'Disassembly Scrap / Variance', type: 'Expense', level: 2, parentId: 'coa-14' },
     { id: 'coa-16', code: '6000', name: 'Operating Expenses', type: 'Expense', level: 1, parentId: null },
     { id: 'coa-17', code: '6100', name: 'Freight, Logistics & Storage', type: 'Expense', level: 2, parentId: 'coa-16' }
   ],
@@ -884,7 +1661,7 @@ class StorageService {
 
   init() {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = (typeof localStorage !== 'undefined') ? localStorage.getItem(STORAGE_KEY) : null;
       if (stored) {
         this.db = JSON.parse(stored);
         // Ensure cutToLength collections and updated products are present in existing stored DB
@@ -900,7 +1677,6 @@ class StorageService {
         }
         // Ensure Auger 400ft and 450ft variants exist
         if (this.db.variants) {
-          // Remove legacy unified var-9 if present
           this.db.variants = this.db.variants.filter(v => v.id !== 'var-9');
           if (!this.db.variants.some(v => v.id === 'var-9-450')) {
             const v450 = SEED_DATABASE.variants.find(v => v.id === 'var-9-450');
@@ -911,6 +1687,70 @@ class StorageService {
             if (v400) this.db.variants.push(JSON.parse(JSON.stringify(v400)));
           }
         }
+
+        // Ensure new assembly/disassembly/bundle products and variants exist in stored DB
+        if (!this.db.products) this.db.products = [];
+        SEED_DATABASE.products.forEach(sp => {
+          if (!this.db.products.some(p => p.id === sp.id)) {
+            this.db.products.push(JSON.parse(JSON.stringify(sp)));
+          }
+        });
+
+        if (!this.db.variants) this.db.variants = [];
+        SEED_DATABASE.variants.forEach(sv => {
+          if (!this.db.variants.some(v => v.id === sv.id)) {
+            this.db.variants.push(JSON.parse(JSON.stringify(sv)));
+          }
+        });
+
+        // Ensure assembly and disassembly collections exist
+        if (!this.db.assemblyRecipes || !this.db.assemblyRecipes.length) {
+          this.db.assemblyRecipes = JSON.parse(JSON.stringify(SEED_DATABASE.assemblyRecipes));
+        }
+        if (!this.db.disassemblyTemplates || !this.db.disassemblyTemplates.length) {
+          this.db.disassemblyTemplates = JSON.parse(JSON.stringify(SEED_DATABASE.disassemblyTemplates));
+        }
+        if (!this.db.bundleDefinitions || !this.db.bundleDefinitions.length) {
+          this.db.bundleDefinitions = JSON.parse(JSON.stringify(SEED_DATABASE.bundleDefinitions));
+        }
+        if (!this.db.assemblies || !this.db.assemblies.length) {
+          this.db.assemblies = JSON.parse(JSON.stringify(SEED_DATABASE.assemblies));
+        }
+        if (!this.db.disassemblies || !this.db.disassemblies.length) {
+          this.db.disassemblies = JSON.parse(JSON.stringify(SEED_DATABASE.disassemblies));
+        }
+        if (!this.db.assemblyPayables) {
+          this.db.assemblyPayables = JSON.parse(JSON.stringify(SEED_DATABASE.assemblyPayables));
+        }
+        if (!this.db.assemblyPayments) {
+          this.db.assemblyPayments = [];
+        }
+
+        // Ensure Labor Parties exist in parties
+        if (!this.db.parties) this.db.parties = [];
+        SEED_DATABASE.parties.forEach(sp => {
+          if (sp.isLaborParty && !this.db.parties.some(p => p.id === sp.id)) {
+            this.db.parties.push(JSON.parse(JSON.stringify(sp)));
+          }
+        });
+
+        // Ensure Chart of Accounts has assembly & disassembly accounts
+        if (!this.db.chartOfAccounts) this.db.chartOfAccounts = [];
+        ['coa-assembly-payable', 'coa-disassembly-variance'].forEach(accId => {
+          if (!this.db.chartOfAccounts.some(a => a.id === accId)) {
+            const acc = SEED_DATABASE.chartOfAccounts.find(a => a.id === accId);
+            if (acc) this.db.chartOfAccounts.push(JSON.parse(JSON.stringify(acc)));
+          }
+        });
+
+        // Ensure stock balances exist for new variants
+        if (!this.db.stockBalances) this.db.stockBalances = [];
+        SEED_DATABASE.stockBalances.forEach(sb => {
+          if (!this.db.stockBalances.some(b => b.warehouseId === sb.warehouseId && b.variantId === sb.variantId)) {
+            this.db.stockBalances.push(JSON.parse(JSON.stringify(sb)));
+          }
+        });
+
         // Ensure physical units have variantId stamped
         if (this.db.cutToLengthUnits && Array.isArray(this.db.cutToLengthUnits)) {
           this.db.cutToLengthUnits.forEach(u => {
@@ -926,21 +1766,6 @@ class StorageService {
               }
             }
           });
-        }
-        // Ensure stock balances are split for var-9-450 and var-9-400
-        if (this.db.stockBalances && Array.isArray(this.db.stockBalances)) {
-          const hasOldVar9 = this.db.stockBalances.some(b => b.variantId === 'var-9');
-          if (hasOldVar9) {
-            this.db.stockBalances = this.db.stockBalances.filter(b => b.variantId !== 'var-9');
-          }
-          if (!this.db.stockBalances.some(b => b.variantId === 'var-9-450')) {
-            const bal450 = SEED_DATABASE.stockBalances.find(b => b.variantId === 'var-9-450');
-            if (bal450) this.db.stockBalances.push(JSON.parse(JSON.stringify(bal450)));
-          }
-          if (!this.db.stockBalances.some(b => b.variantId === 'var-9-400')) {
-            const bal400 = SEED_DATABASE.stockBalances.find(b => b.variantId === 'var-9-400');
-            if (bal400) this.db.stockBalances.push(JSON.parse(JSON.stringify(bal400)));
-          }
         }
         const p4 = (this.db.products || []).find(p => p.id === 'prod-4');
         if (p4 && (!p4.packagingUnits || !p4.packagingUnits.length)) {
@@ -982,7 +1807,12 @@ class StorageService {
     const merged = { ...this.db, ...incomingDb };
 
     // Smart-merge core operational collections
-    const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions', 'users'];
+    const collections = [
+      'gatepasses', 'staffNotifications', 'deliveries', 'salesOrders',
+      'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions',
+      'users', 'assemblies', 'disassemblies', 'assemblyRecipes', 'disassemblyTemplates',
+      'assemblyPayables', 'assemblyPayments', 'bundleDefinitions'
+    ];
     for (const col of collections) {
       const localArr = Array.isArray(this.db[col]) ? this.db[col] : [];
       const incArr = Array.isArray(incomingDb[col]) ? incomingDb[col] : [];
@@ -1108,7 +1938,9 @@ class StorageService {
 
   save() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
+      }
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }

@@ -87,7 +87,7 @@ function smartMergeDb(base, incoming) {
   const merged = { ...base, ...incoming };
 
   // Collections to smart-merge by item id
-  const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'users'];
+  const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'users', 'importShipments'];
   for (const col of collections) {
     const arrBase = Array.isArray(base[col]) ? base[col] : [];
     const arrInc = Array.isArray(incoming[col]) ? incoming[col] : [];
@@ -176,12 +176,244 @@ const server = http.createServer((req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = parsedUrl.pathname;
 
+const TRACKTAINER_API_KEY = process.env.TRACKTAINER_API_KEY || 'ca0853e15f63f20e1f02bc87166ed103bdeab9db';
+const TRACKTAINER_BASE_URL = 'https://api.tracktainer.com/v1';
+
+// -------------------------------------------------------------
+// TRACKTAINER HELPER FUNCTIONS
+// -------------------------------------------------------------
+function mapTracktainerData(trackItem) {
+  const attr = trackItem.attributes || {};
+  const container = (attr.containers && attr.containers[0]) ? attr.containers[0] : null;
+  const latestMov = container ? container.latest_movement : null;
+  
+  return {
+    tracktainerId: trackItem.id,
+    containerNumber: attr.shipment_number,
+    shipmentStatus: attr.shipment_status || 'IN_TRANSIT',
+    carrierName: (attr.carrier && attr.carrier.name) ? attr.carrier.name : 'Ocean Carrier',
+    carrierScac: (attr.carrier && attr.carrier.scac) ? attr.carrier.scac : '',
+    originPort: attr.port_of_loading ? `${attr.port_of_loading.name}` : (attr.origin ? attr.origin.name : 'Qingdao'),
+    destinationPort: attr.port_of_discharge ? `${attr.port_of_discharge.name}` : (attr.destination ? attr.destination.name : 'Karachi'),
+    polCode: attr.port_of_loading ? attr.port_of_loading.code : (attr.origin ? attr.origin.code : 'CNTAO'),
+    podCode: attr.port_of_discharge ? attr.port_of_discharge.code : (attr.destination ? attr.destination.code : 'PKKHI'),
+    originCountry: attr.port_of_loading?.country?.name || attr.origin?.country?.name || 'China',
+    destinationCountry: attr.port_of_discharge?.country?.name || attr.destination?.country?.name || 'Pakistan',
+    etd: attr.etd || '2026-08-31',
+    eta: attr.eta || '2026-10-03',
+    delayDays: typeof attr.delay_days === 'number' ? attr.delay_days : 0,
+    transitTime: attr.transit_time || 33,
+    transshipmentCount: attr.transshipment_count || 0,
+    containerCount: attr.container_count || 1,
+    co2: attr.co2 || 0.93,
+    currentLocation: latestMov && latestMov.location ? `${latestMov.location.name}, ${latestMov.location.country ? latestMov.location.country.name : ''}` : 'Departed Qingdao, China',
+    vesselName: latestMov && latestMov.vessel ? latestMov.vessel.name : 'KMTC CHENNAI',
+    vesselImo: latestMov && latestMov.vessel ? latestMov.vessel.imo : '9375513',
+    voyage: latestMov ? latestMov.voyage : '2605W',
+    lastCheckedAt: attr.last_checked_at || new Date().toISOString(),
+    containers: attr.containers || [],
+    movements: container ? container.movements : []
+  };
+}
+
+async function syncWithTracktainer(specificContainerNumber) {
+  if (!TRACKTAINER_API_KEY) return { success: false, error: 'No API key' };
+  try {
+    const res = await fetch(`${TRACKTAINER_BASE_URL}/ocean/shipments`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${TRACKTAINER_API_KEY}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Tracktainer] Fetch failed:', res.status, errText);
+      return { success: false, status: res.status, error: errText };
+    }
+
+    const json = await res.json();
+    const items = json.data || [];
+    console.log(`[Tracktainer] Retrieved ${items.length} shipment(s) from Tracktainer API`);
+
+    if (!serverDb) serverDb = {};
+    if (!Array.isArray(serverDb.importShipments)) serverDb.importShipments = [];
+
+    items.forEach(item => {
+      const mapped = mapTracktainerData(item);
+      const idx = serverDb.importShipments.findIndex(s => 
+        (s.containerNumber && s.containerNumber.includes(mapped.containerNumber)) ||
+        s.tracktainerId === mapped.tracktainerId
+      );
+
+      if (idx !== -1) {
+        // Merge with existing shipment, updating tracking telemetry
+        serverDb.importShipments[idx] = {
+          ...serverDb.importShipments[idx],
+          ...mapped,
+          status: mapped.shipmentStatus === 'ARRIVED' ? 'Arrived' : (serverDb.importShipments[idx].status || 'Shipped'),
+          updatedAt: new Date().toISOString()
+        };
+      } else {
+        // Create new import shipment record
+        const nextNum = `IMP-${String(serverDb.importShipments.length + 1).padStart(5, '0')}`;
+        serverDb.importShipments.push({
+          id: `imp-${mapped.containerNumber.toLowerCase()}`,
+          shipmentNumber: nextNum,
+          supplierPartyId: 'pty-4', // Qingdao Jinhe Poultry Machinery Co.
+          shippingTerm: 'FOB',
+          blNumber: `BL-${mapped.containerNumber}`,
+          carrierName: mapped.carrierName,
+          status: mapped.shipmentStatus === 'ARRIVED' ? 'Arrived' : 'Shipped',
+          expenses: [
+            { name: 'Ocean Freight (40HQ Container)', amountPkr: 720000, isLandedCostEligible: true },
+            { name: 'Customs Duty & Port Taxes', amountPkr: 380000, isLandedCostEligible: true },
+            { name: 'Terminal Handling Charges (Karachi QICT)', amountPkr: 95000, isLandedCostEligible: true },
+            { name: 'Inland Transport to Warehouse (Multan Rd)', amountPkr: 160000, isLandedCostEligible: true }
+          ],
+          allocationMethod: 'Value',
+          ...mapped,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    });
+
+    serverVersion++;
+    lastUpdatedAt = Date.now();
+    persistDbToFile();
+    notifyPollClients();
+
+    return { success: true, count: items.length, shipments: serverDb.importShipments };
+  } catch (err) {
+    console.error('[Tracktainer] Sync exception:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+// Initial sync on startup
+setTimeout(() => {
+  syncWithTracktainer().then(res => {
+    if (res.success) {
+      console.log(`[Tracktainer] Initial startup sync successful: ${res.count} shipment(s) synced.`);
+    }
+  });
+}, 2000);
+
   // -------------------------------------------------------------
   // API ROUTE: Health check
   // -------------------------------------------------------------
   if (pathname === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', version: serverVersion, clientsWaiting: waitingPollClients.length, time: new Date().toISOString() }));
+    return;
+  }
+
+  // -------------------------------------------------------------
+  // API ROUTE: GET /api/tracking/shipments (Live Tracktainer data)
+  // -------------------------------------------------------------
+  if (pathname === '/api/tracking/shipments' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    const shipments = (serverDb && serverDb.importShipments) ? serverDb.importShipments : [];
+    res.end(JSON.stringify({
+      success: true,
+      count: shipments.length,
+      shipments
+    }));
+    return;
+  }
+
+  // -------------------------------------------------------------
+  // API ROUTE: POST /api/tracking/sync (Force Live Sync with Tracktainer)
+  // -------------------------------------------------------------
+  if (pathname === '/api/tracking/sync' && req.method === 'POST') {
+    syncWithTracktainer().then(result => {
+      res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    });
+    return;
+  }
+
+  // -------------------------------------------------------------
+  // API ROUTE: POST /api/tracking/register (Register New Container in Tracktainer)
+  // -------------------------------------------------------------
+  if (pathname === '/api/tracking/register' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const containerNumber = (payload.containerNumber || '').trim();
+        const blNumber = (payload.blNumber || '').trim();
+        const numberToTrack = containerNumber || blNumber;
+
+        if (!numberToTrack) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing containerNumber or blNumber' }));
+          return;
+        }
+
+        console.log(`[Tracktainer] Registering shipment with Tracktainer API: ${numberToTrack}`);
+        const response = await fetch(`${TRACKTAINER_BASE_URL}/ocean/shipments`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${TRACKTAINER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            data: {
+              type: 'ocean-shipments',
+              attributes: {
+                shipment_number: numberToTrack,
+                shipment_number_type: containerNumber ? 'CONTAINER' : 'BILL_OF_LADING'
+              }
+            }
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          console.warn('[Tracktainer] Registration warning/error from API:', data);
+        }
+
+        // Trigger background sync to pull the newly registered or existing shipment
+        setTimeout(() => syncWithTracktainer(), 1000);
+
+        res.writeHead(response.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: response.ok,
+          tracktainerResponse: data
+        }));
+      } catch (err) {
+        console.error('[Tracktainer] Registration error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // -------------------------------------------------------------
+  // API ROUTE: POST /api/tracking/webhook (Webhook Receiver from Tracktainer)
+  // -------------------------------------------------------------
+  if (pathname === '/api/tracking/webhook' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        console.log('[Tracktainer Webhook] Received webhook notification:', payload.event || payload.type);
+        // Refresh Tracktainer data
+        syncWithTracktainer();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ received: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Malformed webhook payload' }));
+      }
+    });
     return;
   }
 

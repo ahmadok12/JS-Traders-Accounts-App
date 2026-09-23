@@ -8,6 +8,7 @@ import { salesService } from '../../services/salesService.js';
 import { invoiceTemplateService } from '../../services/invoiceTemplateService.js';
 import { productService } from '../../services/productService.js';
 import { cutToLengthService } from '../../services/cutToLengthService.js';
+import { bundleService } from '../../services/bundleService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
 import { openModal, closeModal } from '../../components/modal.js';
@@ -201,8 +202,12 @@ function openCreateInvoiceModal(onSaved) {
   const customers = salesService.getParties(true);
   const variants = productService.getVariants();
   const products = productService.getProducts();
+  const bundles = bundleService.getBundleDefinitions();
   const prodMap = new Map(products.map(p => [p.id, p]));
   const nextInvNum = `INV-2025-${String(Math.floor(1000 + Math.random() * 9000))}`;
+
+  let currentMode = 'standard'; // 'standard' | 'bundle'
+  let bundleAdjustments = { extraQuantities: {}, overrideQuantities: {} };
 
   const contentHtml = `
     <form id="create-inv-form" class="space-y-6 text-xs">
@@ -250,9 +255,17 @@ function openCreateInvoiceModal(onSaved) {
 
       <!-- SECTION 2: Line Items Table -->
       <section class="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-2">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Items &amp; Equipment / Roll Inventory</h3>
+            <span class="text-xs font-bold text-slate-600">Product Mode:</span>
+            <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
+              <button type="button" id="item-mode-standard-btn" class="px-2.5 py-1 text-xs font-bold rounded-md bg-white text-[#138FCB] shadow-2xs cursor-pointer">
+                📦 Standard / Cut-to-Length Item
+              </button>
+              <button type="button" id="item-mode-bundle-btn" class="px-2.5 py-1 text-xs font-bold rounded-md text-slate-600 hover:text-slate-900 cursor-pointer">
+                🧩 Predefined Bundle / Poultry System
+              </button>
+            </div>
           </div>
           <span class="text-xs font-medium text-[#138FCB] flex items-center space-x-1">
             <span>Live Stock Allocation Engine Active</span>
@@ -263,9 +276,9 @@ function openCreateInvoiceModal(onSaved) {
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
-                <th class="py-3 px-3 w-5/12 font-semibold">Item &amp; Description</th>
+                <th id="th-item-title" class="py-3 px-3 w-5/12 font-semibold">Item &amp; Description</th>
                 <th class="py-3 px-3 w-2/12 font-semibold">Unit / Packaging</th>
-                <th class="py-3 px-2 w-1/12 font-semibold text-center">Qty</th>
+                <th id="th-item-qty" class="py-3 px-2 w-1/12 font-semibold text-center">Qty</th>
                 <th class="py-3 px-3 w-2/12 font-semibold text-right">Unit Price (PKR)</th>
                 <th class="py-3 px-2 w-1/12 font-semibold text-center">Tax</th>
                 <th class="py-3 px-3 w-2/12 font-semibold text-right">Amount</th>
@@ -274,14 +287,24 @@ function openCreateInvoiceModal(onSaved) {
             <tbody class="divide-y divide-slate-100 text-slate-700">
               <tr class="hover:bg-slate-50/70 transition-colors">
                 <td class="p-3">
-                  <select id="inv-item-var" class="w-full text-xs font-semibold rounded border border-slate-300 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-1.5 px-2 bg-white mb-1 shadow-2xs">
-                    ${variants.map(v => {
-                      const p = prodMap.get(v.productId) || {};
-                      const isCtl = p.cut_to_length || p.enableRollTracking;
-                      return `<option value="${v.id}" data-product-id="${p.id}" data-ctl="${isCtl ? '1' : '0'}" data-price="${v.sellingPrice || 1450}">${v.name} (${v.sku})${isCtl ? ' [📏 Cut-to-Length]' : ''}</option>`;
-                    }).join('')}
-                  </select>
-                  <div id="inv-ctl-stock-pill" class="hidden text-[10px] text-blue-800 bg-blue-50/90 border border-blue-200 px-2.5 py-1 rounded-lg mt-1 font-medium"></div>
+                  <!-- Standard item picker -->
+                  <div id="standard-item-picker-container">
+                    <select id="inv-item-var" class="w-full text-xs font-semibold rounded border border-slate-300 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-1.5 px-2 bg-white mb-1 shadow-2xs">
+                      ${variants.map(v => {
+                        const p = prodMap.get(v.productId) || {};
+                        const isCtl = p.cut_to_length || p.enableRollTracking;
+                        return `<option value="${v.id}" data-product-id="${p.id}" data-ctl="${isCtl ? '1' : '0'}" data-price="${v.sellingPrice || 1450}">${v.name} (${v.sku})${isCtl ? ' [📏 Cut-to-Length]' : ''}</option>`;
+                      }).join('')}
+                    </select>
+                    <div id="inv-ctl-stock-pill" class="hidden text-[10px] text-blue-800 bg-blue-50/90 border border-blue-200 px-2.5 py-1 rounded-lg mt-1 font-medium"></div>
+                  </div>
+
+                  <!-- Bundle / System picker -->
+                  <div id="bundle-item-picker-container" class="hidden">
+                    <select id="inv-item-bundle" class="w-full text-xs font-semibold rounded border border-slate-300 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-1.5 px-2 bg-white mb-1 shadow-2xs">
+                      ${bundles.map(b => `<option value="${b.id}" data-type="${b.bundleType}">${b.name} (${b.bundleType})</option>`).join('')}
+                    </select>
+                  </div>
                 </td>
                 <td class="p-3">
                   <select id="inv-item-unit" class="w-full text-xs font-bold rounded border border-slate-300 focus:border-[#138FCB] py-1.5 px-2 bg-white shadow-2xs">
@@ -303,6 +326,22 @@ function openCreateInvoiceModal(onSaved) {
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Bundle Components & Adjustments Sub-Panel -->
+        <div id="bundle-components-panel" class="hidden p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-xs font-bold text-blue-900" id="bundle-panel-name">Poultry Feeding System</span>
+              <p class="text-[11px] text-slate-600" id="bundle-panel-desc">Commercial line shows commercial count. Gate Pass will automatically deduct physical components.</p>
+            </div>
+            <button type="button" id="btn-open-bundle-adjust" class="px-3 py-1.5 bg-[#138FCB] hover:bg-[#0E78AC] text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5">
+              <span>⚙️ Adjust Components &amp; Extra Qty</span>
+            </button>
+          </div>
+          <div id="bundle-components-pills" class="text-xs font-semibold text-slate-700 flex flex-wrap gap-1.5">
+            <!-- Dynamic component summary pills -->
+          </div>
         </div>
       </section>
 
@@ -353,7 +392,7 @@ function openCreateInvoiceModal(onSaved) {
 
   openModal({
     title: 'Create New Invoice',
-    subtitle: 'Fill in billing details; Cut-to-Length continuous cuts & roll packaging are allocated automatically',
+    subtitle: 'Fill in billing details; Cut-to-Length cuts, roll packaging & poultry bundle components are handled automatically',
     badge: nextInvNum,
     contentHtml,
     footerHtml,
@@ -362,7 +401,19 @@ function openCreateInvoiceModal(onSaved) {
       const cancelBtn = modalEl.querySelector('#inv-cancel-btn');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
+      const standardBtn = modalEl.querySelector('#item-mode-standard-btn');
+      const bundleBtn = modalEl.querySelector('#item-mode-bundle-btn');
+      const standardPicker = modalEl.querySelector('#standard-item-picker-container');
+      const bundlePicker = modalEl.querySelector('#bundle-item-picker-container');
+      const bundlePanel = modalEl.querySelector('#bundle-components-panel');
+      const bundlePanelName = modalEl.querySelector('#bundle-panel-name');
+      const bundlePanelDesc = modalEl.querySelector('#bundle-panel-desc');
+      const bundlePills = modalEl.querySelector('#bundle-components-pills');
+      const adjustBtn = modalEl.querySelector('#btn-open-bundle-adjust');
+      const thItemQty = modalEl.querySelector('#th-item-qty');
+
       const varSelect = modalEl.querySelector('#inv-item-var');
+      const bundleSelect = modalEl.querySelector('#inv-item-bundle');
       const unitSelect = modalEl.querySelector('#inv-item-unit');
       const qtyInput = modalEl.querySelector('#inv-item-qty');
       const priceInput = modalEl.querySelector('#inv-item-price');
@@ -379,9 +430,59 @@ function openCreateInvoiceModal(onSaved) {
         lineAmountEl.textContent = `Rs. ${total.toLocaleString()}`;
         subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
         grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
+
+        if (currentMode === 'bundle') {
+          updateBundleDisplay();
+        }
+      };
+
+      const updateBundleDisplay = () => {
+        const bId = bundleSelect.value;
+        const bundle = bundles.find(b => b.id === bId);
+        if (!bundle) return;
+
+        const qty = Number(qtyInput.value) || 1;
+        const calc = bundleService.calculateBundleComponents(bundle.id, qty, bundleAdjustments);
+
+        bundlePanelName.textContent = bundle.name;
+        if (bundle.bundleType === 'VARIABLE_SYSTEM') {
+          bundlePanelDesc.textContent = `Variable Poultry System (${qty} Lines). Commercial line shows ${qty} Lines. Gate Pass will automatically deduct the ${calc.components.length} physical components below:`;
+          adjustBtn.classList.remove('hidden');
+        } else {
+          bundlePanelDesc.textContent = `Fixed Set (${qty} Sets). Components are directly proportional and kept internal on invoice.`;
+          adjustBtn.classList.add('hidden');
+        }
+
+        bundlePills.innerHTML = calc.components.map(c => `
+          <span class="px-2.5 py-1 bg-white border border-blue-200 rounded-lg text-slate-800 shadow-2xs">
+            ${c.name}: <strong class="text-blue-600">${c.finalQty} ${c.unit || 'PCS'}</strong>
+            ${c.extraQty ? `<span class="text-emerald-600 text-[10px] ml-1 font-bold">(+${c.extraQty} extra)</span>` : ''}
+          </span>
+        `).join('');
       };
 
       const syncUnitAndProduct = () => {
+        if (currentMode === 'bundle') {
+          const bId = bundleSelect.value;
+          const b = bundles.find(x => x.id === bId);
+          if (!b) return;
+
+          if (b.bundleType === 'VARIABLE_SYSTEM') {
+            unitSelect.innerHTML = `<option value="Lines">Lines</option>`;
+            thItemQty.textContent = 'Lines';
+            priceInput.value = 55000;
+          } else {
+            unitSelect.innerHTML = `<option value="Sets">Sets</option>`;
+            thItemQty.textContent = 'Sets';
+            priceInput.value = 4500;
+          }
+          ctlStockPill.classList.add('hidden');
+          updateBundleDisplay();
+          recalculate();
+          return;
+        }
+
+        thItemQty.textContent = 'Qty';
         const selectedOpt = varSelect.selectedOptions[0];
         if (!selectedOpt) return;
         const prodId = selectedOpt.getAttribute('data-product-id');
@@ -419,7 +520,45 @@ function openCreateInvoiceModal(onSaved) {
         recalculate();
       };
 
+      standardBtn.onclick = () => {
+        currentMode = 'standard';
+        standardBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-md bg-white text-[#138FCB] shadow-2xs cursor-pointer';
+        bundleBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-md text-slate-600 hover:text-slate-900 cursor-pointer';
+        standardPicker.classList.remove('hidden');
+        bundlePicker.classList.add('hidden');
+        bundlePanel.classList.add('hidden');
+        syncUnitAndProduct();
+      };
+
+      bundleBtn.onclick = () => {
+        currentMode = 'bundle';
+        bundleBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-md bg-white text-[#138FCB] shadow-2xs cursor-pointer';
+        standardBtn.className = 'px-2.5 py-1 text-xs font-bold rounded-md text-slate-600 hover:text-slate-900 cursor-pointer';
+        standardPicker.classList.add('hidden');
+        bundlePicker.classList.remove('hidden');
+        bundlePanel.classList.remove('hidden');
+        syncUnitAndProduct();
+      };
+
+      adjustBtn.onclick = () => {
+        const bId = bundleSelect.value;
+        const bundle = bundles.find(b => b.id === bId);
+        const qty = Number(qtyInput.value) || 1;
+        if (!bundle) return;
+
+        openBundleAdjustmentModal(bundle, qty, bundleAdjustments, (newAdj) => {
+          bundleAdjustments = newAdj;
+          updateBundleDisplay();
+        });
+      };
+
+      bundleSelect.onchange = () => {
+        bundleAdjustments = { extraQuantities: {}, overrideQuantities: {} };
+        syncUnitAndProduct();
+      };
+
       unitSelect.onchange = () => {
+        if (currentMode === 'bundle') return;
         const opt = unitSelect.selectedOptions[0];
         const selectedOpt = varSelect.selectedOptions[0];
         const prodId = selectedOpt ? selectedOpt.getAttribute('data-product-id') : null;
@@ -443,17 +582,49 @@ function openCreateInvoiceModal(onSaved) {
       priceInput.oninput = recalculate;
       syncUnitAndProduct();
 
-      // Submit with Atomic Stock Allocation
+      // Submit
       modalEl.querySelector('#create-inv-form').onsubmit = (e) => {
         e.preventDefault();
         const customerPartyId = modalEl.querySelector('#inv-customer-select').value;
         const dueDateDays = Number(modalEl.querySelector('#inv-due-date').value) || 30;
         const dueDate = new Date(Date.now() + dueDateDays * 86400000).toISOString().split('T')[0];
-        const variantId = varSelect.value;
         const quantity = Number(qtyInput.value) || 1;
         const unitPrice = Number(priceInput.value) || 0;
         const chosenUnit = unitSelect.value;
 
+        if (currentMode === 'bundle') {
+          const bId = bundleSelect.value;
+          const bundleDef = bundles.find(b => b.id === bId);
+          if (!bundleDef) return;
+
+          const calculated = bundleService.calculateBundleComponents(bundleDef.id, quantity, bundleAdjustments);
+
+          const invoice = salesService.createSalesInvoice({
+            customerPartyId,
+            dueDate,
+            lines: [
+              {
+                variantId: bundleDef.commercialVariantId || variants[0]?.id,
+                productId: bundleDef.productId || products[0]?.id,
+                bundleId: bundleDef.id,
+                bundleType: bundleDef.bundleType,
+                bundleLinesCount: bundleDef.bundleType === 'VARIABLE_SYSTEM' ? quantity : null,
+                quantity,
+                unitPrice,
+                unit: chosenUnit,
+                bundleComponents: calculated.components
+              }
+            ]
+          });
+
+          toast.show(`Sales invoice ${invoice.invoiceNumber} created for bundle (${quantity} ${chosenUnit}).`, 'success');
+          closeModal();
+          if (onSaved) onSaved();
+          return;
+        }
+
+        // Standard / Cut-to-length mode
+        const variantId = varSelect.value;
         const selectedOpt = varSelect.selectedOptions[0];
         const prodId = selectedOpt ? selectedOpt.getAttribute('data-product-id') : null;
         const product = prodMap.get(prodId);
@@ -490,7 +661,6 @@ function openCreateInvoiceModal(onSaved) {
         };
 
         if (isCtl) {
-          // Evaluate allocation
           const plan = cutToLengthService.planAllocation({
             productId: product.id,
             variantId,
@@ -503,7 +673,6 @@ function openCreateInvoiceModal(onSaved) {
           if (plan.canFulfill) {
             executeCreateInvoice(plan);
           } else if (plan.requiresDecision) {
-            // Present explicit decision modal
             openDecisionModal(plan, (chosenAction) => {
               if (chosenAction === 'open_roll') {
                 const openPlan = cutToLengthService.planAllocation({
@@ -531,9 +700,95 @@ function openCreateInvoiceModal(onSaved) {
             toast.show(plan.error || 'Insufficient inventory.', 'error');
           }
         } else {
-          // Standard piece-based product
           executeCreateInvoice(null);
         }
+      };
+    }
+  });
+}
+
+function openBundleAdjustmentModal(bundleDef, commercialQty, adjustments, onSave) {
+  let workingAdjustments = JSON.parse(JSON.stringify(adjustments || { extraQuantities: {}, overrideQuantities: {} }));
+  if (!workingAdjustments.extraQuantities) workingAdjustments.extraQuantities = {};
+  if (!workingAdjustments.overrideQuantities) workingAdjustments.overrideQuantities = {};
+
+  const calculated = bundleService.calculateBundleComponents(bundleDef.id, commercialQty, workingAdjustments);
+
+  const contentHtml = `
+    <div class="space-y-4 text-xs">
+      <div class="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-blue-900">
+        ⚙️ <strong>Component Adjustment:</strong> Commercial invoice will show <strong>${commercialQty} ${bundleDef.bundleType === 'VARIABLE_SYSTEM' ? 'Lines' : 'Sets'}</strong>. Adjust extra component quantities below without corrupting commercial pricing.
+      </div>
+
+      <div class="overflow-x-auto border border-slate-200 rounded-xl">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] border-b border-slate-200">
+            <tr>
+              <th class="p-2.5">Component</th>
+              <th class="p-2.5">Rule</th>
+              <th class="p-2.5 text-center">Calculated</th>
+              <th class="p-2.5 text-center">Extra Qty (+/-)</th>
+              <th class="p-2.5 text-center font-bold text-slate-800">Final Qty</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${calculated.components.map(c => `
+              <tr class="hover:bg-slate-50" data-comp-id="${c.componentVariantId}">
+                <td class="p-2.5 font-bold text-slate-800">${c.name}</td>
+                <td class="p-2.5 text-slate-500 font-mono text-[11px]">${c.ruleType}</td>
+                <td class="p-2.5 text-center font-semibold">${c.calculatedQty} ${c.unit || 'PCS'}</td>
+                <td class="p-2.5 text-center">
+                  <input type="number" step="any" value="${workingAdjustments.extraQuantities[c.componentVariantId] || 0}" class="inp-adj-extra w-20 text-center font-bold border border-slate-300 rounded px-2 py-1">
+                </td>
+                <td class="p-2.5 text-center font-extrabold text-[#138FCB] col-adj-final">
+                  ${c.finalQty} ${c.unit || 'PCS'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-200">
+        <button type="button" id="btn-cancel-adj" class="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold cursor-pointer">Cancel</button>
+        <button type="button" id="btn-save-adj" class="px-5 py-2 bg-[#138FCB] hover:bg-[#0E78AC] text-white rounded-xl font-bold shadow-xs cursor-pointer">Apply Component Adjustments</button>
+      </div>
+    </div>
+  `;
+
+  openModal({
+    title: `Adjust Bundle Components: ${bundleDef.name}`,
+    subtitle: `Commercial Quantity: ${commercialQty} ${bundleDef.bundleType === 'VARIABLE_SYSTEM' ? 'Lines' : 'Sets'}`,
+    contentHtml,
+    size: 'max-w-2xl',
+    onOpen: (modalEl) => {
+      modalEl.querySelector('#btn-cancel-adj').onclick = () => closeModal();
+
+      const tableRows = modalEl.querySelectorAll('tbody tr');
+      const recalcModal = () => {
+        tableRows.forEach(tr => {
+          const compId = tr.getAttribute('data-comp-id');
+          const extraVal = Number(tr.querySelector('.inp-adj-extra').value) || 0;
+          workingAdjustments.extraQuantities[compId] = extraVal;
+        });
+        const updated = bundleService.calculateBundleComponents(bundleDef.id, commercialQty, workingAdjustments);
+        tableRows.forEach(tr => {
+          const compId = tr.getAttribute('data-comp-id');
+          const comp = updated.components.find(x => x.componentVariantId === compId);
+          if (comp) {
+            tr.querySelector('.col-adj-final').textContent = `${comp.finalQty} ${comp.unit || 'PCS'}`;
+          }
+        });
+      };
+
+      modalEl.querySelectorAll('.inp-adj-extra').forEach(inp => {
+        inp.oninput = recalcModal;
+      });
+
+      modalEl.querySelector('#btn-save-adj').onclick = () => {
+        recalcModal();
+        closeModal();
+        if (onSave) onSave(workingAdjustments);
       };
     }
   });

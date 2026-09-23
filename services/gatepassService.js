@@ -45,6 +45,66 @@ class GatepassService {
     });
   }
 
+  // Create Gatepass from Sales Invoice with automatic bundle final component inheritance
+  createGatepassFromInvoice(invoiceId, {
+    warehouseId = 'wh-1',
+    assignedStaffIds = [],
+    vehicleNumber = '',
+    driverName = '',
+    driverPhone = '',
+    notes = '',
+    userId = 'user-wh-mgr'
+  } = {}) {
+    const invoice = storageService.getById('salesInvoices', invoiceId);
+    if (!invoice) throw new Error(`Invoice "${invoiceId}" not found.`);
+
+    const expandedLines = [];
+    (invoice.lines || []).forEach(line => {
+      if (line.isBundle && Array.isArray(line.bundleComponents) && line.bundleComponents.length > 0) {
+        // Automatically inherit final component quantities from invoice
+        line.bundleComponents.forEach(comp => {
+          const finalQ = Number(comp.finalQty !== undefined ? comp.finalQty : comp.calculatedQty) || 0;
+          if (finalQ > 0) {
+            expandedLines.push({
+              variantId: comp.componentVariantId,
+              warehouseQty: warehouseId === 'wh-1' ? finalQ : 0,
+              officeQty: warehouseId === 'wh-2' ? finalQ : 0,
+              quantity: finalQ,
+              unit: comp.unit || 'PCS',
+              bundleRef: line.bundleName || 'Bundle System',
+              notes: `Component from ${line.bundleName || 'Bundle'} (${comp.calculationText || ''})`
+            });
+          }
+        });
+      } else if (line.variantId) {
+        const q = Number(line.quantity) || 0;
+        expandedLines.push({
+          variantId: line.variantId,
+          warehouseQty: warehouseId === 'wh-1' ? q : 0,
+          officeQty: warehouseId === 'wh-2' ? q : 0,
+          quantity: q,
+          unit: line.unit || 'PCS',
+          negotiatedRate: line.unitPrice
+        });
+      }
+    });
+
+    return this.createGatepass({
+      gatepassType: 'outward',
+      salesOrderId: invoice.salesOrderId || null,
+      deliveryId: invoice.deliveryId || null,
+      customerPartyId: invoice.customerPartyId || null,
+      farmId: invoice.farmId || null,
+      vehicleNumber,
+      driverName,
+      driverPhone,
+      assignedStaffIds,
+      lines: expandedLines,
+      notes: notes || `Created from Invoice ${invoice.invoiceNumber}. ${invoice.notes || ''}`,
+      userId
+    });
+  }
+
   createGatepass({
     gatepassType = 'outward',
     salesOrderId = null,
@@ -72,10 +132,30 @@ class GatepassService {
     });
     const gatepassNumber = `GP-${String(maxNum + 1).padStart(5, '0')}`;
 
+    // Flatten any bundle components if passed directly
+    const flattenedInputLines = [];
+    lines.forEach(l => {
+      if (l.bundleComponents && Array.isArray(l.bundleComponents)) {
+        l.bundleComponents.forEach(comp => {
+          const finalQ = Number(comp.finalQty !== undefined ? comp.finalQty : comp.calculatedQty) || 0;
+          flattenedInputLines.push({
+            variantId: comp.componentVariantId,
+            warehouseQty: l.warehouseQty !== undefined ? (l.warehouseQty > 0 ? finalQ : 0) : finalQ,
+            officeQty: l.officeQty !== undefined ? (l.officeQty > 0 ? finalQ : 0) : 0,
+            quantity: finalQ,
+            unit: comp.unit || 'PCS',
+            bundleRef: l.bundleName || 'Bundle'
+          });
+        });
+      } else {
+        flattenedInputLines.push(l);
+      }
+    });
+
     let totalWhQty = 0;
     let totalOffQty = 0;
 
-    const formattedLines = lines.map(l => {
+    const formattedLines = flattenedInputLines.map(l => {
       const wQty = Number(l.warehouseQty) || 0;
       const oQty = Number(l.officeQty) || 0;
       totalWhQty += wQty;
@@ -91,7 +171,8 @@ class GatepassService {
         isRoll: Boolean(l.isRoll),
         rollSize: l.rollSize ? Number(l.rollSize) : null,
         totalFeet: l.totalFeet ? Number(l.totalFeet) : null,
-        negotiatedRate: Number(l.negotiatedRate) || null
+        negotiatedRate: Number(l.negotiatedRate) || null,
+        bundleRef: l.bundleRef || null
       };
     });
 
