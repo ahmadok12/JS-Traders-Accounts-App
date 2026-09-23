@@ -185,6 +185,8 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
   const isEdit = !!gatepassToEdit;
   const variants = productService.getVariants();
   const staffMembers = staffAuthService.getStaffMembers();
+  const whStaff = staffMembers.filter(s => s.staffType === 'warehouse_staff' || s.activeWarehouseId === 'wh-1');
+  const officeStaff = staffMembers.filter(s => s.staffType === 'office_staff' || s.activeWarehouseId === 'wh-2');
 
   const renderRowHtml = (variantId = null, whQty = '', offQty = '') => {
     const selectedVariant = variantId ? variants.find(v => v.id === variantId) || variants[0] : variants[0];
