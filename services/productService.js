@@ -53,12 +53,18 @@ class ProductService {
     const count = products.length + 1;
     const code = `PROD-${String(count).padStart(5, '0')}`;
 
+    const isCutToLength = !!(productData.cut_to_length || productData.enableRollTracking);
     const newProduct = storageService.insert('products', {
       ...productData,
       code,
       productType: productData.productType || 'Stock',
       lowStockLevel: Number(productData.lowStockLevel) || 10,
-      enableRollTracking: !!productData.enableRollTracking,
+      enableRollTracking: isCutToLength,
+      cut_to_length: isCutToLength,
+      base_unit: productData.base_unit || 'ft',
+      full_unit: productData.full_unit || 'roll',
+      full_unit_quantity: Number(productData.full_unit_quantity) || 5000,
+      packagingUnits: productData.packagingUnits || [],
       negativeStockAllowed: productData.negativeStockAllowed || 'disallow',
       isActive: productData.isActive !== undefined ? productData.isActive : true
     });

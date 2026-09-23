@@ -271,6 +271,33 @@ export function openProductDetailModal(product, refreshCallback) {
             <p>${product.description}</p>
           </div>
         ` : ''}
+
+        ${(product.cut_to_length || product.enableRollTracking) ? `
+          <div class="p-3.5 bg-blue-50/50 rounded-xl border border-blue-200/80 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                <span>📏</span>
+                <span>Cut-to-Length Inventory Configuration</span>
+              </span>
+              <span class="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
+                Continuous Base Unit: ${product.base_unit || 'ft'}
+              </span>
+            </div>
+            ${(product.packagingUnits && product.packagingUnits.length > 0) ? `
+              <div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Defined Full Roll Packaging Sizes:</span>
+                <div class="flex flex-wrap gap-2">
+                  ${product.packagingUnits.map(pkg => `
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-blue-200 text-xs font-semibold text-slate-800 shadow-2xs">
+                      <span>📦</span>
+                      <span><strong>${pkg.name}</strong> (${Number(pkg.factor).toLocaleString()} ${pkg.unit || product.base_unit || 'ft'})</span>
+                    </span>
+                  `).join('')}
+                </div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
       </section>
 
       <!-- SECTION 2: Associated Variants & SKUs Cards -->
@@ -708,8 +735,62 @@ export function openProductModal(product = null, onSaved) {
 
           <div class="flex flex-col justify-end">
             <div class="flex items-center gap-2 p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl">
-              <input type="checkbox" id="prod-roll-tracking" ${product && product.enableRollTracking ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
-              <label for="prod-roll-tracking" class="font-bold text-slate-800 cursor-pointer">Enable Roll / Cut-to-Length</label>
+              <input type="checkbox" id="prod-roll-tracking" ${product && (product.cut_to_length || product.enableRollTracking) ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
+              <label for="prod-roll-tracking" class="font-bold text-slate-800 cursor-pointer">☑ Cut to Length</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cut-to-Length Multi-Packaging Sub-Card -->
+        <div id="prod-ctl-config-box" class="${product && (product.cut_to_length || product.enableRollTracking) ? '' : 'hidden'} p-4 bg-blue-50/40 rounded-xl border border-blue-200/80 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-blue-200/60">
+            <div>
+              <span class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                <span>📏</span>
+                <span>Cut-to-Length &amp; Multi-Roll Packaging Setup</span>
+              </span>
+              <p class="text-[10px] text-blue-700 mt-0.5">Define continuous base unit and full roll packaging configurations (e.g. 5,000 ft roll, 3,280 ft roll, 450 ft roll).</p>
+            </div>
+            <button type="button" id="add-roll-size-btn" class="px-2.5 py-1 bg-white hover:bg-blue-100 text-[#138FCB] border border-blue-200 rounded-lg text-xs font-bold shadow-2xs transition-all cursor-pointer">
+              + Add Roll Size
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700" for="prod-ctl-base-unit">Continuous Base Length Unit</label>
+              <select id="prod-ctl-base-unit" class="w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]">
+                <option value="ft" ${!product || product.base_unit === 'ft' ? 'selected' : ''}>Feet (ft)</option>
+                <option value="m" ${product && product.base_unit === 'm' ? 'selected' : ''}>Meters (m)</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700" for="prod-ctl-full-unit-name">Full Unit Packaging Type</label>
+              <input type="text" id="prod-ctl-full-unit-name" value="${product?.full_unit || 'roll'}" placeholder="e.g. roll, spool, coil" class="w-full text-xs font-semibold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]">
+            </div>
+          </div>
+
+          <!-- Dynamic Roll Sizes List -->
+          <div class="space-y-2 pt-1">
+            <label class="text-[11px] font-bold text-slate-700 block">Defined Full Roll Sizes (Packaging Options)</label>
+            <div id="roll-sizes-container" class="space-y-2">
+              ${(product?.packagingUnits && product.packagingUnits.length > 0 ? product.packagingUnits : [
+                { id: 'pkg-default-1', name: 'Roll (5,000 ft)', factor: 5000, unit: 'ft' },
+                { id: 'pkg-default-2', name: 'Roll (3,280 ft)', factor: 3280, unit: 'ft' }
+              ]).map((pkg, idx) => `
+                <div class="roll-size-row flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 shadow-2xs">
+                  <div class="flex-1">
+                    <input type="text" value="${pkg.name}" placeholder="e.g. Roll (5,000 ft)" class="roll-size-name w-full text-xs font-bold text-slate-800 border-0 focus:ring-0 p-1">
+                  </div>
+                  <div class="w-32 flex items-center gap-1">
+                    <input type="number" min="1" value="${pkg.factor}" placeholder="5000" class="roll-size-qty w-full text-xs font-mono font-bold text-blue-900 border border-slate-200 rounded px-2 py-1 text-right focus:border-[#138FCB]">
+                    <span class="roll-size-unit-lbl text-[10px] text-slate-500 font-bold shrink-0">ft</span>
+                  </div>
+                  <button type="button" class="remove-roll-size-btn text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer" title="Remove roll size">
+                    ✕
+                  </button>
+                </div>
+              `).join('')}
             </div>
           </div>
         </div>
@@ -753,6 +834,66 @@ export function openProductModal(product = null, onSaved) {
       const cancelBtn = modalEl.querySelector('#prod-cancel-btn');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
+      // Cut-to-Length toggle visibility
+      const rollCheckbox = modalEl.querySelector('#prod-roll-tracking');
+      const ctlBox = modalEl.querySelector('#prod-ctl-config-box');
+      if (rollCheckbox && ctlBox) {
+        rollCheckbox.onchange = () => {
+          ctlBox.classList.toggle('hidden', !rollCheckbox.checked);
+        };
+      }
+
+      // Add & Remove Roll Sizes
+      const addRollBtn = modalEl.querySelector('#add-roll-size-btn');
+      const rollContainer = modalEl.querySelector('#roll-sizes-container');
+      const baseUnitSelect = modalEl.querySelector('#prod-ctl-base-unit');
+
+      const bindRemoveButtons = () => {
+        if (!rollContainer) return;
+        rollContainer.querySelectorAll('.remove-roll-size-btn').forEach(btn => {
+          btn.onclick = () => {
+            const rows = rollContainer.querySelectorAll('.roll-size-row');
+            if (rows.length > 1) {
+              btn.closest('.roll-size-row').remove();
+            } else {
+              toast.show('At least one full roll packaging size must be specified.', 'warning');
+            }
+          };
+        });
+      };
+      bindRemoveButtons();
+
+      if (baseUnitSelect) {
+        baseUnitSelect.onchange = () => {
+          const u = baseUnitSelect.value;
+          if (rollContainer) {
+            rollContainer.querySelectorAll('.roll-size-unit-lbl').forEach(lbl => lbl.textContent = u);
+          }
+        };
+      }
+
+      if (addRollBtn && rollContainer) {
+        addRollBtn.onclick = () => {
+          const u = baseUnitSelect ? baseUnitSelect.value : 'ft';
+          const newRow = document.createElement('div');
+          newRow.className = 'roll-size-row flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 shadow-2xs animate-in fade-in duration-100';
+          newRow.innerHTML = `
+            <div class="flex-1">
+              <input type="text" value="Roll (1,000 ${u})" placeholder="e.g. Roll (1,000 ${u})" class="roll-size-name w-full text-xs font-bold text-slate-800 border-0 focus:ring-0 p-1">
+            </div>
+            <div class="w-32 flex items-center gap-1">
+              <input type="number" min="1" value="1000" placeholder="1000" class="roll-size-qty w-full text-xs font-mono font-bold text-blue-900 border border-slate-200 rounded px-2 py-1 text-right focus:border-[#138FCB]">
+              <span class="roll-size-unit-lbl text-[10px] text-slate-500 font-bold shrink-0">${u}</span>
+            </div>
+            <button type="button" class="remove-roll-size-btn text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer" title="Remove roll size">
+              ✕
+            </button>
+          `;
+          rollContainer.appendChild(newRow);
+          bindRemoveButtons();
+        };
+      }
+
       modalEl.querySelector('#product-master-form').onsubmit = (e) => {
         e.preventDefault();
         const businessName = modalEl.querySelector('#prod-biz-name').value.trim();
@@ -767,35 +908,50 @@ export function openProductModal(product = null, onSaved) {
         const description = modalEl.querySelector('#prod-desc').value.trim();
         const isActive = modalEl.querySelector('#prod-active').checked;
 
-        if (isEdit) {
-          productService.updateProduct(product.id, {
-            businessName,
-            customerName,
-            urduName,
-            categoryId,
-            baseUnitId,
-            productType,
-            lowStockLevel,
-            negativeStockAllowed,
-            enableRollTracking,
-            description,
-            isActive
+        // Cut to length multi-packaging data
+        const cut_to_length = enableRollTracking;
+        const base_unit = modalEl.querySelector('#prod-ctl-base-unit')?.value || 'ft';
+        const full_unit = modalEl.querySelector('#prod-ctl-full-unit-name')?.value.trim() || 'roll';
+
+        const packagingUnits = [];
+        if (enableRollTracking && rollContainer) {
+          rollContainer.querySelectorAll('.roll-size-row').forEach((row, i) => {
+            const name = row.querySelector('.roll-size-name')?.value.trim() || `Roll Size ${i + 1}`;
+            const factor = Number(row.querySelector('.roll-size-qty')?.value) || 5000;
+            packagingUnits.push({
+              id: `pkg-${Date.now()}-${i}`,
+              name,
+              factor,
+              unit: base_unit
+            });
           });
+        }
+        const full_unit_quantity = packagingUnits.length > 0 ? packagingUnits[0].factor : 5000;
+
+        const payload = {
+          businessName,
+          customerName,
+          urduName,
+          categoryId,
+          baseUnitId,
+          productType,
+          lowStockLevel,
+          negativeStockAllowed,
+          enableRollTracking,
+          cut_to_length,
+          base_unit,
+          full_unit,
+          full_unit_quantity,
+          packagingUnits,
+          description,
+          isActive
+        };
+
+        if (isEdit) {
+          productService.updateProduct(product.id, payload);
           toast.show('Product updated successfully.', 'success');
         } else {
-          productService.createProduct({
-            businessName,
-            customerName,
-            urduName,
-            categoryId,
-            baseUnitId,
-            productType,
-            lowStockLevel,
-            negativeStockAllowed,
-            enableRollTracking,
-            description,
-            isActive
-          });
+          productService.createProduct(payload);
           toast.show('Product created successfully.', 'success');
         }
 

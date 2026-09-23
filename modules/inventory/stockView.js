@@ -7,6 +7,7 @@
 import { inventoryService } from '../../services/inventoryService.js';
 import { productService } from '../../services/productService.js';
 import { warehouseService } from '../../services/warehouseService.js';
+import { cutToLengthService } from '../../services/cutToLengthService.js';
 import { authService } from '../../services/authService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
@@ -71,6 +72,23 @@ export function renderStockView() {
       label: 'Available Balance',
       align: 'right',
       render: row => {
+        if (row.product?.cut_to_length) {
+          const ctlSummary = cutToLengthService.getSummary(row.product.id, row.warehouseId);
+          if (ctlSummary) {
+            return `
+              <div class="text-right">
+                <div class="text-xs font-black text-slate-900">
+                  ${ctlSummary.fullRollsCount} rolls + ${Number(ctlSummary.loosePiecesFootage).toLocaleString()} ${ctlSummary.baseUnit} Loose
+                </div>
+                <div class="text-[10px] text-slate-500 font-semibold flex items-center justify-end gap-1 mt-0.5">
+                  <span>Total: <strong class="text-slate-700">${Number(ctlSummary.totalFootage).toLocaleString()} ${ctlSummary.baseUnit}</strong></span>
+                  <a href="#/inventory-rolls" class="text-[#138FCB] hover:underline font-bold ml-1">View Rolls →</a>
+                </div>
+              </div>
+            `;
+          }
+        }
+
         const isNeg = row.quantity < 0;
         const isLow = row.isLowStock;
         return `

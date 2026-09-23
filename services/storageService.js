@@ -100,16 +100,47 @@ const SEED_DATABASE = {
     {
       id: 'prod-4',
       code: 'PROD-00004',
-      businessName: 'PIP-GAL-45',
-      customerName: 'Galvanized Feeder Auger Pipe 45mm',
-      urduName: 'فیڈ پائپ',
+      businessName: 'WIRE-3MM-GAL',
+      customerName: '3mm Galvanized Steel Wire',
+      urduName: 'تار 3 ایم ایم',
       categoryId: 'cat-6',
       baseUnitId: 'u-3', // Feet
       productType: 'Stock',
       lowStockLevel: 500,
       enableRollTracking: true, // Cut-to-length / Roll tracking enabled!
+      cut_to_length: true,
+      base_unit: 'ft',
+      full_unit: 'roll',
+      full_unit_quantity: 5000,
+      packagingUnits: [
+        { id: 'pkg-wire-5000', name: 'Roll (5,000 ft)', factor: 5000, unit: 'ft' },
+        { id: 'pkg-wire-3280', name: 'Roll (3,280 ft)', factor: 3280, unit: 'ft' }
+      ],
       negativeStockAllowed: 'disallow',
-      description: 'Continuous coil roll and cut galvanized tubing for automated auger lines.',
+      description: 'Continuous coil roll and cut galvanized high-tensile 3mm steel wire for winch lines & curtains.',
+      isActive: true
+    },
+    {
+      id: 'prod-9',
+      code: 'PROD-00009',
+      businessName: 'AUG-45-GAL',
+      customerName: 'Galvanized Feeder Auger 45mm',
+      urduName: 'اوگر 45 ایم ایم',
+      categoryId: 'cat-1',
+      baseUnitId: 'u-3', // Feet
+      productType: 'Stock',
+      lowStockLevel: 200,
+      enableRollTracking: true,
+      cut_to_length: true,
+      base_unit: 'ft',
+      full_unit: 'roll',
+      full_unit_quantity: 450,
+      packagingUnits: [
+        { id: 'pkg-aug-450', name: 'Roll (450 ft)', factor: 450, unit: 'ft' },
+        { id: 'pkg-aug-400', name: 'Roll (400 ft)', factor: 400, unit: 'ft' }
+      ],
+      negativeStockAllowed: 'disallow',
+      description: 'High-grade carbon spring steel spiral auger for 45mm automatic feed pan lines.',
       isActive: true
     },
     {
@@ -223,11 +254,11 @@ const SEED_DATABASE = {
       id: 'var-5',
       productId: 'prod-4',
       code: 'VAR-00005',
-      sku: 'PIP-GAL-ROLL',
-      name: 'Galvanized Feeder Pipe 45mm (Roll/Continuous)',
-      costPrice: 120, // Per foot
-      sellingPrice: 185,
-      attributes: { Origin: 'China', Material: 'Galvanized Steel', Size: '45mm' },
+      sku: 'WIRE-3MM-FT',
+      name: '3mm Galvanized Steel Wire (Continuous)',
+      costPrice: 20, // Per foot
+      sellingPrice: 32,
+      attributes: { Origin: 'China', Material: 'Galvanized High-Tensile Steel', Size: '3mm' },
       isActive: true
     },
     {
@@ -262,16 +293,120 @@ const SEED_DATABASE = {
       sellingPrice: 5500,
       attributes: { Origin: 'China' },
       isActive: true
+    },
+    {
+      id: 'var-9',
+      productId: 'prod-9',
+      code: 'VAR-00009',
+      sku: 'AUG-45-FT',
+      name: 'Galvanized Feeder Auger 45mm (Continuous)',
+      costPrice: 180, // Per foot
+      sellingPrice: 260,
+      attributes: { Origin: 'South Africa', Material: 'Spring Steel', Size: '45mm' },
+      isActive: true
     }
   ],
 
-  // Physical rolls for Roll / Cut-to-length tracking
+  // Physical units (Full untouched rolls & partially used loose pieces)
+  cutToLengthUnits: [
+    // 3mm Galvanized Steel Wire (prod-4)
+    // 6 Full Rolls of 5,000 ft (30,000 ft)
+    { id: 'unit-r001', code: 'R001', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 5000, initialQuantity: 5000, packagingName: 'Roll (5,000 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-01T08:00:00Z', notes: 'Import shipment lot 1' },
+    { id: 'unit-r002', code: 'R002', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 5000, initialQuantity: 5000, packagingName: 'Roll (5,000 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-01T08:00:00Z', notes: 'Import shipment lot 1' },
+    { id: 'unit-r003', code: 'R003', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 5000, initialQuantity: 5000, packagingName: 'Roll (5,000 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-01T08:00:00Z', notes: 'Import shipment lot 1' },
+    { id: 'unit-r004', code: 'R004', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 5000, initialQuantity: 5000, packagingName: 'Roll (5,000 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-01T08:00:00Z', notes: 'Import shipment lot 1' },
+    { id: 'unit-r005', code: 'R005', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 5000, initialQuantity: 5000, packagingName: 'Roll (5,000 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-01T08:00:00Z', notes: 'Import shipment lot 1' },
+    { id: 'unit-r006', code: 'R006', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 5000, initialQuantity: 5000, packagingName: 'Roll (5,000 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-01T08:00:00Z', notes: 'Import shipment lot 1' },
+    // 4 Full Rolls of 3,280 ft (13,120 ft)
+    { id: 'unit-r101', code: 'R101', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 3280, initialQuantity: 3280, packagingName: 'Roll (3,280 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-05T09:30:00Z', notes: 'Standard 1000m coil import' },
+    { id: 'unit-r102', code: 'R102', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 3280, initialQuantity: 3280, packagingName: 'Roll (3,280 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-05T09:30:00Z', notes: 'Standard 1000m coil import' },
+    { id: 'unit-r103', code: 'R103', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 3280, initialQuantity: 3280, packagingName: 'Roll (3,280 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-05T09:30:00Z', notes: 'Standard 1000m coil import' },
+    { id: 'unit-r104', code: 'R104', productId: 'prod-4', warehouseId: 'wh-1', classification: 'FULL', quantity: 3280, initialQuantity: 3280, packagingName: 'Roll (3,280 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-05T09:30:00Z', notes: 'Standard 1000m coil import' },
+    // 2 Loose Pieces of 3mm wire (4,700 ft)
+    { id: 'unit-l001', code: 'L001', productId: 'prod-4', warehouseId: 'wh-1', classification: 'LOOSE', quantity: 1000, initialQuantity: 5000, unit: 'ft', parentUnitId: 'unit-r005', status: 'AVAILABLE', createdAt: '2025-09-10T14:15:00Z', notes: 'Remaining from 4,000 ft cut for Farm A' },
+    { id: 'unit-l002', code: 'L002', productId: 'prod-4', warehouseId: 'wh-1', classification: 'LOOSE', quantity: 3700, initialQuantity: 5000, unit: 'ft', parentUnitId: 'unit-r006', status: 'AVAILABLE', createdAt: '2025-09-12T11:00:00Z', notes: 'Remaining from 1,300 ft cut for Farm B' },
+
+    // Galvanized Feeder Auger 45mm (prod-9)
+    // 5 Full Rolls of 450 ft (2,250 ft)
+    { id: 'unit-a001', code: 'A001', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 450, initialQuantity: 450, packagingName: 'Roll (450 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-02T10:00:00Z', notes: 'Standard 450ft box' },
+    { id: 'unit-a002', code: 'A002', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 450, initialQuantity: 450, packagingName: 'Roll (450 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-02T10:00:00Z', notes: 'Standard 450ft box' },
+    { id: 'unit-a003', code: 'A003', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 450, initialQuantity: 450, packagingName: 'Roll (450 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-02T10:00:00Z', notes: 'Standard 450ft box' },
+    { id: 'unit-a004', code: 'A004', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 450, initialQuantity: 450, packagingName: 'Roll (450 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-02T10:00:00Z', notes: 'Standard 450ft box' },
+    { id: 'unit-a005', code: 'A005', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 450, initialQuantity: 450, packagingName: 'Roll (450 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-02T10:00:00Z', notes: 'Standard 450ft box' },
+    // 3 Full Rolls of 400 ft (1,200 ft)
+    { id: 'unit-a101', code: 'A101', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 400, initialQuantity: 400, packagingName: 'Roll (400 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-06T12:00:00Z', notes: 'Standard 400ft box' },
+    { id: 'unit-a102', code: 'A102', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 400, initialQuantity: 400, packagingName: 'Roll (400 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-06T12:00:00Z', notes: 'Standard 400ft box' },
+    { id: 'unit-a103', code: 'A103', productId: 'prod-9', warehouseId: 'wh-1', classification: 'FULL', quantity: 400, initialQuantity: 400, packagingName: 'Roll (400 ft)', unit: 'ft', status: 'AVAILABLE', createdAt: '2025-09-06T12:00:00Z', notes: 'Standard 400ft box' },
+    // 1 Loose Piece of Auger (250 ft)
+    { id: 'unit-l201', code: 'L201', productId: 'prod-9', warehouseId: 'wh-1', classification: 'LOOSE', quantity: 250, initialQuantity: 450, unit: 'ft', parentUnitId: 'unit-a006', status: 'AVAILABLE', createdAt: '2025-09-14T16:00:00Z', notes: 'Remaining from 200 ft cut for Shed 3 replacement' }
+  ],
+
+  // Audit trail of roll / cut operations
+  cutToLengthTransactions: [
+    {
+      id: 'tx-ctl-001',
+      transactionType: 'INITIAL_PURCHASE',
+      referenceDocType: 'purchase',
+      referenceDocId: 'PO-2025-001',
+      productId: 'prod-4',
+      warehouseId: 'wh-1',
+      sourceUnitId: 'unit-r001',
+      sourceCode: 'R001',
+      originalLength: 0,
+      issuedLength: 0,
+      remainingLength: 5000,
+      resultingUnitId: 'unit-r001',
+      newClassification: 'FULL',
+      userId: 'user-admin',
+      notes: 'Initial import batch received: 6 rolls of 5,000 ft',
+      createdAt: '2025-09-01T08:00:00Z'
+    },
+    {
+      id: 'tx-ctl-002',
+      transactionType: 'ROLL_OPEN',
+      referenceDocType: 'invoice',
+      referenceDocId: 'INV-2025-0012',
+      productId: 'prod-4',
+      warehouseId: 'wh-1',
+      sourceUnitId: 'unit-r005',
+      sourceCode: 'R005',
+      originalLength: 5000,
+      issuedLength: 4000,
+      remainingLength: 1000,
+      resultingUnitId: 'unit-l001',
+      resultingCode: 'L001',
+      newClassification: 'LOOSE',
+      userId: 'user-admin',
+      notes: 'Opened full roll R005 (5,000 ft), cut 4,000 ft, created loose piece L001 (1,000 ft)',
+      createdAt: '2025-09-10T14:15:00Z'
+    },
+    {
+      id: 'tx-ctl-003',
+      transactionType: 'ROLL_OPEN',
+      referenceDocType: 'invoice',
+      referenceDocId: 'INV-2025-0019',
+      productId: 'prod-4',
+      warehouseId: 'wh-1',
+      sourceUnitId: 'unit-r006',
+      sourceCode: 'R006',
+      originalLength: 5000,
+      issuedLength: 1300,
+      remainingLength: 3700,
+      resultingUnitId: 'unit-l002',
+      resultingCode: 'L002',
+      newClassification: 'LOOSE',
+      userId: 'user-admin',
+      notes: 'Opened full roll R006 (5,000 ft), cut 1,300 ft, created loose piece L002 (3,700 ft)',
+      createdAt: '2025-09-12T11:00:00Z'
+    }
+  ],
+
+  // Backward compatibility alias
   physicalRolls: [
-    { id: 'roll-1', variantId: 'var-5', warehouseId: 'wh-1', code: 'ROLL-101', initialLength: 5000, remainingLength: 5000, isFull: true },
-    { id: 'roll-2', variantId: 'var-5', warehouseId: 'wh-1', code: 'ROLL-102', initialLength: 5000, remainingLength: 5000, isFull: true },
-    { id: 'roll-3', variantId: 'var-5', warehouseId: 'wh-1', code: 'ROLL-103', initialLength: 5000, remainingLength: 5000, isFull: true },
-    { id: 'roll-4', variantId: 'var-5', warehouseId: 'wh-1', code: 'ROLL-104', initialLength: 5000, remainingLength: 5000, isFull: true },
-    { id: 'roll-5', variantId: 'var-5', warehouseId: 'wh-1', code: 'ROLL-105', initialLength: 5000, remainingLength: 5000, isFull: true }
+    { id: 'roll-1', variantId: 'var-5', warehouseId: 'wh-1', code: 'R001', initialLength: 5000, remainingLength: 5000, isFull: true },
+    { id: 'roll-2', variantId: 'var-5', warehouseId: 'wh-1', code: 'R002', initialLength: 5000, remainingLength: 5000, isFull: true },
+    { id: 'roll-3', variantId: 'var-5', warehouseId: 'wh-1', code: 'R003', initialLength: 5000, remainingLength: 5000, isFull: true },
+    { id: 'roll-4', variantId: 'var-5', warehouseId: 'wh-1', code: 'R101', initialLength: 3280, remainingLength: 3280, isFull: true }
   ],
 
   // Stock balances by warehouse & variant
@@ -280,16 +415,17 @@ const SEED_DATABASE = {
     { id: 'bal-wh1-var2', warehouseId: 'wh-1', variantId: 'var-2', quantity: 820, averageCost: 650, unit: 'PCS' },
     { id: 'bal-wh1-var3', warehouseId: 'wh-1', variantId: 'var-3', quantity: 4500, averageCost: 65, unit: 'PCS' },
     { id: 'bal-wh1-var4', warehouseId: 'wh-1', variantId: 'var-4', quantity: 6, averageCost: 42000, unit: 'PCS' },
-    { id: 'bal-wh1-var5', warehouseId: 'wh-1', variantId: 'var-5', quantity: 22500, averageCost: 120, unit: 'FT' },
+    { id: 'bal-wh1-var5', warehouseId: 'wh-1', variantId: 'var-5', quantity: 47820, averageCost: 20, unit: 'FT' },
     { id: 'bal-wh1-var6', warehouseId: 'wh-1', variantId: 'var-6', quantity: 25, averageCost: 18500, unit: 'PCS' },
     { id: 'bal-wh1-var7', warehouseId: 'wh-1', variantId: 'var-7', quantity: 30, averageCost: 9500, unit: 'PCS' },
     { id: 'bal-wh1-var8', warehouseId: 'wh-1', variantId: 'var-8', quantity: 40, averageCost: 3800, unit: 'PCS' },
+    { id: 'bal-wh1-var9', warehouseId: 'wh-1', variantId: 'var-9', quantity: 3700, averageCost: 180, unit: 'FT' },
     // Office Stock Balances (wh-2)
     { id: 'bal-wh2-var1', warehouseId: 'wh-2', variantId: 'var-1', quantity: 350, averageCost: 950, unit: 'PCS' },
     { id: 'bal-wh2-var2', warehouseId: 'wh-2', variantId: 'var-2', quantity: 180, averageCost: 650, unit: 'PCS' },
     { id: 'bal-wh2-var3', warehouseId: 'wh-2', variantId: 'var-3', quantity: 1200, averageCost: 65, unit: 'PCS' },
     { id: 'bal-wh2-var4', warehouseId: 'wh-2', variantId: 'var-4', quantity: 3, averageCost: 42000, unit: 'PCS' },
-    { id: 'bal-wh2-var5', warehouseId: 'wh-2', variantId: 'var-5', quantity: 2500, averageCost: 120, unit: 'FT' },
+    { id: 'bal-wh2-var5', warehouseId: 'wh-2', variantId: 'var-5', quantity: 5000, averageCost: 20, unit: 'FT' },
     { id: 'bal-wh2-var6', warehouseId: 'wh-2', variantId: 'var-6', quantity: 5, averageCost: 18500, unit: 'PCS' },
     { id: 'bal-wh2-var7', warehouseId: 'wh-2', variantId: 'var-7', quantity: 6, averageCost: 9500, unit: 'PCS' },
     { id: 'bal-wh2-var8', warehouseId: 'wh-2', variantId: 'var-8', quantity: 15, averageCost: 3800, unit: 'PCS' }
@@ -732,6 +868,34 @@ class StorageService {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         this.db = JSON.parse(stored);
+        // Ensure cutToLength collections and updated products are present in existing stored DB
+        if (!this.db.cutToLengthUnits || !this.db.cutToLengthUnits.length) {
+          this.db.cutToLengthUnits = JSON.parse(JSON.stringify(SEED_DATABASE.cutToLengthUnits));
+        }
+        if (!this.db.cutToLengthTransactions || !this.db.cutToLengthTransactions.length) {
+          this.db.cutToLengthTransactions = JSON.parse(JSON.stringify(SEED_DATABASE.cutToLengthTransactions));
+        }
+        if (this.db.products && !this.db.products.some(p => p.id === 'prod-9')) {
+          const prod9 = SEED_DATABASE.products.find(p => p.id === 'prod-9');
+          if (prod9) this.db.products.push(JSON.parse(JSON.stringify(prod9)));
+        }
+        if (this.db.variants && !this.db.variants.some(v => v.id === 'var-9')) {
+          const var9 = SEED_DATABASE.variants.find(v => v.id === 'var-9');
+          if (var9) this.db.variants.push(JSON.parse(JSON.stringify(var9)));
+        }
+        const p4 = (this.db.products || []).find(p => p.id === 'prod-4');
+        if (p4 && (!p4.packagingUnits || !p4.packagingUnits.length)) {
+          const seedP4 = SEED_DATABASE.products.find(p => p.id === 'prod-4');
+          if (seedP4) {
+            p4.customerName = seedP4.customerName;
+            p4.cut_to_length = true;
+            p4.enableRollTracking = true;
+            p4.base_unit = seedP4.base_unit;
+            p4.full_unit = seedP4.full_unit;
+            p4.full_unit_quantity = seedP4.full_unit_quantity;
+            p4.packagingUnits = JSON.parse(JSON.stringify(seedP4.packagingUnits));
+          }
+        }
       } else {
         this.resetToDefaults();
       }
@@ -759,7 +923,7 @@ class StorageService {
     const merged = { ...this.db, ...incomingDb };
 
     // Smart-merge core operational collections
-    const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'users'];
+    const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions', 'users'];
     for (const col of collections) {
       const localArr = Array.isArray(this.db[col]) ? this.db[col] : [];
       const incArr = Array.isArray(incomingDb[col]) ? incomingDb[col] : [];
