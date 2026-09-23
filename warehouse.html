@@ -64,16 +64,24 @@
         <!-- Navigation Menus -->
         <nav class="space-y-3.5 text-xs font-medium">
 
-          <!-- 1. Operations (Gatepass & Delivery) -->
+          <!-- 1. Inward & Outward Stock Operations -->
           <div class="space-y-1">
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Floor Operations</span>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Inward &amp; Outward Stock</span>
+            <a class="wh-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-slate-100 transition-colors cursor-pointer" data-route="sales-orders" href="#/sales-orders">
+              <span>📋</span>
+              <span>Sales Orders (Outgoing)</span>
+            </a>
+            <a class="wh-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-slate-100 transition-colors cursor-pointer" data-route="inward-orders" href="#/inward-orders">
+              <span>📥</span>
+              <span>Stock Inward Orders</span>
+            </a>
             <a class="wh-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all cursor-pointer font-bold text-emerald-700 bg-emerald-50" data-route="warehouse-gatepasses" href="#/warehouse-gatepasses">
               <span>🚚</span>
-              <span>Gatepasses & Loading</span>
+              <span>Gatepasses (GDN &amp; GRN)</span>
             </a>
             <a class="wh-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-slate-100 transition-colors cursor-pointer" data-route="warehouse-deliveries" href="#/warehouse-deliveries">
               <span>📦</span>
-              <span>Deliveries & Dispatch</span>
+              <span>Deliveries &amp; Dispatch</span>
             </a>
           </div>
 

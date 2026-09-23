@@ -34,8 +34,20 @@ export function renderGatepassView() {
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search gatepasses by number, customer, vehicle...',
-    primaryAction: { label: 'Create Draft Gatepass Outward' },
+    searchPlaceholder: 'Search gatepasses by number, party, vehicle...',
+    dropdowns: [
+      {
+        id: 'gp-type-filter',
+        label: 'Direction',
+        value: 'all',
+        options: [
+          { value: 'all', label: 'All Gatepasses' },
+          { value: 'outward', label: 'Outward (GDN) Only' },
+          { value: 'inward', label: 'Inward (GRN) Only' }
+        ]
+      }
+    ],
+    primaryAction: { label: '+ Create Gatepass Outward' },
     secondaryAction: { label: 'Generate from Sales Invoice', icon: '🧾' }
   });
 
@@ -45,22 +57,24 @@ export function renderGatepassView() {
       label: 'Gatepass #',
       render: row => `
         <div>
-          <span class="font-bold text-[#138FCB] text-xs">${row.gatepassNumber}</span>
-          <span class="block text-[10px] text-slate-400 uppercase tracking-wider">${row.gatepassType || 'Outward'}</span>
+          <span class="font-bold text-[#138FCB] text-xs font-mono">${row.gatepassNumber}</span>
+          <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${row.gatepassType === 'inward' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
+            ${row.gatepassType === 'inward' ? 'INWARD (GRN)' : 'OUTWARD (GDN)'}
+          </span>
         </div>
       `
     },
     {
       key: 'date',
       label: 'Date',
-      render: row => `<span class="text-slate-600 font-medium">${row.date}</span>`
+      render: row => `<span class="text-slate-600 font-medium font-mono">${row.date}</span>`
     },
     {
       key: 'customer',
-      label: 'Customer / Farm',
+      label: 'Party / Destination / Origin',
       render: row => `
         <div>
-          <div class="font-bold text-slate-800">${row.customerName || partyMap.get(row.customerPartyId) || 'Customer'}</div>
+          <div class="font-bold text-slate-800">${row.customerName || partyMap.get(row.customerPartyId) || (row.gatepassType === 'inward' ? 'Supplier / Origin' : 'Customer')}</div>
           <div class="text-[10px] text-slate-400">Driver: ${row.driverName || 'N/A'} (${row.vehicleNumber || 'N/A'})</div>
         </div>
       `
@@ -179,6 +193,144 @@ export function bindGatepassEvents(container, refreshCallback) {
     { label: 'View', variant: 'secondary', onClick: (row) => openGatepassDetailModal(row, refreshCallback) }
   ];
   bindTableActions(container, actions, gatepasses);
+
+  const parties = salesService.getParties(true);
+  const partyMap = new Map(parties.map(p => [p.id, p.name]));
+
+  const applyFilters = () => {
+    const q = container.querySelector('#filter-search-input')?.value.toLowerCase().trim() || '';
+    const typeFilter = container.querySelector('#gp-type-filter')?.value || 'all';
+
+    const filtered = gatepasses.filter(gp => {
+      if (typeFilter === 'outward' && gp.gatepassType === 'inward') return false;
+      if (typeFilter === 'inward' && gp.gatepassType !== 'inward') return false;
+      if (!q) return true;
+
+      const pName = partyMap.get(gp.customerPartyId) || gp.customerName || '';
+      return (
+        gp.gatepassNumber.toLowerCase().includes(q) ||
+        pName.toLowerCase().includes(q) ||
+        (gp.vehicleNumber && gp.vehicleNumber.toLowerCase().includes(q)) ||
+        (gp.driverName && gp.driverName.toLowerCase().includes(q))
+      );
+    });
+
+    const tableContainer = container.querySelector('#gatepass-table-container');
+    if (tableContainer) {
+      const warehouses = warehouseService.getWarehouses();
+      const whMap = new Map(warehouses.map(w => [w.id, w.name]));
+      const users = storageService.getCollection('users');
+      const userMap = new Map(users.map(u => [u.id, u.fullName]));
+
+      const columns = [
+        {
+          key: 'gatepassNumber',
+          label: 'Gatepass #',
+          render: row => `
+            <div>
+              <span class="font-bold text-[#138FCB] text-xs font-mono">${row.gatepassNumber}</span>
+              <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${row.gatepassType === 'inward' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
+                ${row.gatepassType === 'inward' ? 'INWARD (GRN)' : 'OUTWARD (GDN)'}
+              </span>
+            </div>
+          `
+        },
+        { key: 'date', label: 'Date', render: row => `<span class="text-slate-600 font-medium font-mono">${row.date}</span>` },
+        {
+          key: 'customer',
+          label: 'Party / Destination / Origin',
+          render: row => `
+            <div>
+              <div class="font-bold text-slate-800">${row.customerName || partyMap.get(row.customerPartyId) || (row.gatepassType === 'inward' ? 'Supplier / Origin' : 'Customer')}</div>
+              <div class="text-[10px] text-slate-400">Driver: ${row.driverName || 'N/A'} (${row.vehicleNumber || 'N/A'})</div>
+            </div>
+          `
+        },
+        {
+          key: 'locationBreakdown',
+          label: 'Cargo Breakdown',
+          render: row => {
+            let totalWh = 0;
+            let totalOff = 0;
+            (row.lines || []).forEach(l => {
+              totalWh += (Number(l.warehouseQty) || 0);
+              totalOff += (Number(l.officeQty) || 0);
+            });
+            const total = (row.lines || []).reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+            return `
+              <div class="text-xs space-y-0.5">
+                ${row.gatepassType === 'inward' ? `
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span class="text-slate-700">Receipt: <strong>${total}</strong> units</span>
+                  </div>
+                ` : `
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span class="text-slate-700">Warehouse: <strong>${totalWh}</strong></span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                    <span class="text-slate-700">Office: <strong>${totalOff}</strong></span>
+                  </div>
+                `}
+              </div>
+            `;
+          }
+        },
+        {
+          key: 'assignedStaff',
+          label: 'Assigned Staff',
+          render: row => {
+            const staffIds = row.assignedStaffIds || [];
+            if (staffIds.length === 0) return `<span class="text-slate-400 text-xs italic">Unassigned</span>`;
+            return `
+              <div class="flex flex-wrap gap-1">
+                ${staffIds.map(id => {
+                  const staff = userMap.get(id) || 'Staff';
+                  const hasProof = (row.staffProofs || []).some(p => p.staffId === id);
+                  return `
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold ${hasProof ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-700'}">
+                      ${hasProof ? '✓ ' : ''}${staff}
+                    </span>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          }
+        },
+        {
+          key: 'status',
+          label: 'Workflow Status',
+          render: row => {
+            let badgeClass = 'bg-slate-100 text-slate-700';
+            if (row.status === 'Draft - Staff Assigned') badgeClass = 'bg-blue-50 text-blue-700 border border-blue-200';
+            else if (row.status === 'Staff Submitted - Ready for Approval') badgeClass = 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse';
+            else if (row.status && row.status.startsWith('Approved')) badgeClass = 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold';
+            else if (row.status === 'Ready for Invoice') badgeClass = 'bg-purple-50 text-purple-700 border border-purple-200';
+            else if (row.status === 'Voided') badgeClass = 'bg-rose-50 text-rose-700 border border-rose-200';
+
+            return `
+              <div>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">
+                  ${row.status}
+                </span>
+              </div>
+            `;
+          }
+        }
+      ];
+
+      tableContainer.innerHTML = renderTable({ columns, data: filtered, actions });
+      bindTableActions(tableContainer, actions, filtered);
+    }
+  };
+
+  const searchInput = container.querySelector('#filter-search-input');
+  if (searchInput) searchInput.oninput = applyFilters;
+
+  const typeFilter = container.querySelector('#gp-type-filter');
+  if (typeFilter) typeFilter.onchange = applyFilters;
 }
 
 function openGenerateGatepassFromInvoiceModal(onSaved) {
@@ -1212,16 +1364,22 @@ function openGatepassDetailModal(gatepass, onSaved) {
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path>
             </svg>
-            <span>Approve Gatepass &amp; Release Stock</span>
+            <span>${gatepass.gatepassType === 'inward' ? 'Verify &amp; Inward Stock' : 'Approve Gatepass &amp; Release Stock'}</span>
           </button>
         ` : ''}
       </div>
     </div>
   `;
 
+  const isInward = gatepass.gatepassType === 'inward';
+  const modalTitle = isInward ? `Gatepass Inward (GRN) Document` : `Gatepass Outward Document`;
+  const modalSubtitle = isInward
+    ? 'Verify incoming goods receipt, inspect physical items, and put away stock into warehouse'
+    : 'Review cargo breakdown, staff photo submissions, and authorize delivery dispatch';
+
   openModal({
-    title: `Gatepass Outward Document`,
-    subtitle: 'Review cargo breakdown, staff photo submissions, and authorize delivery dispatch',
+    title: modalTitle,
+    subtitle: modalSubtitle,
     badge: gatepass.gatepassNumber,
     headerActionsHtml,
     contentHtml,
@@ -1288,7 +1446,10 @@ function openGatepassDetailModal(gatepass, onSaved) {
       if (approveBtn) {
         approveBtn.onclick = () => {
           gatepassService.approveGatepass(gatepass.id, authService.getCurrentUser().id);
-          toast.show(`Gatepass ${gatepass.gatepassNumber} approved! Outward stock deducted from Warehouse & Office.`, 'success');
+          const msg = isInward
+            ? `Gatepass Inward ${gatepass.gatepassNumber} verified! Inward stock has been added to warehouse balance.`
+            : `Gatepass ${gatepass.gatepassNumber} approved! Outward stock deducted from Warehouse & Office.`;
+          toast.show(msg, 'success');
           closeModal();
           if (onSaved) onSaved();
         };

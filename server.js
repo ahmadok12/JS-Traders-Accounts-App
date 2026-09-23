@@ -87,7 +87,7 @@ function smartMergeDb(base, incoming) {
   const merged = { ...base, ...incoming };
 
   // Collections to smart-merge by item id
-  const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'users', 'importShipments'];
+  const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders', 'stockBalances', 'stockMovements', 'users', 'importShipments'];
   for (const col of collections) {
     const arrBase = Array.isArray(base[col]) ? base[col] : [];
     const arrInc = Array.isArray(incoming[col]) ? incoming[col] : [];
@@ -234,10 +234,12 @@ async function syncWithTracktainer(specificContainerNumber) {
 
       if (idx !== -1) {
         // Merge with existing shipment, updating tracking telemetry
+        const existingStatus = serverDb.importShipments[idx].status;
+        const isVoidedOrCancelled = existingStatus === 'Cancelled' || existingStatus === 'Voided';
         serverDb.importShipments[idx] = {
           ...serverDb.importShipments[idx],
           ...mapped,
-          status: mapped.shipmentStatus === 'ARRIVED' ? 'Arrived' : (serverDb.importShipments[idx].status || 'Shipped'),
+          status: isVoidedOrCancelled ? existingStatus : (mapped.shipmentStatus === 'ARRIVED' ? 'Arrived' : (existingStatus || 'Shipped')),
           updatedAt: new Date().toISOString()
         };
       } else {
@@ -315,11 +317,12 @@ const server = http.createServer((req, res) => {
   // -------------------------------------------------------------
   if (pathname === '/api/tracking/shipments' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    const shipments = (serverDb && serverDb.importShipments) ? serverDb.importShipments : [];
+    const allShipments = (serverDb && serverDb.importShipments) ? serverDb.importShipments : [];
+    const activeShipments = allShipments.filter(s => s && s.status !== 'Cancelled' && s.status !== 'Voided');
     res.end(JSON.stringify({
       success: true,
-      count: shipments.length,
-      shipments
+      count: activeShipments.length,
+      shipments: activeShipments
     }));
     return;
   }

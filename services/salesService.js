@@ -101,9 +101,15 @@ class SalesService {
     return variant ? { rate: Number(variant.sellingPrice) || 0, date: null, source: 'Catalog Standard Price' } : null;
   }
 
-  // --- SALES ORDERS ---
+  // --- SALES ORDERS (Customer Requirements / Outgoing Demand - No stock movement) ---
   getSalesOrders() {
-    return storageService.getCollection('salesOrders');
+    const list = storageService.getCollection('salesOrders') || [];
+    return [...list].sort((a, b) => {
+      const numA = parseInt((a.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt((b.orderNumber || '').replace(/\D/g, ''), 10) || 0;
+      if (numB !== numA) return numB - numA;
+      return new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0);
+    });
   }
 
   getSalesOrderById(id) {
@@ -112,28 +118,41 @@ class SalesService {
 
   createSalesOrder(orderData) {
     const orders = this.getSalesOrders();
-    const orderNumber = `SO-${String(orders.length + 1).padStart(5, '0')}`;
+    let maxNum = 0;
+    orders.forEach(o => {
+      const match = (o.orderNumber || '').match(/\d+/);
+      if (match) {
+        const val = parseInt(match[0], 10);
+        if (val > maxNum) maxNum = val;
+      }
+    });
+    const orderNumber = `SO-${String(maxNum + 1).padStart(5, '0')}`;
 
     let subtotal = 0;
     const lines = (orderData.lines || []).map((l, idx) => {
-      const qty = Number(l.orderedQty) || 0;
+      const qty = Number(l.orderedQty !== undefined ? l.orderedQty : l.quantity) || 0;
       const price = Number(l.unitPrice) || 0;
       const lineTotal = qty * price;
       subtotal += lineTotal;
+      const v = productService.getVariantById(l.variantId) || {};
       return {
         id: `sol-${Date.now()}-${idx}`,
         variantId: l.variantId,
         orderedQty: qty,
         deliveredQty: 0,
-        unit: l.unit || 'PCS',
+        invoicedQty: 0,
+        unit: l.unit || v.unit || 'PCS',
         unitPrice: price,
-        lineTotal
+        lineTotal,
+        notes: l.notes || ''
       };
     });
 
     const discount = Number(orderData.discount) || 0;
     const tax = Number(orderData.tax) || 0;
     const total = subtotal - discount + tax;
+    const totalOrdered = lines.reduce((sum, l) => sum + l.orderedQty, 0);
+    const initialStatus = orderData.status === 'Draft' ? 'Draft' : (totalOrdered > 0 ? 'Confirmed' : 'Draft');
 
     return storageService.insert('salesOrders', {
       ...orderData,
@@ -142,8 +161,169 @@ class SalesService {
       discount,
       tax,
       total,
-      status: 'Confirmed',
-      lines
+      status: initialStatus,
+      gdnIds: [],
+      lines,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  // Returns remaining undelivered lines on a Sales Order
+  getRemainingDeliveryLines(salesOrderId) {
+    const order = this.getSalesOrderById(salesOrderId);
+    if (!order) throw new Error(`Sales Order "${salesOrderId}" not found.`);
+
+    return (order.lines || [])
+      .map(line => {
+        const ord = Number(line.orderedQty) || 0;
+        const del = Number(line.deliveredQty) || 0;
+        const remaining = Math.max(0, ord - del);
+        return {
+          ...line,
+          remainingDeliveryQty: remaining
+        };
+      })
+      .filter(l => l.remainingDeliveryQty > 0);
+  }
+
+  // Called when a GDN / Gatepass Outward is posted/approved
+  recordDeliveryProgress(salesOrderId, gdnId, deliveredItems = []) {
+    const order = this.getSalesOrderById(salesOrderId);
+    if (!order) throw new Error(`Sales Order "${salesOrderId}" not found.`);
+
+    const deliveredMap = new Map();
+    deliveredItems.forEach(item => {
+      const q = Number(item.quantity !== undefined ? item.quantity : (Number(item.warehouseQty || 0) + Number(item.officeQty || 0))) || 0;
+      if (item.variantId) {
+        deliveredMap.set(item.variantId, (deliveredMap.get(item.variantId) || 0) + q);
+      }
+    });
+
+    let totalOrdered = 0;
+    let totalDelivered = 0;
+
+    const updatedLines = (order.lines || []).map(line => {
+      const addQty = deliveredMap.get(line.variantId) || 0;
+      const newDel = (Number(line.deliveredQty) || 0) + addQty;
+      const ord = Number(line.orderedQty) || 0;
+      totalOrdered += ord;
+      totalDelivered += newDel;
+      return {
+        ...line,
+        deliveredQty: newDel
+      };
+    });
+
+    // Update status based on total delivery progress
+    let newStatus = order.status;
+    if (totalDelivered >= totalOrdered && totalOrdered > 0) {
+      newStatus = 'Fully Delivered';
+    } else if (totalDelivered > 0) {
+      newStatus = 'Partially Delivered';
+    } else {
+      newStatus = order.status === 'Draft' ? 'Draft' : 'Confirmed';
+    }
+
+    const currentGdnIds = order.gdnIds || [];
+    const newGdnIds = gdnId && !currentGdnIds.includes(gdnId) ? [...currentGdnIds, gdnId] : currentGdnIds;
+
+    return storageService.update('salesOrders', salesOrderId, {
+      lines: updatedLines,
+      status: newStatus,
+      gdnIds: newGdnIds,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  // Called when a GDN is voided/reversed
+  revertDeliveryProgress(salesOrderId, gdnId, reversedItems = []) {
+    const order = this.getSalesOrderById(salesOrderId);
+    if (!order) return null;
+
+    const reversedMap = new Map();
+    reversedItems.forEach(item => {
+      const q = Number(item.quantity !== undefined ? item.quantity : (Number(item.warehouseQty || 0) + Number(item.officeQty || 0))) || 0;
+      if (item.variantId) {
+        reversedMap.set(item.variantId, (reversedMap.get(item.variantId) || 0) + q);
+      }
+    });
+
+    let totalOrdered = 0;
+    let totalDelivered = 0;
+
+    const updatedLines = (order.lines || []).map(line => {
+      const subQty = reversedMap.get(line.variantId) || 0;
+      const newDel = Math.max(0, (Number(line.deliveredQty) || 0) - subQty);
+      const ord = Number(line.orderedQty) || 0;
+      totalOrdered += ord;
+      totalDelivered += newDel;
+      return {
+        ...line,
+        deliveredQty: newDel
+      };
+    });
+
+    let newStatus = 'Confirmed';
+    if (totalDelivered >= totalOrdered && totalOrdered > 0) {
+      newStatus = 'Fully Delivered';
+    } else if (totalDelivered > 0) {
+      newStatus = 'Partially Delivered';
+    }
+
+    const currentGdnIds = (order.gdnIds || []).filter(id => id !== gdnId);
+
+    return storageService.update('salesOrders', salesOrderId, {
+      lines: updatedLines,
+      status: newStatus,
+      gdnIds: currentGdnIds,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  // Future-proof invoicing: increments invoicedQty independently of delivery
+  recordInvoiceProgress(salesOrderId, invoiceId, invoicedItems = []) {
+    const order = this.getSalesOrderById(salesOrderId);
+    if (!order) return null;
+
+    const invoicedMap = new Map();
+    invoicedItems.forEach(item => {
+      const q = Number(item.quantity) || 0;
+      if (item.variantId) {
+        invoicedMap.set(item.variantId, (invoicedMap.get(item.variantId) || 0) + q);
+      }
+    });
+
+    const updatedLines = (order.lines || []).map(line => {
+      const addQty = invoicedMap.get(line.variantId) || 0;
+      const newInv = (Number(line.invoicedQty) || 0) + addQty;
+      return {
+        ...line,
+        invoicedQty: newInv
+      };
+    });
+
+    const currentInvIds = order.invoiceIds || [];
+    const newInvIds = invoiceId && !currentInvIds.includes(invoiceId) ? [...currentInvIds, invoiceId] : currentInvIds;
+
+    return storageService.update('salesOrders', salesOrderId, {
+      lines: updatedLines,
+      invoiceIds: newInvIds,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  cancelSalesOrder(orderId) {
+    const order = this.getSalesOrderById(orderId);
+    if (!order) throw new Error('Sales Order not found.');
+
+    const hasDelivered = (order.lines || []).some(l => (Number(l.deliveredQty) || 0) > 0);
+    if (hasDelivered) {
+      throw new Error('Cannot cancel a Sales Order that already has delivered goods. Void the linked GDNs first.');
+    }
+
+    return storageService.update('salesOrders', orderId, {
+      status: 'Cancelled',
+      updatedAt: new Date().toISOString()
     });
   }
 

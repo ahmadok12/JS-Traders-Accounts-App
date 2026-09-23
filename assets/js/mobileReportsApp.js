@@ -1156,7 +1156,8 @@ class MobileReportsApp {
   // --- 7. EXECUTIVE: IMPORT SHIPMENTS & CONTAINER TRACKING ---
 
   renderShipmentsTrackingView() {
-    const shipments = purchasingService.getImportShipments();
+    const rawShipments = purchasingService.getImportShipments() || [];
+    const shipments = rawShipments.filter(s => s && s.status !== 'Cancelled' && s.status !== 'Voided');
 
     this.contentEl.innerHTML = `
       <div class="space-y-4">
@@ -1173,7 +1174,7 @@ class MobileReportsApp {
           </div>
           <div class="flex items-center justify-between">
             <div>
-              <div class="text-2xl font-black tracking-tight">${shipments.filter(s => s.status !== 'Cancelled').length} In-Transit Cargo</div>
+              <div class="text-2xl font-black tracking-tight">${shipments.length} In-Transit Cargo</div>
               <div class="text-[11px] text-blue-200/80 font-medium mt-0.5">Maritime vessel tracking &amp; automated milestone updates</div>
             </div>
             <button id="refresh-tracktainer-btn" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center text-sm font-bold transition-all cursor-pointer" title="Sync with Tracktainer API">
@@ -1188,7 +1189,7 @@ class MobileReportsApp {
             <div class="bg-white rounded-3xl p-8 text-center border border-slate-200 shadow-2xs space-y-2">
               <span class="text-3xl block">🚢</span>
               <h4 class="text-sm font-extrabold text-slate-800">No Active Ocean Shipments</h4>
-              <p class="text-xs text-slate-400">Register import containers in Main ERP to view automated tracking.</p>
+              <p class="text-xs text-slate-400">All registered shipments are either delivered or cancelled.</p>
             </div>
           ` : shipments.map(s => {
             const daysLeft = s.transitTime || 33;
@@ -1212,9 +1213,9 @@ class MobileReportsApp {
                     </div>
                   </div>
                   <div class="text-right">
-                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${s.status === 'Cancelled' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
-                      <span class="w-1.5 h-1.5 rounded-full ${s.status === 'Cancelled' ? 'bg-rose-500' : 'bg-emerald-500'} animate-pulse"></span>
-                      <span>${s.status === 'Cancelled' ? 'Cancelled' : '● IN TRANSIT'}</span>
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${s.status === 'Cancelled' || s.status === 'Voided' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
+                      <span class="w-1.5 h-1.5 rounded-full ${s.status === 'Cancelled' || s.status === 'Voided' ? 'bg-rose-500' : 'bg-emerald-500'} animate-pulse"></span>
+                      <span>${s.status === 'Cancelled' || s.status === 'Voided' ? 'Cancelled' : '● IN TRANSIT'}</span>
                     </span>
                   </div>
                 </div>
@@ -1285,7 +1286,13 @@ class MobileReportsApp {
           if (res.ok) {
             const data = await res.json();
             if (data.shipments) {
-              data.shipments.forEach(s => storageService.update('importShipments', s.id, s));
+              data.shipments.forEach(s => {
+                const current = storageService.getById('importShipments', s.id);
+                if (current && (current.status === 'Cancelled' || current.status === 'Voided')) {
+                  return;
+                }
+                storageService.update('importShipments', s.id, s);
+              });
             }
           }
         } catch (err) {

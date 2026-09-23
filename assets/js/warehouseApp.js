@@ -22,6 +22,8 @@ import { renderAssemblyView, bindAssemblyEvents } from '../../modules/inventory/
 
 import { renderGatepassView, bindGatepassEvents } from '../../modules/warehouse/gatepassView.js';
 import { renderDeliveryView, bindDeliveryEvents } from '../../modules/warehouse/deliveryView.js';
+import { renderInwardOrdersView, bindInwardOrdersEvents } from '../../modules/warehouse/inwardOrdersView.js';
+import { renderSalesOrdersView, bindSalesOrdersEvents } from '../../modules/sales/salesOrdersView.js';
 import { renderWarehousesView, bindWarehousesEvents } from '../../modules/warehouse/warehousesView.js';
 import { renderLocationsView, bindLocationsEvents } from '../../modules/warehouse/locationsView.js';
 import { renderStockByWarehouseView, bindStockByWarehouseEvents } from '../../modules/warehouse/stockByWarehouseView.js';
@@ -103,6 +105,18 @@ class WarehouseAppController {
       let breadcrumbs = ['Warehouse Portal'];
 
     switch (this.currentRoute) {
+      case 'sales-orders':
+        html = renderSalesOrdersView();
+        bindFn = bindSalesOrdersEvents;
+        breadcrumbs = ['Operations', 'Sales Orders (Outgoing Demand)'];
+        break;
+
+      case 'inward-orders':
+        html = renderInwardOrdersView();
+        bindFn = bindInwardOrdersEvents;
+        breadcrumbs = ['Operations', 'Stock Inward Orders (Incoming Demand)'];
+        break;
+
       case 'warehouse-gatepasses':
         html = renderGatepassView();
         bindFn = bindGatepassEvents;

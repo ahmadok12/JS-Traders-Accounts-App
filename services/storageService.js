@@ -979,38 +979,137 @@ const SEED_DATABASE = {
     { id: 'deal-2', farmId: 'farm-2', code: 'DEAL-2025-02', name: 'Cooling Pad & Air Cooler Overhaul Phase 1', assignedSalesperson: 'Taimoor Shah', budget: 1650000, status: 'Active' }
   ],
 
-  // Sales Orders
+  // Sales Orders (Customer complete orders / requirements - No physical stock deduction)
   salesOrders: [
     {
       id: 'so-1',
       orderNumber: 'SO-00001',
       customerPartyId: 'pty-1',
+      customerName: 'Ryan Korsgaard — Ergo Systems Ltd.',
       farmId: 'farm-1',
       dealId: 'deal-1',
       assignedSalespersonId: 'user-sales',
       date: '2025-09-15',
       currency: 'PKR',
-      status: 'Confirmed', // Draft, Confirmed, Partially Delivered, Delivered, Cancelled
+      status: 'Partially Delivered', // Draft, Confirmed, Partially Delivered, Fully Delivered, Cancelled
       subtotal: 145000,
       tax: 0,
       discount: 5000,
       total: 140000,
       notes: 'Delivery requested in 2 batches for Bhai Pheru site',
+      gdnIds: ['gp-1'],
       lines: [
         {
           id: 'sol-1',
           variantId: 'var-1',
           orderedQty: 100,
-          deliveredQty: 40, // 40 delivered, 60 remaining!
+          deliveredQty: 50,
+          invoicedQty: 0,
           unit: 'PCS',
           unitPrice: 1450,
-          lineTotal: 145000
+          lineTotal: 145000,
+          notes: 'Feed Pan 16" - China'
+        }
+      ]
+    },
+    {
+      id: 'so-2',
+      orderNumber: 'SO-00002',
+      customerPartyId: 'pty-2',
+      customerName: 'Madelyn Lubin — Sunset Creative Corp',
+      farmId: 'farm-2',
+      dealId: null,
+      assignedSalespersonId: 'user-sales',
+      date: '2025-09-22',
+      currency: 'PKR',
+      status: 'Confirmed', // 0 delivered
+      subtotal: 75000,
+      tax: 0,
+      discount: 0,
+      total: 75000,
+      notes: 'Full order to be dispatched upon confirmation',
+      gdnIds: [],
+      lines: [
+        {
+          id: 'sol-2',
+          variantId: 'var-fan-assembled',
+          orderedQty: 20,
+          deliveredQty: 0,
+          invoicedQty: 0,
+          unit: 'PCS',
+          unitPrice: 3750,
+          lineTotal: 75000,
+          notes: 'Assembled Cone Fan 50"'
         }
       ]
     }
   ],
 
-  // Gatepasses (Warehouse operational logistics document)
+  // Stock Inward Orders (Generic Expected Inbound - No physical stock addition)
+  stockInwardOrders: [
+    {
+      id: 'sio-1',
+      orderNumber: 'SIO-00001',
+      partyName: 'Shanghai Poultry Equipment Co.',
+      referenceNumber: 'BL-984210 / Container MSCU-8491024',
+      date: '2025-09-18',
+      expectedArrivalDate: '2025-09-22',
+      targetWarehouseId: 'wh-1',
+      status: 'Partially Received', // Draft, Confirmed, Partially Received, Fully Received, Cancelled
+      source_type: 'PURCHASE',
+      source_id: 'imp-1',
+      grnIds: ['gp-in-1'],
+      notes: 'Incoming container shipment of feed pans and feeding line components',
+      lines: [
+        {
+          id: 'siol-1',
+          variantId: 'var-1',
+          expectedQty: 500,
+          receivedQty: 300,
+          unit: 'PCS',
+          notes: 'Feed Pan 16" - China'
+        },
+        {
+          id: 'siol-2',
+          variantId: 'var-3',
+          expectedQty: 2000,
+          receivedQty: 2000,
+          unit: 'PCS',
+          notes: 'Drip Cup 360'
+        }
+      ],
+      createdBy: 'user-wh-mgr',
+      createdAt: '2025-09-18T09:00:00Z'
+    },
+    {
+      id: 'sio-2',
+      orderNumber: 'SIO-00002',
+      partyName: 'Lahore Electric Motors Ltd.',
+      referenceNumber: 'DC-4421',
+      date: '2025-09-22',
+      expectedArrivalDate: '2025-09-24',
+      targetWarehouseId: 'wh-1',
+      status: 'Confirmed',
+      source_type: 'PURCHASE',
+      source_id: null,
+      grnIds: [],
+      notes: 'Batch of 1.5 kW cooler motors',
+      lines: [
+        {
+          id: 'siol-3',
+          variantId: 'var-motor-cooler',
+          expectedQty: 50,
+          receivedQty: 0,
+          unit: 'PCS',
+          notes: 'Air Cooler Motor 1.5 kW'
+        }
+      ],
+      createdBy: 'user-wh-mgr',
+      createdAt: '2025-09-22T10:30:00Z'
+    }
+  ],
+
+  // Gatepasses (Warehouse operational logistics documents: GDN = Outward, GRN = Inward)
   gatepasses: [
     {
       id: 'gp-1',
@@ -1019,6 +1118,7 @@ const SEED_DATABASE = {
       salesOrderId: 'so-1',
       warehouseId: 'wh-1',
       customerPartyId: 'pty-1',
+      customerName: 'Ryan Korsgaard — Ergo Systems Ltd.',
       farmId: 'farm-1',
       assignedSalespersonId: 'user-sales',
       assignedStaffIds: ['user-wh-staff', 'user-office-staff'],
@@ -1026,12 +1126,38 @@ const SEED_DATABASE = {
       vehicleNumber: 'LES-9412 Hino Truck',
       driverName: 'Muhammad Rasheed',
       driverPhone: '+92 345 6789012',
-      status: 'Draft - Staff Assigned',
-      notes: 'Urgent allocation for Bhai Pheru site. Picked across Warehouse and Office.',
+      status: 'Approved - Ready to Deliver',
+      notes: 'Partial dispatch of 50 pcs for Bhai Pheru site.',
       staffProofs: [],
       lines: [
         { variantId: 'var-1', warehouseQty: 30, officeQty: 20, quantity: 50, unit: 'PCS', negotiatedRate: 1400 }
       ]
+    },
+    {
+      id: 'gp-in-1',
+      gatepassNumber: 'GRN-00001',
+      gatepassType: 'inward',
+      inwardOrderId: 'sio-1',
+      partyName: 'Shanghai Poultry Equipment Co.',
+      targetWarehouseId: 'wh-1',
+      assignedStaffIds: ['user-wh-alitoor', 'user-wh-zain'],
+      date: '2025-09-20',
+      vehicleNumber: 'LES-9412 Container Trailer',
+      driverName: 'Muhammad Rasheed',
+      driverPhone: '+92 345 6789012',
+      transporterName: 'Al-Madina Goods Transport',
+      biltyNumber: 'BL-984210',
+      status: 'Verified & Stock In',
+      notes: 'First batch of 300 feed pans and 2000 drip cups unloaded in good condition.',
+      staffProofs: [],
+      lines: [
+        { variantId: 'var-1', quantity: 300, warehouseQty: 300, officeQty: 0, unit: 'PCS', conditionNotes: 'Intact, seal verified' },
+        { variantId: 'var-3', quantity: 2000, warehouseQty: 2000, officeQty: 0, unit: 'PCS', conditionNotes: 'Good condition' }
+      ],
+      createdBy: 'user-wh-mgr',
+      createdAt: '2025-09-20T14:00:00Z',
+      verifiedAt: '2025-09-20T16:30:00Z',
+      verifiedByUserId: 'user-wh-mgr'
     },
     {
       id: 'gp-2',
@@ -1726,6 +1852,11 @@ class StorageService {
           this.db.assemblyPayments = [];
         }
 
+        // Ensure stockInwardOrders collection exists
+        if (!this.db.stockInwardOrders || !this.db.stockInwardOrders.length) {
+          this.db.stockInwardOrders = JSON.parse(JSON.stringify(SEED_DATABASE.stockInwardOrders));
+        }
+
         // Ensure Labor Parties exist in parties
         if (!this.db.parties) this.db.parties = [];
         SEED_DATABASE.parties.forEach(sp => {
@@ -1808,7 +1939,7 @@ class StorageService {
 
     // Smart-merge core operational collections
     const collections = [
-      'gatepasses', 'staffNotifications', 'deliveries', 'salesOrders',
+      'gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders',
       'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions',
       'users', 'assemblies', 'disassemblies', 'assemblyRecipes', 'disassemblyTemplates',
       'assemblyPayables', 'assemblyPayments', 'bundleDefinitions'

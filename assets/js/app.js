@@ -30,6 +30,7 @@ import { renderWarehousesView, bindWarehousesEvents } from '../../modules/wareho
 import { renderLocationsView, bindLocationsEvents } from '../../modules/warehouse/locationsView.js';
 import { renderStockByWarehouseView, bindStockByWarehouseEvents } from '../../modules/warehouse/stockByWarehouseView.js';
 import { renderStaffManagementView, bindStaffManagementEvents } from '../../modules/warehouse/staffManagementView.js';
+import { renderInwardOrdersView, bindInwardOrdersEvents } from '../../modules/warehouse/inwardOrdersView.js';
 
 import { renderCustomersView, bindCustomersEvents } from '../../modules/sales/customersView.js';
 import { renderSalesOrdersView, bindSalesOrdersEvents } from '../../modules/sales/salesOrdersView.js';
@@ -225,6 +226,11 @@ class AppController {
         html = renderStaffManagementView();
         bindFn = bindStaffManagementEvents;
         breadcrumbs = ['Warehouses', 'Staff & Mobile Access'];
+        break;
+      case 'inward-orders':
+        html = renderInwardOrdersView();
+        bindFn = bindInwardOrdersEvents;
+        breadcrumbs = ['Operations', 'Stock Inward Orders'];
         break;
 
       // Sales

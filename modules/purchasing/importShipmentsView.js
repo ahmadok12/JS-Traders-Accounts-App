@@ -568,7 +568,7 @@ export function openShipmentDetailModal(shipment, refreshCallback) {
             confirmLabel: 'Yes, Void Shipment',
             isDestructive: true,
             onConfirm: () => {
-              storageService.update('importShipments', shipment.id, { status: 'Cancelled' });
+              purchasingService.cancelImportShipment(shipment.id);
               toast.show(`Import Shipment ${shipment.shipmentNumber} cancelled.`, 'success');
               closeModal();
               if (refreshCallback) refreshCallback();

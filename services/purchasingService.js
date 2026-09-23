@@ -69,6 +69,13 @@ class PurchasingService {
       method: allocationMethod
     };
   }
+
+  cancelImportShipment(shipmentId) {
+    return storageService.update('importShipments', shipmentId, {
+      status: 'Cancelled',
+      cancelledAt: new Date().toISOString()
+    });
+  }
 }
 
 export const purchasingService = new PurchasingService();

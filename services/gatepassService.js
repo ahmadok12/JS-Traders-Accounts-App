@@ -12,6 +12,8 @@ import { storageService } from './storageService.js';
 import { productService } from './productService.js';
 import { inventoryService } from './inventoryService.js';
 import { cutToLengthService } from './cutToLengthService.js';
+import { salesService } from './salesService.js';
+import { inwardOrderService } from './inwardOrderService.js';
 
 class GatepassService {
   getGatepasses() {
@@ -22,6 +24,24 @@ class GatepassService {
       if (numB !== numA) return numB - numA;
       return new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0);
     });
+  }
+
+  getOutwardGatepasses() {
+    return this.getGatepasses().filter(gp => gp.gatepassType !== 'inward');
+  }
+
+  getInwardGatepasses() {
+    return this.getGatepasses().filter(gp => gp.gatepassType === 'inward');
+  }
+
+  getGDNsBySalesOrder(salesOrderId) {
+    if (!salesOrderId) return [];
+    return this.getOutwardGatepasses().filter(gp => gp.salesOrderId === salesOrderId);
+  }
+
+  getGRNsByInwardOrder(inwardOrderId) {
+    if (!inwardOrderId) return [];
+    return this.getInwardGatepasses().filter(gp => gp.inwardOrderId === inwardOrderId);
   }
 
   getGatepassById(id) {
@@ -105,9 +125,109 @@ class GatepassService {
     });
   }
 
+  // Create Outward GDN from Sales Order (Warehouse dispatch document)
+  createGDNFromSalesOrder(salesOrderId, {
+    warehouseId = 'wh-1',
+    assignedStaffIds = [],
+    vehicleNumber = '',
+    driverName = '',
+    driverPhone = '',
+    lines = null,
+    notes = '',
+    userId = 'user-wh-mgr'
+  } = {}) {
+    const so = salesService.getSalesOrderById(salesOrderId);
+    if (!so) throw new Error(`Sales Order "${salesOrderId}" not found.`);
+
+    let gdnLines = [];
+    if (lines && lines.length > 0) {
+      gdnLines = lines;
+    } else {
+      const remainingLines = salesService.getRemainingDeliveryLines(salesOrderId);
+      gdnLines = remainingLines.map(rl => ({
+        variantId: rl.variantId,
+        warehouseQty: warehouseId === 'wh-1' ? rl.remainingDeliveryQty : 0,
+        officeQty: warehouseId === 'wh-2' ? rl.remainingDeliveryQty : 0,
+        quantity: rl.remainingDeliveryQty,
+        unit: rl.unit || 'PCS',
+        negotiatedRate: rl.unitPrice || 0,
+        notes: rl.notes || ''
+      }));
+    }
+
+    if (gdnLines.length === 0) {
+      throw new Error(`Sales Order "${so.orderNumber}" has no remaining undelivered quantities.`);
+    }
+
+    return this.createGatepass({
+      gatepassType: 'outward',
+      salesOrderId: so.id,
+      warehouseId,
+      customerPartyId: so.customerPartyId || null,
+      customerName: so.customerName || null,
+      farmId: so.farmId || null,
+      assignedSalespersonId: so.assignedSalespersonId || null,
+      assignedStaffIds,
+      vehicleNumber,
+      driverName,
+      driverPhone,
+      lines: gdnLines,
+      notes: notes || `GDN created against Sales Order ${so.orderNumber}. ${so.notes || ''}`,
+      userId
+    });
+  }
+
+  // Create Inward GRN from Stock Inward Order (Warehouse receipt document)
+  createGRNFromInwardOrder(inwardOrderId, {
+    warehouseId = 'wh-1',
+    vehicleNumber = '',
+    driverName = '',
+    driverPhone = '',
+    lines = null,
+    notes = '',
+    userId = 'user-wh-mgr'
+  } = {}) {
+    const io = inwardOrderService.getInwardOrderById(inwardOrderId);
+    if (!io) throw new Error(`Stock Inward Order "${inwardOrderId}" not found.`);
+
+    let grnLines = [];
+    if (lines && lines.length > 0) {
+      grnLines = lines;
+    } else {
+      const remainingLines = inwardOrderService.getRemainingExpectedLines(inwardOrderId);
+      grnLines = remainingLines.map(rl => ({
+        variantId: rl.variantId,
+        warehouseQty: rl.remainingQty,
+        officeQty: 0,
+        quantity: rl.remainingQty,
+        unit: rl.unit || 'PCS',
+        notes: rl.notes || ''
+      }));
+    }
+
+    if (grnLines.length === 0) {
+      throw new Error(`Stock Inward Order "${io.orderNumber}" has no remaining quantities to receive.`);
+    }
+
+    return this.createGatepass({
+      gatepassType: 'inward',
+      inwardOrderId: io.id,
+      warehouseId: warehouseId || io.targetWarehouseId || 'wh-1',
+      customerName: io.partyName || null,
+      vehicleNumber,
+      driverName,
+      driverPhone,
+      lines: grnLines,
+      notes: notes || `GRN created against Stock Inward Order ${io.orderNumber}. ${io.notes || ''}`,
+      userId
+    });
+  }
+
   createGatepass({
     gatepassType = 'outward',
     salesOrderId = null,
+    inwardOrderId = null,
+    warehouseId = 'wh-1',
     deliveryId = null,
     customerPartyId = null,
     customerName = null,
@@ -187,12 +307,14 @@ class GatepassService {
       return isOffice ? totalOffQty > 0 : totalWhQty > 0;
     });
 
-    const status = validAssignedStaffIds.length > 0 ? 'Draft - Staff Assigned' : (assignedSalespersonId ? 'Rates Pending' : 'Draft');
+    const status = gatepassType === 'inward' ? 'Draft' : (validAssignedStaffIds.length > 0 ? 'Draft - Staff Assigned' : (assignedSalespersonId ? 'Rates Pending' : 'Draft'));
 
     const gp = storageService.insert('gatepasses', {
       gatepassNumber,
       gatepassType,
       salesOrderId,
+      inwardOrderId,
+      warehouseId,
       deliveryId,
       customerPartyId,
       customerName: customerName || null,
@@ -380,7 +502,52 @@ class GatepassService {
     const gp = this.getGatepassById(gatepassId);
     if (!gp) throw new Error('Gatepass not found.');
 
-    // Execute atomic outward stock movements for Warehouse & Office
+    if (gp.gatepassType === 'inward') {
+      // INWARD STOCK MOVEMENT: Physical stock increases
+      const targetWarehouse = gp.warehouseId || 'wh-1';
+      const inwardLines = [];
+      const variants = productService.getVariants();
+      const varMap = new Map(variants.map(v => [v.id, v]));
+
+      for (const line of (gp.lines || [])) {
+        const qty = Number(line.quantity !== undefined ? line.quantity : (Number(line.warehouseQty || 0) + Number(line.officeQty || 0))) || 0;
+        if (qty > 0) {
+          const v = varMap.get(line.variantId) || {};
+          inwardLines.push({
+            variantId: line.variantId,
+            quantity: Math.abs(qty),
+            unitRate: Number(line.negotiatedRate || v.costPrice || 0),
+            unit: line.unit || v.unit || 'PCS',
+            notes: `GRN Inward ${gp.gatepassNumber}`
+          });
+        }
+      }
+
+      if (inwardLines.length > 0) {
+        inventoryService.postStockMovement({
+          movementType: 'receipt',
+          referenceDocType: 'gatepass_inward',
+          referenceDocId: gp.id,
+          warehouseId: targetWarehouse,
+          lines: inwardLines,
+          notes: `Stock Inward verified for ${gp.gatepassNumber}`,
+          userId: approvedByUserId
+        });
+      }
+
+      // Record receipt progress against Stock Inward Order if linked
+      if (gp.inwardOrderId) {
+        inwardOrderService.recordReceiptProgress(gp.inwardOrderId, gp.id, gp.lines);
+      }
+
+      return storageService.update('gatepasses', gatepassId, {
+        status: 'Approved - Stock Inwarded',
+        approvedBy: approvedByUserId,
+        approvedAt: new Date().toISOString()
+      });
+    }
+
+    // OUTWARD DISPATCH: Execute atomic outward stock movements for Warehouse & Office
     const warehouseLines = [];
     const officeLines = [];
 
@@ -481,6 +648,11 @@ class GatepassService {
       });
     }
 
+    // Record delivery progress against Sales Order if linked
+    if (gp.salesOrderId) {
+      salesService.recordDeliveryProgress(gp.salesOrderId, gp.id, gp.lines);
+    }
+
     return storageService.update('gatepasses', gatepassId, {
       status: 'Approved - Ready to Deliver',
       approvedBy: approvedByUserId,
@@ -575,11 +747,102 @@ class GatepassService {
     const gp = this.getGatepassById(gatepassId);
     if (!gp) throw new Error('Gatepass not found.');
 
-    // Rollback any cut-to-length allocations made for this gatepass
-    try {
-      cutToLengthService.rollbackAllocation('gatepass', gp.id, voidedByUserId);
-    } catch (e) {
-      console.warn('Cut to length rollback error:', e);
+    const wasApproved = gp.status && gp.status.startsWith('Approved');
+
+    if (gp.gatepassType === 'inward') {
+      if (wasApproved) {
+        // Reverse inward stock: deduct physical stock
+        const targetWarehouse = gp.warehouseId || 'wh-1';
+        const reversalLines = (gp.lines || []).map(line => {
+          const qty = Number(line.quantity !== undefined ? line.quantity : (Number(line.warehouseQty || 0) + Number(line.officeQty || 0))) || 0;
+          return {
+            variantId: line.variantId,
+            quantity: -Math.abs(qty),
+            unitRate: Number(line.negotiatedRate || line.costPrice || 0),
+            unit: line.unit || 'PCS',
+            notes: `Reversal of GRN Inward ${gp.gatepassNumber}`
+          };
+        }).filter(l => l.quantity !== 0);
+
+        if (reversalLines.length > 0) {
+          inventoryService.postStockMovement({
+            movementType: 'cancellation_deduction',
+            referenceDocType: 'gatepass_inward_void',
+            referenceDocId: gp.id,
+            warehouseId: targetWarehouse,
+            lines: reversalLines,
+            notes: `Stock reversed on voiding GRN ${gp.gatepassNumber}`,
+            userId: voidedByUserId
+          });
+        }
+
+        if (gp.inwardOrderId) {
+          inwardOrderService.revertReceiptProgress(gp.inwardOrderId, gp.id, gp.lines);
+        }
+      }
+    } else {
+      // Outward gatepass voiding
+      if (wasApproved) {
+        // Restore outward stock to Warehouse & Office
+        const warehouseLines = [];
+        const officeLines = [];
+        (gp.lines || []).forEach(line => {
+          const wQty = Number(line.warehouseQty) || 0;
+          const oQty = Number(line.officeQty) || 0;
+          if (wQty > 0) {
+            warehouseLines.push({
+              variantId: line.variantId,
+              quantity: Math.abs(wQty),
+              unitRate: line.negotiatedRate || 0,
+              unit: line.unit,
+              notes: `Stock restored on voiding Outward GDN ${gp.gatepassNumber} (Warehouse)`
+            });
+          }
+          if (oQty > 0) {
+            officeLines.push({
+              variantId: line.variantId,
+              quantity: Math.abs(oQty),
+              unitRate: line.negotiatedRate || 0,
+              unit: line.unit,
+              notes: `Stock restored on voiding Outward GDN ${gp.gatepassNumber} (Office)`
+            });
+          }
+        });
+
+        if (warehouseLines.length > 0) {
+          inventoryService.postStockMovement({
+            movementType: 'cancellation_return',
+            referenceDocType: 'gatepass_outward_void',
+            referenceDocId: gp.id,
+            warehouseId: 'wh-1',
+            lines: warehouseLines,
+            notes: `Stock restored on voiding ${gp.gatepassNumber}`,
+            userId: voidedByUserId
+          });
+        }
+        if (officeLines.length > 0) {
+          inventoryService.postStockMovement({
+            movementType: 'cancellation_return',
+            referenceDocType: 'gatepass_outward_void',
+            referenceDocId: gp.id,
+            warehouseId: 'wh-2',
+            lines: officeLines,
+            notes: `Stock restored on voiding ${gp.gatepassNumber}`,
+            userId: voidedByUserId
+          });
+        }
+
+        if (gp.salesOrderId) {
+          salesService.revertDeliveryProgress(gp.salesOrderId, gp.id, gp.lines);
+        }
+      }
+
+      // Rollback any cut-to-length allocations made for this gatepass
+      try {
+        cutToLengthService.rollbackAllocation('gatepass', gp.id, voidedByUserId);
+      } catch (e) {
+        console.warn('Cut to length rollback error:', e);
+      }
     }
 
     const updated = storageService.update('gatepasses', gatepassId, {
