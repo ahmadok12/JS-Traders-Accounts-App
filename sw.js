@@ -6,7 +6,7 @@
  * 3. Offline Caching of Mobile App Shell
  */
 
-const CACHE_NAME = 'js-staff-cache-v1';
+const CACHE_NAME = 'js-staff-cache-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/mobile.html',
