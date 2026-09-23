@@ -66,7 +66,7 @@ export function renderInvoicesView() {
   ];
 
   const actions = [
-    { label: 'Print / Preview', variant: 'primary', onClick: (row) => openInvoicePrintModal(row) }
+    { label: 'View', variant: 'secondary', onClick: (row) => openInvoicePrintModal(row) }
   ];
 
   const tableHtml = renderTable({
@@ -78,7 +78,7 @@ export function renderInvoicesView() {
 
   return `
     <div id="invoices-view-container" class="space-y-5 animate-in fade-in duration-150">
-      <div class="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl flex items-center justify-between text-xs text-blue-900">
+      <div class="p-3.5 bg-blue-50/70 border border-blue-100 rounded-2xl flex items-center justify-between text-xs text-blue-900 shadow-2xs">
         <div class="flex items-center gap-2">
           <span>🧾</span>
           <span><strong>ERP Accounting Principle:</strong> Confirming a Sales Invoice affects accounts receivable, but <em>never</em> modifies warehouse stock balances.</span>
@@ -101,16 +101,17 @@ export function bindInvoicesEvents(container, refreshCallback) {
 
   const invoices = salesService.getSalesInvoices();
   const actions = [
-    { label: 'Print / Preview', onClick: (row) => openInvoicePrintModal(row) }
+    { label: 'View', variant: 'secondary', onClick: (row) => openInvoicePrintModal(row, refreshCallback) }
   ];
   bindTableActions(container, actions, invoices);
 }
 
-function openInvoicePrintModal(invoice) {
+function openInvoicePrintModal(invoice, refreshCallback) {
   const parties = salesService.getParties(true);
   const customer = parties.find(p => p.id === invoice.customerPartyId) || {};
   const variants = productService.getVariants();
   const varMap = new Map(variants.map(v => [v.id, v]));
+  const isVoided = invoice.status === 'Voided' || invoice.status === 'Cancelled';
 
   const lines = (invoice.lines || []).map(l => {
     const v = varMap.get(l.variantId) || {};
@@ -126,20 +127,70 @@ function openInvoicePrintModal(invoice) {
 
   const printableHtml = invoiceTemplateService.renderPrintableInvoice(invoice, customer, lines);
 
+  const footerHtml = `
+    <div class="flex items-center space-x-2 text-xs text-slate-400">
+      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      <span>🛡️ SSL 256-bit encrypted ERP transaction</span>
+    </div>
+    <div class="flex flex-col sm:flex-row items-center justify-between w-full sm:w-auto gap-3">
+      <div>
+        ${!isVoided ? `
+          <button id="inv-void-btn" type="button" class="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+            <span>Void / Cancel Invoice</span>
+          </button>
+        ` : `
+          <span class="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5">
+            Invoice Voided
+          </span>
+        `}
+      </div>
+      <div class="flex items-center space-x-3">
+        <button id="inv-close-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
+          Close
+        </button>
+        <button onclick="window.print()" type="button" class="inline-flex items-center space-x-2 px-4 py-2 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all cursor-pointer">
+          <span>🖨 Print / Save as PDF</span>
+        </button>
+      </div>
+    </div>
+  `;
+
   openModal({
-    title: `Printable Invoice: ${invoice.invoiceNumber}`,
-    subtitle: 'Dynamic live template output',
+    title: `Sales Invoice: ${invoice.invoiceNumber}`,
+    subtitle: 'Dynamic live template output and financial receivable documentation',
+    badge: invoice.invoiceNumber,
     contentHtml: `
       <div class="space-y-4">
-        <div class="flex justify-end gap-2 pb-2 border-b border-slate-100">
-          <button onclick="window.print()" class="px-3 py-1.5 bg-[#138FCB] text-white rounded-lg text-xs font-bold shadow-xs hover:bg-[#0E78AC] cursor-pointer">
-            🖨 Print / Save as PDF
-          </button>
-        </div>
         ${printableHtml}
       </div>
     `,
-    size: 'max-w-4xl'
+    footerHtml,
+    size: 'max-w-4xl',
+    onOpen: (modalEl) => {
+      const closeBtn = modalEl.querySelector('#inv-close-btn');
+      if (closeBtn) closeBtn.onclick = () => closeModal();
+
+      const voidBtn = modalEl.querySelector('#inv-void-btn');
+      if (voidBtn) {
+        voidBtn.onclick = () => {
+          confirmAction({
+            title: `Void Invoice: ${invoice.invoiceNumber}`,
+            message: 'Are you sure you want to void this sales invoice? It will be marked cancelled and customer receivable balance adjusted.',
+            confirmLabel: 'Yes, Void Invoice',
+            isDestructive: true,
+            onConfirm: () => {
+              storageService.update('salesInvoices', invoice.id, { status: 'Voided' });
+              toast.show(`Invoice ${invoice.invoiceNumber} voided.`, 'success');
+              closeModal();
+              if (refreshCallback) refreshCallback();
+            }
+          });
+        };
+      }
+    }
   });
 }
 

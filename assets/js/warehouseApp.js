@@ -139,12 +139,6 @@ class WarehouseAppController {
         breadcrumbs = ['Inventory', 'Categories'];
         break;
 
-      case 'inventory-movements':
-        html = renderStockMovementsView();
-        bindFn = bindStockMovementsEvents;
-        breadcrumbs = ['Inventory', 'Stock Movements Log'];
-        break;
-
       case 'inventory-adjustments':
         html = renderStockAdjustmentsView();
         bindFn = bindStockAdjustmentsEvents;
