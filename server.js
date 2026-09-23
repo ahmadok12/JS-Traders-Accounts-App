@@ -87,7 +87,7 @@ function smartMergeDb(base, incoming) {
   const merged = { ...base, ...incoming };
 
   // Collections to smart-merge by item id
-  const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders', 'stockBalances', 'stockMovements', 'users', 'importShipments'];
+  const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders', 'stockAdjustments', 'stockBalances', 'stockMovements', 'users', 'importShipments'];
   for (const col of collections) {
     const arrBase = Array.isArray(base[col]) ? base[col] : [];
     const arrInc = Array.isArray(incoming[col]) ? incoming[col] : [];

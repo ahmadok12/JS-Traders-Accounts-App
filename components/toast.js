@@ -9,17 +9,22 @@ class ToastManager {
   }
 
   ensureContainer() {
+    if (typeof document === 'undefined') return;
     let el = document.getElementById('toast-container');
     if (!el) {
       el = document.createElement('div');
       el.id = 'toast-container';
       el.className = 'fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 pointer-events-none';
-      document.body.appendChild(el);
+      if (document.body) document.body.appendChild(el);
     }
     this.container = el;
   }
 
   show(message, type = 'info', duration = 3500) {
+    if (typeof document === 'undefined') {
+      console.log(`[Toast ${type}] ${message}`);
+      return;
+    }
     this.ensureContainer();
 
     const toast = document.createElement('div');

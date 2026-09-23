@@ -16,7 +16,7 @@ class AuthService {
   init() {
     const users = storageService.getCollection('users');
     // Default to Owner for full initial visibility, with one-click switcher
-    const savedUserId = localStorage.getItem('js_active_user_id') || 'user-owner';
+    const savedUserId = (typeof localStorage !== 'undefined' ? localStorage.getItem('js_active_user_id') : null) || 'user-owner';
     this.currentUser = users.find(u => u.id === savedUserId) || users[0] || {
       id: 'user-owner',
       fullName: 'Muhammad Jamil',
@@ -52,7 +52,9 @@ class AuthService {
     }
 
     this.currentUser = matchingUser;
-    localStorage.setItem('js_active_user_id', matchingUser.id);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('js_active_user_id', matchingUser.id);
+    }
     this.notifySessionChange();
   }
 

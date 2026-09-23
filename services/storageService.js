@@ -1939,7 +1939,7 @@ class StorageService {
 
     // Smart-merge core operational collections
     const collections = [
-      'gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders',
+      'gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders', 'stockAdjustments',
       'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions',
       'users', 'assemblies', 'disassemblies', 'assemblyRecipes', 'disassemblyTemplates',
       'assemblyPayables', 'assemblyPayments', 'bundleDefinitions'

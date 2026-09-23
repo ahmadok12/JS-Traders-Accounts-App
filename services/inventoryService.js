@@ -180,39 +180,88 @@ class InventoryService {
   }
 
   createStockAdjustment({ type, warehouseId, reason, lines, notes, userId }) {
+    if (!lines || !lines.length) {
+      throw new Error('At least one item line is required for stock adjustment.');
+    }
+
     const adjustments = this.getStockAdjustments();
     const adjustmentNumber = `ADJ-${String(adjustments.length + 1).padStart(5, '0')}`;
 
+    // Normalize lines with current stock, target stock, and signed delta quantity
+    const normalizedLines = lines.map(l => {
+      const currentStock = l.currentStock !== undefined ? Number(l.currentStock) : this.getBalance(warehouseId, l.variantId);
+      let qty = Number(l.quantity) || 0;
+      if (type === 'increase') qty = Math.abs(qty);
+      else if (type === 'decrease') qty = -Math.abs(qty);
+
+      const newStock = l.newStock !== undefined ? Number(l.newStock) : (currentStock + qty);
+
+      return {
+        variantId: l.variantId,
+        currentStock,
+        newStock,
+        quantity: qty,
+        unit: l.unit || 'PCS',
+        unitRate: Number(l.unitRate) || 0,
+        mode: l.mode || (qty >= 0 ? 'increase' : 'decrease'),
+        notes: l.notes || ''
+      };
+    }).filter(l => l.quantity !== 0);
+
+    if (normalizedLines.length === 0) {
+      throw new Error('No quantity adjustments specified (all lines have 0 change).');
+    }
+
+    // Determine overall adjustment classification
+    let calculatedType = type;
+    if (!calculatedType || calculatedType === 'auto' || calculatedType === 'reconciliation' || calculatedType === 'mixed') {
+      const allPositive = normalizedLines.every(l => l.quantity > 0);
+      const allNegative = normalizedLines.every(l => l.quantity < 0);
+      if (allPositive) calculatedType = 'increase';
+      else if (allNegative) calculatedType = 'decrease';
+      else calculatedType = 'reconciliation';
+    }
+
     const adj = storageService.insert('stockAdjustments', {
       adjustmentNumber,
-      type, // 'increase' or 'decrease'
+      type: calculatedType, // 'increase', 'decrease', or 'reconciliation'
       warehouseId,
       date: new Date().toISOString().split('T')[0],
-      reason,
+      reason: reason || 'Physical inventory reconciliation',
       status: 'Confirmed', // Confirmed directly triggers stock movement
       notes: notes || '',
-      lines,
-      createdBy: userId
+      lines: normalizedLines,
+      createdBy: userId || 'user-admin'
     });
 
     // Directly post atomic stock movement
-    const movementLines = lines.map(l => ({
+    const movementLines = normalizedLines.map(l => ({
       variantId: l.variantId,
-      quantity: type === 'increase' ? Math.abs(Number(l.quantity)) : -Math.abs(Number(l.quantity)),
+      quantity: l.quantity,
       unitRate: Number(l.unitRate) || 0,
       unit: l.unit || 'PCS',
-      notes: `Stock Adjustment ${adjustmentNumber} (${reason})`
+      notes: `Stock Adjustment ${adjustmentNumber} (${reason || 'Audit'})`
     }));
 
-    this.postStockMovement({
-      movementType: type === 'increase' ? 'adjustment_increase' : 'adjustment_decrease',
+    const hasAnyPositive = movementLines.some(l => l.quantity > 0);
+    const hasAnyNegative = movementLines.some(l => l.quantity < 0);
+    let movementType = 'adjustment';
+    if (hasAnyPositive && !hasAnyNegative) movementType = 'adjustment_increase';
+    if (!hasAnyPositive && hasAnyNegative) movementType = 'adjustment_decrease';
+
+    const movement = this.postStockMovement({
+      movementType,
       referenceDocType: 'stock_adjustment',
       referenceDocId: adj.id,
       warehouseId,
       lines: movementLines,
-      notes: `Stock adjustment: ${reason}`,
-      userId
+      notes: `Stock adjustment: ${reason || 'Physical Count Reconciliation'}`,
+      userId: userId || 'user-admin'
     });
+
+    if (movement && movement.id) {
+      storageService.update('stockAdjustments', adj.id, { movementId: movement.id });
+    }
 
     return adj;
   }
