@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ERP Accounts - Create New Invoice Modal</title>
+<!-- Tailwind CSS CDN with Forms & Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration for Custom Brand Colors -->
+<script data-purpose="tailwind-config">
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: '#138FCB',
+              50: '#E8F5FC',
+              100: '#D1ECF9',
+              200: '#A4D9F3',
+              500: '#138FCB',
+              600: '#0E78AC',
+              700: '#0B5E87',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<style data-purpose="custom-scrollbars">
+    /* Subtle custom scrollbar for modal internal overflow */
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #F8FAFC;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 font-sans text-slate-800 antialiased relative min-h-screen overflow-hidden select-none">
+<!-- BEGIN: Blurred ERP Background Dashboard -->
+<!-- Mimics Screen 1 in background for authentic modal depth -->
+<div class="w-full min-h-screen flex filter blur-[3px] opacity-70 pointer-events-none scale-[0.99] origin-top transition-all duration-300" data-purpose="erp-dashboard-background">
+<!-- Sidebar Preview -->
+<aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between p-5 min-h-screen">
+<div class="space-y-6">
+<div class="flex items-center space-x-3 pb-4 border-b border-slate-100">
+<div class="w-9 h-9 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center text-sm shadow">S</div>
+<div>
+<p class="text-[10px] tracking-wider uppercase font-semibold text-slate-400">Agency</p>
+<p class="text-xs font-bold text-slate-800">Spark Pixel Team</p>
+</div>
+</div>
+<div class="space-y-4 text-xs font-medium text-slate-400">
+<p class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Main Menu</p>
+<div class="space-y-2">
+<div class="px-3 py-2 rounded-lg bg-blue-50/70 text-brand font-semibold flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-brand"></span>
+<span>Overview</span>
+</div>
+<div class="px-3 py-2 text-slate-500">Customers</div>
+<div class="px-3 py-2 text-slate-500">Management</div>
+<div class="px-3 py-2 text-slate-500">Settings</div>
+</div>
+</div>
+</div>
+<div class="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center space-x-3">
+<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold">SP</div>
+<div>
+<p class="text-xs font-bold text-slate-800">Salung Prastyo</p>
+<p class="text-[10px] text-slate-400">Sales Operator</p>
+</div>
+</div>
+</aside>
+<!-- Main Content Area Preview -->
+<div class="flex-1 flex flex-col overflow-hidden bg-slate-50/60 p-8 space-y-6">
+<!-- Breadcrumb Bar -->
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2 text-xs font-medium text-slate-400">
+<span>Dashboard</span>
+<span>&gt;</span>
+<span class="text-slate-800 font-semibold">Overview</span>
+</div>
+<div class="flex items-center space-x-4">
+<div class="bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-400 w-52 flex justify-between items-center">
+<span>Search...</span>
+<span class="text-[10px] bg-slate-100 px-1 rounded">⌘K</span>
+</div>
+</div>
+</div>
+<!-- Welcome Banner -->
+<div class="flex justify-between items-center">
+<h1 class="text-2xl font-bold text-slate-900 tracking-tight">Welcome back, Salung</h1>
+<div class="flex items-center space-x-3">
+<div class="bg-white px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600">6 Nov 2025</div>
+<button class="bg-brand text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-sm">+ Add Transaction</button>
+</div>
+</div>
+<!-- Metric Cards Grid Preview -->
+<div class="grid grid-cols-4 gap-4">
+<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+<span class="text-[10px] font-semibold uppercase text-slate-400">Total Revenue</span>
+<p class="text-xl font-bold text-slate-900 mt-1">$20,320</p>
+</div>
+<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+<span class="text-[10px] font-semibold uppercase text-slate-400">Total Orders</span>
+<p class="text-xl font-bold text-slate-900 mt-1">10,320</p>
+</div>
+<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+<span class="text-[10px] font-semibold uppercase text-slate-400">New Customers</span>
+<p class="text-xl font-bold text-slate-900 mt-1">4,305</p>
+</div>
+<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+<span class="text-[10px] font-semibold uppercase text-slate-400">Conversion Rate</span>
+<p class="text-xl font-bold text-slate-900 mt-1">3.9%</p>
+</div>
+</div>
+<!-- Table placeholder preview -->
+<div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-3">
+<div class="h-4 bg-slate-100 rounded w-1/4"></div>
+<div class="h-10 bg-slate-50 rounded"></div>
+<div class="h-10 bg-slate-50 rounded"></div>
+</div>
+</div>
+</div>
+<!-- END: Blurred ERP Background Dashboard -->
+<!-- BEGIN: Modal Backdrop Overlay -->
+<div class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 lg:p-8 overflow-y-auto" data-purpose="modal-overlay">
+<!-- BEGIN: Create Invoice Modal Window -->
+<div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200" data-purpose="invoice-modal-card">
+<!-- BEGIN: Modal Header -->
+<header class="px-7 py-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-20">
+<div class="flex items-center space-x-3.5">
+<div class="w-10 h-10 rounded-xl bg-brand-50 text-brand flex items-center justify-center shadow-xs">
+<!-- File Invoice SVG Icon -->
+<svg class="w-5 h-5 text-brand" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div>
+<div class="flex items-center space-x-3">
+<h2 class="text-lg font-bold text-slate-900 tracking-tight">Create New Invoice</h2>
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-brand-50 text-brand border border-brand-200">
+                INV-2025-0842
+              </span>
+</div>
+<p class="text-xs text-slate-500 mt-0.5">Fill in the billing details and item breakdown to issue an invoice to your client</p>
+</div>
+</div>
+<!-- Action / Close Button -->
+<button aria-label="Close dialog" class="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</header>
+<!-- END: Modal Header -->
+<!-- BEGIN: Scrollable Modal Body Form -->
+<div class="p-7 overflow-y-auto custom-scroll space-y-6 flex-1 bg-slate-50/40">
+<!-- SECTION 1: Client & Invoice Configuration -->
+<section class="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs space-y-5" data-purpose="client-and-dates-form">
+<div class="flex items-center justify-between border-b border-slate-100 pb-3">
+<h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-2">
+<svg class="w-3.5 h-3.5 text-brand" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Client &amp; Billing Details</span>
+</h3>
+<span class="text-[11px] text-slate-400">All fields marked with <span class="text-red-500">*</span> are required</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+<!-- Client Selection -->
+<div class="md:col-span-6 space-y-1.5">
+<div class="flex justify-between items-center">
+<label class="text-xs font-semibold text-slate-700" for="client-select">Client / Customer <span class="text-red-500">*</span></label>
+<button class="text-[11px] font-semibold text-brand hover:text-brand-600 flex items-center space-x-1" type="button">
+<span>+ New Client</span>
+</button>
+</div>
+<div class="relative">
+<select class="w-full text-xs font-medium rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 py-2.5 pl-3 pr-8 text-slate-800 bg-white" id="client-select">
+<option selected="">Ryan Korsgaard — Ergo Systems Ltd.</option>
+<option>Madelyn Lubin — Sunset Creative Corp</option>
+<option>Abram Bergson — Eco Modern Furniture</option>
+<option>Phillip Mango — Green Leaf Studios</option>
+</select>
+</div>
+<p class="text-[11px] text-slate-400">Tax ID: US-9842109 • contact@ergosystems.io</p>
+</div>
+<!-- Currency Selection -->
+<div class="md:col-span-2 space-y-1.5">
+<label class="text-xs font-semibold text-slate-700" for="currency-select">Currency</label>
+<select class="w-full text-xs font-medium rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 py-2.5 text-slate-800 bg-white" id="currency-select">
+<option selected="">USD ($)</option>
+<option>EUR (€)</option>
+<option>GBP (£)</option>
+<option>CAD ($)</option>
+</select>
+</div>
+<!-- Invoice Issue Date -->
+<div class="md:col-span-2 space-y-1.5">
+<label class="text-xs font-semibold text-slate-700" for="invoice-date">Invoice Date</label>
+<div class="relative">
+<input class="w-full text-xs font-medium rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 py-2.5 pl-3 pr-8 text-slate-800 bg-white" id="invoice-date" type="text" value="06 Nov 2025"/>
+<svg class="w-3.5 h-3.5 text-slate-400 absolute right-3 top-3 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+</div>
+<!-- Payment Due Date Terms -->
+<div class="md:col-span-2 space-y-1.5">
+<label class="text-xs font-semibold text-slate-700" for="due-date">Due Terms</label>
+<div class="relative">
+<select class="w-full text-xs font-medium rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 py-2.5 text-slate-800 bg-white" id="due-date">
+<option selected="">Net 30 (06 Dec)</option>
+<option>Net 15 (21 Nov)</option>
+<option>Due on Receipt</option>
+<option>Net 60 (05 Jan)</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Billing Info Secondary Bar -->
+<div class="bg-slate-50/80 rounded-lg p-3 text-xs flex flex-wrap items-center justify-between gap-3 border border-slate-100 text-slate-600">
+<div class="flex items-center space-x-2">
+<span class="font-semibold text-slate-700">Billing Address:</span>
+<span class="text-slate-500">742 Evergreen Terrace, Suite 400, Austin, TX 78701</span>
+</div>
+<div class="flex items-center space-x-4 text-[11px]">
+<span class="inline-flex items-center text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
+                Verified Customer
+              </span>
+<a class="text-brand hover:underline font-medium" href="#">Edit Billing info</a>
+</div>
+</div>
+</section>
+<!-- SECTION 2: Line Items Table -->
+<section class="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="line-items-section">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Items &amp; Services</h3>
+<span class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-slate-100 text-slate-600">2 Items</span>
+</div>
+<button class="text-xs font-medium text-brand hover:text-brand-600 flex items-center space-x-1" type="button">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Import from Catalogue</span>
+</button>
+</div>
+<!-- Table Container -->
+<div class="overflow-x-auto border border-slate-200 rounded-lg">
+<table class="w-full text-left text-xs">
+<thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
+<tr>
+<th class="py-3 px-3 w-5/12 font-semibold" scope="col">Item &amp; Description</th>
+<th class="py-3 px-3 w-2/12 font-semibold" scope="col">Category</th>
+<th class="py-3 px-2 w-1/12 font-semibold text-center" scope="col">Qty</th>
+<th class="py-3 px-3 w-2/12 font-semibold text-right" scope="col">Unit Price</th>
+<th class="py-3 px-2 w-1/12 font-semibold text-center" scope="col">Tax</th>
+<th class="py-3 px-3 w-2/12 font-semibold text-right" scope="col">Amount</th>
+<th class="py-3 px-2 w-8 text-center font-semibold" scope="col"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 text-slate-700">
+<!-- Line Item Row 1 -->
+<tr class="hover:bg-slate-50/70 transition-colors group">
+<td class="p-3">
+<input class="w-full text-xs font-medium text-slate-800 rounded border-slate-200 focus:border-brand focus:ring-brand py-1 px-2 mb-1" type="text" value="Ergo Office Chair - Model Pro"/>
+<input class="w-full text-[11px] text-slate-400 placeholder-slate-300 rounded border-none bg-transparent p-0 focus:ring-0" placeholder="Add description (e.g. Ergonomic lumbar mesh, black)" type="text" value="Ergonomic lumbar support, adjustable 3D armrests, mesh frame"/>
+</td>
+<td class="p-3">
+<span class="inline-block px-2 py-1 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">Furniture</span>
+</td>
+<td class="p-3 text-center">
+<input class="w-14 text-center text-xs font-semibold rounded border-slate-200 focus:border-brand focus:ring-brand py-1 px-1" min="1" type="number" value="4"/>
+</td>
+<td class="p-3 text-right">
+<div class="relative inline-block w-24">
+<span class="absolute left-2 top-1 text-slate-400 text-xs">$</span>
+<input class="w-full text-right text-xs font-medium rounded border-slate-200 focus:border-brand focus:ring-brand py-1 pl-4 pr-1.5" type="text" value="350.00"/>
+</div>
+</td>
+<td class="p-3 text-center">
+<span class="text-xs text-slate-500 font-medium">10%</span>
+</td>
+<td class="p-3 text-right font-semibold text-slate-900">
+                    $1,540.00
+                  </td>
+<td class="p-3 text-center">
+<button aria-label="Delete line item" class="text-slate-300 hover:text-red-500 p-1 rounded transition-colors opacity-70 group-hover:opacity-100" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</td>
+</tr>
+<!-- Line Item Row 2 -->
+<tr class="hover:bg-slate-50/70 transition-colors group">
+<td class="p-3">
+<input class="w-full text-xs font-medium text-slate-800 rounded border-slate-200 focus:border-brand focus:ring-brand py-1 px-2 mb-1" type="text" value="Sunset Desk 02 - Executive Oak"/>
+<input class="w-full text-[11px] text-slate-400 placeholder-slate-300 rounded border-none bg-transparent p-0 focus:ring-0" placeholder="Add description..." type="text" value="Electric dual-motor standing desk with solid oak desktop 160x80cm"/>
+</td>
+<td class="p-3">
+<span class="inline-block px-2 py-1 rounded bg-slate-100 text-slate-600 text-[11px] font-medium">Workspace</span>
+</td>
+<td class="p-3 text-center">
+<input class="w-14 text-center text-xs font-semibold rounded border-slate-200 focus:border-brand focus:ring-brand py-1 px-1" min="1" type="number" value="2"/>
+</td>
+<td class="p-3 text-right">
+<div class="relative inline-block w-24">
+<span class="absolute left-2 top-1 text-slate-400 text-xs">$</span>
+<input class="w-full text-right text-xs font-medium rounded border-slate-200 focus:border-brand focus:ring-brand py-1 pl-4 pr-1.5" type="text" value="1,490.00"/>
+</div>
+</td>
+<td class="p-3 text-center">
+<span class="text-xs text-slate-500 font-medium">10%</span>
+</td>
+<td class="p-3 text-right font-semibold text-slate-900">
+                    $3,278.00
+                  </td>
+<td class="p-3 text-center">
+<button aria-label="Delete line item" class="text-slate-300 hover:text-red-500 p-1 rounded transition-colors opacity-70 group-hover:opacity-100" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Add Item Action Row -->
+<div class="flex items-center justify-between pt-1">
+<button class="inline-flex items-center space-x-1.5 px-3.5 py-2 border border-dashed border-brand-200 hover:border-brand bg-brand-50/50 hover:bg-brand-50 text-brand rounded-lg text-xs font-semibold transition-all" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>+ Add Line Item</span>
+</button>
+<span class="text-[11px] text-slate-400">All prices include automated tax computation</span>
+</div>
+</section>
+<!-- SECTION 3: Bottom Dual Columns: Notes & Payment Terms vs Summary Calculation -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+<!-- Notes & Terms -->
+<div class="lg:col-span-7 bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="terms-and-notes">
+<h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Notes &amp; Payment Instructions</h3>
+<div class="space-y-1.5">
+<label class="text-xs font-medium text-slate-700" for="customer-notes">Client Note / Memo</label>
+<textarea class="w-full text-xs rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 text-slate-700 p-2.5 resize-none" id="customer-notes" placeholder="Add custom message or warranty notes..." rows="3">Thank you for your business. Please remit payment via bank wire within 30 days of receipt. Deliveries are scheduled immediately following invoice confirmation.</textarea>
+</div>
+<div class="grid grid-cols-2 gap-3 pt-1">
+<div class="space-y-1.5">
+<label class="text-xs font-medium text-slate-700" for="payment-method">Preferred Method</label>
+<select class="w-full text-xs rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 py-2 text-slate-700 bg-white" id="payment-method">
+<option selected="">Bank Transfer (ACH / SEPA)</option>
+<option>Credit Card (Stripe Gateway)</option>
+<option>Letter of Credit</option>
+</select>
+</div>
+<div class="space-y-1.5">
+<label class="text-xs font-medium text-slate-700" for="po-number">Purchase Order (PO #)</label>
+<input class="w-full text-xs rounded-lg border-slate-300 focus:border-brand focus:ring focus:ring-brand-200 py-2 px-3 text-slate-700" id="po-number" placeholder="PO-2025-998" type="text" value="PO-77218"/>
+</div>
+</div>
+</div>
+<!-- Invoice Summary Breakdown Card -->
+<div class="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs space-y-3" data-purpose="totals-summary-card">
+<h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 pb-1 border-b border-slate-100">Summary</h3>
+<div class="space-y-2 text-xs">
+<div class="flex justify-between text-slate-600">
+<span>Subtotal (Net)</span>
+<span class="font-medium text-slate-900">$4,380.00</span>
+</div>
+<div class="flex justify-between items-center text-slate-600">
+<span class="flex items-center space-x-1">
+<span>Discount</span>
+<span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Promo</span>
+</span>
+<div class="flex items-center space-x-1">
+<span class="text-slate-400">-$</span>
+<input class="w-14 text-right text-xs py-0.5 px-1 border-b border-slate-200 focus:border-brand bg-transparent text-slate-700 focus:ring-0" type="text" value="0.00"/>
+</div>
+</div>
+<div class="flex justify-between text-slate-600">
+<span>Estimated Tax (10%)</span>
+<span class="font-medium text-slate-900">$438.00</span>
+</div>
+<div class="flex justify-between text-slate-600">
+<span>Shipping &amp; Freight</span>
+<span class="text-emerald-600 font-medium">Free</span>
+</div>
+</div>
+<!-- Grand Total Highlight Card -->
+<div class="mt-4 pt-3 border-t-2 border-slate-100 bg-brand-50/40 -mx-5 -mb-5 p-5 rounded-b-xl border-t border-brand-100 flex items-center justify-between">
+<div>
+<p class="text-[11px] font-bold uppercase tracking-wider text-brand-700">Total Due (USD)</p>
+<p class="text-[11px] text-slate-500">Includes all applicable duties</p>
+</div>
+<div class="text-right">
+<span class="text-2xl font-extrabold text-slate-900 tracking-tight">$4,818.00</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- END: Scrollable Modal Body Form -->
+<!-- BEGIN: Modal Footer / Sticky Action Bar -->
+<footer class="px-7 py-4 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 sticky bottom-0 z-20">
+<div class="flex items-center space-x-2 text-xs text-slate-400">
+<svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>SSL 256-bit encrypted ERP transaction</span>
+</div>
+<div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
+<button class="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-transparent" type="button">
+            Preview PDF
+          </button>
+<button class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors border border-slate-300" type="button">
+            Save as Draft
+          </button>
+<!-- Primary Send Button with Brand Color #138FCB -->
+<button class="inline-flex items-center space-x-2 px-5 py-2 text-xs font-bold text-white bg-brand hover:bg-brand-600 rounded-lg shadow-sm hover:shadow transition-all active:scale-[0.98]" type="button">
+<!-- Send Paper Plane Icon -->
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span>Send Invoice</span>
+</button>
+</div>
+</footer>
+<!-- END: Modal Footer / Sticky Action Bar -->
+</div>
+<!-- END: Create Invoice Modal Window -->
+</div>
+<!-- END: Modal Backdrop Overlay -->
+</body></html>

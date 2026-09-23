@@ -1,0 +1,454 @@
+/**
+ * JS Traders ERP - Gatepass Management Service
+ * Warehouse operational logistics document.
+ * Supports:
+ * 1. Dual-location inventory allocation (Warehouse vs Office)
+ * 2. Multi-staff assignment & notification dispatch
+ * 3. Mobile staff proof photo collection & compression tracking
+ * 4. Warehouse Manager inspection & approval workflow
+ */
+
+import { storageService } from './storageService.js';
+import { productService } from './productService.js';
+import { inventoryService } from './inventoryService.js';
+
+class GatepassService {
+  getGatepasses() {
+    const list = storageService.getCollection('gatepasses') || [];
+    return [...list].sort((a, b) => {
+      const numA = parseInt((a.gatepassNumber || '').replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt((b.gatepassNumber || '').replace(/\D/g, ''), 10) || 0;
+      if (numB !== numA) return numB - numA;
+      return new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0);
+    });
+  }
+
+  getGatepassById(id) {
+    return storageService.getById('gatepasses', id);
+  }
+
+  getGatepassesForStaff(staffId) {
+    const all = this.getGatepasses();
+    const users = storageService.getCollection('users') || [];
+    const staff = users.find(u => u.id === staffId);
+    const isOffice = staff && staff.staffType === 'office_staff';
+
+    return all.filter(gp => {
+      if (gp.status === 'Voided' || gp.status === 'Archived') return false;
+      if (!(gp.assignedStaffIds || []).includes(staffId)) return false;
+      // Staff only sees gatepass if their station has items to arrange
+      return (gp.lines || []).some(l => {
+        const qty = isOffice ? (Number(l.officeQty) || 0) : (Number(l.warehouseQty) || 0);
+        return qty > 0;
+      });
+    });
+  }
+
+  createGatepass({
+    gatepassType = 'outward',
+    salesOrderId = null,
+    deliveryId = null,
+    customerPartyId = null,
+    customerName = null,
+    farmId = null,
+    assignedSalespersonId = null,
+    assignedStaffIds = [],
+    vehicleNumber = '',
+    driverName = '',
+    driverPhone = '',
+    lines = [], // Array of { variantId, warehouseQty, officeQty, quantity, unit, negotiatedRate }
+    notes = '',
+    userId = 'user-wh-mgr'
+  }) {
+    const allExisting = storageService.getCollection('gatepasses') || [];
+    let maxNum = 0;
+    allExisting.forEach(gp => {
+      const match = (gp.gatepassNumber || '').match(/\d+/);
+      if (match) {
+        const val = parseInt(match[0], 10);
+        if (val > maxNum) maxNum = val;
+      }
+    });
+    const gatepassNumber = `GP-${String(maxNum + 1).padStart(5, '0')}`;
+
+    let totalWhQty = 0;
+    let totalOffQty = 0;
+
+    const formattedLines = lines.map(l => {
+      const wQty = Number(l.warehouseQty) || 0;
+      const oQty = Number(l.officeQty) || 0;
+      totalWhQty += wQty;
+      totalOffQty += oQty;
+      const total = (wQty + oQty) > 0 ? (wQty + oQty) : (Number(l.quantity) || 0);
+      return {
+        variantId: l.variantId,
+        warehouseQty: wQty,
+        officeQty: oQty,
+        quantity: total,
+        unit: l.unit || 'PCS',
+        negotiatedRate: Number(l.negotiatedRate) || null
+      };
+    });
+
+    const users = storageService.getCollection('users') || [];
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    // If inventory from warehouse or office is 0, don't assign that staff even if checked
+    const validAssignedStaffIds = (assignedStaffIds || []).filter(staffId => {
+      const staff = userMap.get(staffId);
+      if (!staff) return false;
+      const isOffice = staff.staffType === 'office_staff';
+      return isOffice ? totalOffQty > 0 : totalWhQty > 0;
+    });
+
+    const status = validAssignedStaffIds.length > 0 ? 'Draft - Staff Assigned' : (assignedSalespersonId ? 'Rates Pending' : 'Draft');
+
+    const gp = storageService.insert('gatepasses', {
+      gatepassNumber,
+      gatepassType,
+      salesOrderId,
+      deliveryId,
+      customerPartyId,
+      customerName: customerName || null,
+      farmId,
+      assignedSalespersonId,
+      assignedStaffIds: validAssignedStaffIds,
+      date: new Date().toISOString().split('T')[0],
+      vehicleNumber,
+      driverName,
+      driverPhone,
+      status,
+      lines: formattedLines,
+      staffProofs: [],
+      notes,
+      createdBy: userId,
+      createdAt: new Date().toISOString()
+    });
+
+    // Generate notifications for assigned staff with items to fetch
+    this._dispatchStaffNotifications(gp);
+
+    return gp;
+  }
+
+  assignStaff(gatepassId, staffIds = []) {
+    const gp = this.getGatepassById(gatepassId);
+    if (!gp) throw new Error('Gatepass not found.');
+
+    const users = storageService.getCollection('users') || [];
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    let totalWhQty = 0;
+    let totalOffQty = 0;
+    (gp.lines || []).forEach(l => {
+      totalWhQty += (Number(l.warehouseQty) || 0);
+      totalOffQty += (Number(l.officeQty) || 0);
+    });
+
+    // Only assign staff whose facility has quantity > 0
+    const validAssignedStaffIds = (staffIds || []).filter(id => {
+      const staff = userMap.get(id);
+      if (!staff) return false;
+      const isOffice = staff.staffType === 'office_staff';
+      return isOffice ? totalOffQty > 0 : totalWhQty > 0;
+    });
+
+    const updated = storageService.update('gatepasses', gatepassId, {
+      assignedStaffIds: validAssignedStaffIds,
+      status: validAssignedStaffIds.length > 0 ? 'Draft - Staff Assigned' : gp.status,
+      updatedAt: new Date().toISOString()
+    });
+
+    this._dispatchStaffNotifications(updated);
+    return updated;
+  }
+
+  _dispatchStaffNotifications(gp) {
+    if (!gp.assignedStaffIds || gp.assignedStaffIds.length === 0) return;
+
+    const users = storageService.getCollection('users') || [];
+    const userMap = new Map(users.map(u => [u.id, u]));
+    const variants = productService.getVariants();
+    const varMap = new Map(variants.map(v => [v.id, v]));
+    const notifiedStaffIds = [];
+
+    for (const staffId of gp.assignedStaffIds) {
+      const staff = userMap.get(staffId);
+      if (!staff) continue;
+
+      const isOfficeStaff = staff.staffType === 'office_staff';
+      const itemsToFetch = [];
+
+      for (const line of (gp.lines || [])) {
+        const v = varMap.get(line.variantId);
+        const name = v ? v.name : 'Equipment Item';
+        const qty = isOfficeStaff ? (Number(line.officeQty) || 0) : (Number(line.warehouseQty) || 0);
+        if (qty > 0) {
+          itemsToFetch.push(`${qty} ${line.unit || 'PCS'} ${name}`);
+        }
+      }
+
+      // If inventory from warehouse or office is 0, don't notify that staff even if checkbox was checked
+      if (itemsToFetch.length === 0) {
+        continue;
+      }
+
+      const locationName = isOfficeStaff ? 'Office' : 'Warehouse';
+      const summaryText = `Fetch from ${locationName}: ${itemsToFetch.join(', ')}`;
+
+      storageService.insert('staffNotifications', {
+        staffId,
+        gatepassId: gp.id,
+        gatepassNumber: gp.gatepassNumber,
+        title: `Stock Fetch: ${gp.gatepassNumber} (${locationName})`,
+        message: summaryText,
+        location: locationName,
+        isRead: false,
+        createdAt: new Date().toISOString()
+      });
+
+      notifiedStaffIds.push(staffId);
+    }
+
+    if (notifiedStaffIds.length === 0) return;
+
+    // Broadcast instant real-time alert to all open staff mobile apps (only for staff with items to fetch)
+    const alertPayload = {
+      type: 'STAFF_GATEPASS_ALERT',
+      gatepassId: gp.id,
+      gatepassNumber: gp.gatepassNumber,
+      assignedStaffIds: notifiedStaffIds,
+      timestamp: Date.now()
+    };
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const bc = new BroadcastChannel('js_traders_staff_alerts');
+        bc.postMessage(alertPayload);
+        bc.close();
+      } catch (e) {
+        console.warn('BroadcastChannel error:', e);
+      }
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('js_staff_realtime_alert', JSON.stringify(alertPayload));
+      } catch (e) {
+        console.warn('localStorage alert trigger error:', e);
+      }
+    }
+  }
+
+  // Staff submits proof photos from mobile app
+  submitStaffProof(gatepassId, staffId, photos = [], notes = '') {
+    const gp = this.getGatepassById(gatepassId);
+    if (!gp) throw new Error('Gatepass not found.');
+
+    const users = storageService.getCollection('users');
+    const staff = users.find(u => u.id === staffId) || { fullName: 'Warehouse Staff', staffType: 'warehouse_staff' };
+
+    const proofEntry = {
+      staffId,
+      staffName: staff.fullName,
+      staffType: staff.staffType || 'warehouse_staff',
+      photos, // Array of { id, dataUrl, sizeKb, timestamp, filename }
+      notes,
+      submittedAt: new Date().toISOString()
+    };
+
+    const existingProofs = (gp.staffProofs || []).filter(p => p.staffId !== staffId);
+    existingProofs.push(proofEntry);
+
+    // Determine new status: if all assigned staff submitted, status is 'Staff Submitted'
+    const assigned = gp.assignedStaffIds || [];
+    const submittedStaffIds = new Set(existingProofs.map(p => p.staffId));
+    const allSubmitted = assigned.length > 0 && assigned.every(id => submittedStaffIds.has(id));
+
+    const newStatus = allSubmitted ? 'Staff Submitted - Ready for Approval' : 'Draft - Partially Submitted';
+
+    const updated = storageService.update('gatepasses', gatepassId, {
+      staffProofs: existingProofs,
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    });
+
+    // Notify Warehouse Manager
+    storageService.insert('staffNotifications', {
+      staffId: 'user-wh-mgr',
+      gatepassId: gp.id,
+      gatepassNumber: gp.gatepassNumber,
+      title: `Staff Proof Submitted: ${gp.gatepassNumber}`,
+      message: `${staff.fullName} uploaded ${photos.length} photo(s) for ${gp.gatepassNumber}.`,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
+
+  // Warehouse Manager reviews photos and approves gatepass
+  approveGatepass(gatepassId, approvedByUserId = 'user-wh-mgr') {
+    const gp = this.getGatepassById(gatepassId);
+    if (!gp) throw new Error('Gatepass not found.');
+
+    // Execute atomic outward stock movements for Warehouse & Office
+    const warehouseLines = [];
+    const officeLines = [];
+
+    for (const line of gp.lines) {
+      if (line.warehouseQty > 0) {
+        warehouseLines.push({
+          variantId: line.variantId,
+          quantity: -Math.abs(line.warehouseQty), // negative for deduction
+          unitRate: line.negotiatedRate || 0,
+          unit: line.unit,
+          notes: `Gatepass Outward ${gp.gatepassNumber} (Warehouse)`
+        });
+      }
+      if (line.officeQty > 0) {
+        officeLines.push({
+          variantId: line.variantId,
+          quantity: -Math.abs(line.officeQty), // negative for deduction
+          unitRate: line.negotiatedRate || 0,
+          unit: line.unit,
+          notes: `Gatepass Outward ${gp.gatepassNumber} (Office)`
+        });
+      }
+    }
+
+    // Post to Warehouse (wh-1)
+    if (warehouseLines.length > 0) {
+      inventoryService.postStockMovement({
+        movementType: 'delivery',
+        referenceDocType: 'gatepass',
+        referenceDocId: gp.id,
+        warehouseId: 'wh-1',
+        lines: warehouseLines,
+        notes: `Outward dispatch approved for ${gp.gatepassNumber}`,
+        userId: approvedByUserId
+      });
+    }
+
+    // Post to Office (wh-2)
+    if (officeLines.length > 0) {
+      inventoryService.postStockMovement({
+        movementType: 'delivery',
+        referenceDocType: 'gatepass',
+        referenceDocId: gp.id,
+        warehouseId: 'wh-2',
+        lines: officeLines,
+        notes: `Office stock dispatch approved for ${gp.gatepassNumber}`,
+        userId: approvedByUserId
+      });
+    }
+
+    return storageService.update('gatepasses', gatepassId, {
+      status: 'Approved - Ready to Deliver',
+      approvedBy: approvedByUserId,
+      approvedAt: new Date().toISOString()
+    });
+  }
+
+  // Salesperson updates negotiated rates on gatepass
+  updateRates(gatepassId, lineRates, userId = 'user-sales') {
+    const gp = this.getGatepassById(gatepassId);
+    if (!gp) throw new Error('Gatepass not found.');
+
+    const updatedLines = gp.lines.map((line, idx) => ({
+      ...line,
+      negotiatedRate: lineRates[idx] !== undefined ? Number(lineRates[idx]) : line.negotiatedRate
+    }));
+
+    return storageService.update('gatepasses', gp.id, {
+      lines: updatedLines,
+      status: 'Ready for Invoice',
+      ratesEnteredBy: userId,
+      ratesEnteredAt: new Date().toISOString()
+    });
+  }
+
+  updateGatepass(gatepassId, updateData = {}) {
+    const gp = this.getGatepassById(gatepassId);
+    if (!gp) throw new Error('Gatepass not found.');
+
+    const users = storageService.getCollection('users') || [];
+    const userMap = new Map(users.map(u => [u.id, u]));
+
+    // Format and calculate totals for lines if provided
+    let formattedLines = gp.lines;
+    let totalWhQty = 0;
+    let totalOffQty = 0;
+
+    if (updateData.lines) {
+      formattedLines = updateData.lines.map(line => {
+        const whQty = Number(line.warehouseQty) || 0;
+        const offQty = Number(line.officeQty) || 0;
+        const totalQty = whQty + offQty;
+        totalWhQty += whQty;
+        totalOffQty += offQty;
+        return {
+          variantId: line.variantId,
+          warehouseQty: whQty,
+          officeQty: offQty,
+          quantity: totalQty,
+          unit: line.unit || 'PCS',
+          negotiatedRate: line.negotiatedRate || 0
+        };
+      });
+    } else {
+      (gp.lines || []).forEach(l => {
+        totalWhQty += (Number(l.warehouseQty) || 0);
+        totalOffQty += (Number(l.officeQty) || 0);
+      });
+    }
+
+    // Filter assigned staff based on quantities
+    let validAssignedStaffIds = gp.assignedStaffIds || [];
+    if (updateData.assignedStaffIds) {
+      validAssignedStaffIds = updateData.assignedStaffIds.filter(staffId => {
+        const staff = userMap.get(staffId);
+        if (!staff) return false;
+        const isOffice = staff.staffType === 'office_staff';
+        return isOffice ? totalOffQty > 0 : totalWhQty > 0;
+      });
+    }
+
+    const payload = {
+      ...updateData,
+      lines: formattedLines,
+      assignedStaffIds: validAssignedStaffIds,
+      updatedAt: new Date().toISOString()
+    };
+
+    const updated = storageService.update('gatepasses', gatepassId, payload);
+
+    // Re-dispatch notifications to assigned staff
+    this._dispatchStaffNotifications(updated);
+
+    return updated;
+  }
+
+  voidGatepass(gatepassId, voidedByUserId = 'user-wh-mgr') {
+    const gp = this.getGatepassById(gatepassId);
+    if (!gp) throw new Error('Gatepass not found.');
+
+    const updated = storageService.update('gatepasses', gatepassId, {
+      status: 'Voided',
+      voidedBy: voidedByUserId,
+      voidedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    return updated;
+  }
+
+  updateStatus(gatepassId, newStatus) {
+    return storageService.update('gatepasses', gatepassId, {
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    });
+  }
+}
+
+export const gatepassService = new GatepassService();

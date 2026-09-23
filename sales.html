@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <title>JS Traders - Sales Representative Portal</title>
+
+  <!-- Tailwind CSS v3 with Plugins -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#D97706', // Amber/Warm theme for Sales
+              50: '#FFFBEB',
+              100: '#FEF3C7',
+              500: '#F59E0B',
+              600: '#D97706',
+              700: '#B45309',
+            },
+            neutralText: '#64748B',
+            headingText: '#0F172A',
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="stylesheet" href="./assets/css/app.css">
+</head>
+<body class="bg-[#FFFDF9] font-sans antialiased text-[#0F172A] h-screen w-screen overflow-hidden flex">
+
+  <div class="w-full h-full bg-[#FFFDF9] overflow-hidden flex flex-col lg:flex-row">
+
+    <!-- LeftSidebar: Sales Navigation -->
+    <aside class="w-full lg:w-[270px] xl:w-[285px] bg-white border-r border-amber-100 flex flex-col justify-between p-4 shrink-0 h-full">
+      <div class="space-y-4 overflow-y-auto flex-1 pr-1 custom-scroll">
+
+        <!-- Sales Rep Profile Pill -->
+        <div class="flex items-center justify-between p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/80 shadow-xs">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-lg bg-amber-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+              <span>💼</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-[9px] font-extrabold text-amber-700 uppercase tracking-wider leading-none">Sales Representative</span>
+              <span class="text-xs font-extrabold text-slate-900 tracking-tight mt-0.5">JS Field Commercial</span>
+            </div>
+          </div>
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800">FIELD</span>
+        </div>
+
+        <!-- Navigation Menus -->
+        <nav class="space-y-2 text-xs font-medium">
+
+          <!-- 1. Customers & Ledgers -->
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Accounts & Ledgers</span>
+            <a class="sales-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all cursor-pointer font-bold text-amber-800 bg-amber-50" data-route="customers-ledger" href="#/customers-ledger">
+              <span>👥</span>
+              <span>Customer Ledgers & Balances</span>
+            </a>
+          </div>
+
+          <!-- 2. Real-time Inventory Quantity Lookup -->
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Catalog & Stock</span>
+            <a class="sales-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-amber-50/50 transition-colors cursor-pointer" data-route="stock-lookup" href="#/stock-lookup">
+              <span>📦</span>
+              <span>Live Stock Quantities</span>
+            </a>
+          </div>
+
+          <!-- 3. Sales Bookings & Rate Entry -->
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Orders & Invoicing</span>
+            <a class="sales-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-amber-50/50 transition-colors cursor-pointer" data-route="book-order" href="#/book-order">
+              <span>📝</span>
+              <span>Book Field Order</span>
+            </a>
+            <a class="sales-nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-amber-50/50 transition-colors cursor-pointer" data-route="rate-entry" href="#/rate-entry">
+              <span>🏷</span>
+              <span>Gatepass Rate Entry</span>
+            </a>
+          </div>
+
+        </nav>
+      </div>
+
+      <!-- Cost Redaction & Security Badge -->
+      <div class="mt-4 pt-3 border-t border-amber-100 space-y-2">
+        <div class="flex items-center gap-2 p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold">
+          <span>🔒</span>
+          <span>Supplier Cost Masked • Retail Only</span>
+        </div>
+
+        <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs">
+              SR
+            </div>
+            <div class="flex flex-col text-left">
+              <span class="text-xs font-bold text-slate-800">Tariq Mehmood</span>
+              <span class="text-[10px] text-slate-500">Gujranwala Region</span>
+            </div>
+          </div>
+          <span class="w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-w-0 bg-[#FFFDF9] h-full overflow-hidden">
+
+      <!-- Top Header Bar -->
+      <header class="h-16 px-6 border-b border-amber-100 flex items-center justify-between gap-4 bg-white shrink-0">
+        <!-- Breadcrumbs -->
+        <div id="sales-header-breadcrumbs" class="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <span class="text-slate-900 font-semibold">Customer Ledgers</span>
+        </div>
+
+        <!-- Action Controls -->
+        <div class="flex items-center gap-2.5">
+          <!-- Portals Switcher Launcher -->
+          <button id="sales-portals-btn" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-700 hover:to-orange-700 transition-all shadow-xs cursor-pointer active:scale-95">
+            <span>🌐</span>
+            <span>Portals</span>
+          </button>
+
+          <!-- Back to Main ERP -->
+          <a href="index.html" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">
+            <span>🏢</span>
+            <span>Main ERP</span>
+          </a>
+
+          <!-- Quick Stock Check Pill -->
+          <a href="#/stock-lookup" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-900 hover:bg-amber-200 transition-colors shadow-2xs">
+            <span>📦</span>
+            <span class="hidden sm:inline">Check Stock</span>
+          </a>
+        </div>
+      </header>
+
+      <!-- Primary Workspace -->
+      <main id="sales-primary-workspace" class="p-6 flex-1 overflow-y-auto custom-scroll">
+        <!-- Dynamically rendered by salesApp.js -->
+      </main>
+
+    </div>
+
+  </div>
+
+  <script type="module" src="./assets/js/salesApp.js"></script>
+</body>
+</html>

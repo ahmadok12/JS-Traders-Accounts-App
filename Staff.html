@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#138FCB">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/assets/images/mobile-qr.png">
+  <title>JS Traders - Warehouse Staff Mobile App</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="h-full w-full flex items-center justify-center bg-slate-950 p-0 sm:p-4 overflow-hidden">
+
+  <!-- Mobile Viewport Frame (Centered on desktop, full screen on phone) -->
+  <div id="mobile-viewport" class="w-full h-full sm:max-w-[420px] sm:max-h-[880px] bg-slate-50 flex flex-col sm:rounded-[36px] sm:border-[8px] sm:border-slate-800 sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] overflow-hidden relative">
+
+    <!-- Top Status Bar & Header -->
+    <header class="bg-[#138FCB] text-white px-4 py-3 shrink-0 shadow-sm safe-top z-20 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center font-black text-sm italic">
+          JS
+        </div>
+        <div class="flex flex-col">
+          <span class="text-[10px] uppercase font-bold text-blue-100 tracking-wider leading-none">Warehouse Operations</span>
+          <span id="app-staff-name" class="text-xs font-black tracking-tight mt-0.5">Staff Mobile Portal</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <!-- Portals Switcher -->
+        <button id="staff-portals-btn" title="Open Ecosystem Portals" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold cursor-pointer active:scale-95 transition-all">
+          <span>🌐</span>
+          <span class="hidden xs:inline">Portals</span>
+        </button>
+
+        <!-- Screen WakeLock Button -->
+        <button id="mobile-wakelock-btn" title="Keep Screen Awake (Screen will not turn off during shift)" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold cursor-pointer active:scale-95 transition-all">
+          <span id="wakelock-icon">☀️</span>
+          <span id="wakelock-text" class="hidden xs:inline">Awake</span>
+        </button>
+
+        <!-- Sound Alert Test Button -->
+        <button id="mobile-sound-test-btn" title="Loud Alert Sound Enabled (Tap to test loud alarm)" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[10px] font-bold cursor-pointer active:scale-95 transition-all">
+          <span>🔊</span>
+          <span class="hidden xs:inline">Sound</span>
+        </button>
+
+        <!-- Notification Bell -->
+        <button id="mobile-notif-btn" class="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center relative cursor-pointer active:scale-95 transition-transform">
+          <span class="text-xs">🔔</span>
+          <span id="notif-badge" class="hidden w-2 h-2 rounded-full bg-rose-400 absolute top-1.5 right-1.5 ring-2 ring-[#138FCB]"></span>
+        </button>
+
+        <!-- Logout / Switch Button -->
+        <button id="mobile-logout-btn" class="hidden text-xs text-white/80 hover:text-white px-2 py-1 rounded-lg bg-black/20 cursor-pointer active:scale-95">
+          Exit
+        </button>
+      </div>
+    </header>
+
+    <!-- Real-time Urgent Assignment Dropdown Banner (with loud audible sound) -->
+    <div id="realtime-alert-banner" class="hidden shrink-0 bg-gradient-to-r from-rose-600 via-rose-700 to-amber-600 text-white p-3.5 shadow-xl border-b-2 border-amber-400 z-30 animate-in slide-in-from-top duration-300">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-start gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-xl shrink-0 animate-bounce">
+            🚨
+          </div>
+          <div>
+            <span class="text-[10px] font-black uppercase tracking-wider text-amber-200 block">Immediate Assignment Alert</span>
+            <h4 id="alert-banner-title" class="font-black text-xs leading-snug">GP-00003 Stock Fetch</h4>
+            <p id="alert-banner-desc" class="text-[11px] text-white/95 font-medium mt-0.5 line-clamp-2">New cargo items allocated for immediate warehouse floor fetch.</p>
+          </div>
+        </div>
+        <button id="alert-banner-close" class="text-white/80 hover:text-white text-xs font-black p-1 shrink-0 cursor-pointer">
+          ✕
+        </button>
+      </div>
+      <div class="mt-2.5 pt-2 border-t border-white/20 flex items-center justify-between gap-2">
+        <span class="text-[10px] text-amber-100 flex items-center gap-1 font-bold">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>No Refresh Required</span>
+        </span>
+        <button id="alert-banner-view-btn" class="px-3.5 py-1.5 bg-white text-rose-700 rounded-lg text-xs font-black hover:bg-slate-100 transition-all cursor-pointer shadow-xs active:scale-95">
+          Fetch Cargo Now →
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Dynamic Content Workspace -->
+    <main id="mobile-content" class="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 bg-[#F8FAFC]">
+      <!-- Dynamically injected by assets/js/mobileApp.js -->
+      <div class="h-full flex items-center justify-center">
+        <div class="text-center space-y-2">
+          <div class="w-8 h-8 border-3 border-[#138FCB] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p class="text-xs text-slate-400 font-medium">Loading Warehouse Staff Portal...</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation Bar (Only visible when logged in) -->
+    <nav id="mobile-nav-bar" class="hidden bg-white border-t border-slate-200 px-4 py-2 shrink-0 safe-bottom z-20 flex justify-around items-center shadow-lg">
+      <button class="mobile-nav-item flex flex-col items-center gap-1 text-[#138FCB] cursor-pointer" data-tab="tasks">
+        <span class="text-lg">📋</span>
+        <span class="text-[10px] font-bold">Pick Tasks</span>
+      </button>
+      <button class="mobile-nav-item flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 cursor-pointer" data-tab="notifications">
+        <span class="text-lg relative">
+          🔔
+          <span id="nav-notif-dot" class="hidden w-1.5 h-1.5 rounded-full bg-rose-500 absolute top-0 right-0"></span>
+        </span>
+        <span class="text-[10px] font-bold">Alerts</span>
+      </button>
+      <button class="mobile-nav-item flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600 cursor-pointer" data-tab="profile">
+        <span class="text-lg">👤</span>
+        <span class="text-[10px] font-bold">Profile</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="mobile-toast-container" class="fixed top-4 inset-x-4 max-w-[380px] mx-auto z-50 pointer-events-none space-y-2"></div>
+
+  <!-- Mobile Controller ES Module -->
+  <script type="module" src="assets/js/mobileApp.js"></script>
+</body>
+</html>

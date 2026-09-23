@@ -1,0 +1,883 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>ERP Accounts Dashboard</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Font: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+          },
+          colors: {
+            canvas: '#ECEEF2',
+            surface: '#FFFFFF',
+            borderSubtle: '#EAECEF',
+            neutralText: '#6F767E',
+            headingText: '#1A1D1F',
+            badgeGreen: '#10B981',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-scrollbars-and-utilities">
+    /* Subtle scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #D5D9DF;
+      border-radius: 4px;
+    }
+    /* Grid background patterns for chart visual */
+    .chart-grid-line {
+      border-bottom: 1px dashed #EDF0F3;
+    }
+  </style>
+</head>
+<body class="bg-[#DFE2E6] p-2 sm:p-4 md:p-6 lg:p-8 font-sans antialiased text-[#1A1D1F] min-h-screen flex items-center justify-center">
+<!-- Main Container Card encapsulating the whole dashboard layout -->
+<div class="w-full max-w-[1440px] bg-[#F7F8FA] rounded-[28px] shadow-2xl border border-[#E3E6EB] overflow-hidden flex flex-col lg:flex-row">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-full lg:w-[260px] xl:w-[270px] bg-[#F7F8FA] border-r border-[#E8EBEE] flex flex-col justify-between p-4 shrink-0" data-purpose="sidebar-navigation">
+<!-- Top Section of Sidebar -->
+<div class="space-y-6">
+<!-- Agency Selector Pill -->
+<div class="flex items-center justify-between p-2 rounded-xl bg-white border border-[#EBECEF] shadow-xs cursor-pointer hover:border-gray-300 transition-all">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-black text-white flex items-center justify-center font-bold text-lg shadow-sm">
+<span class="tracking-tighter font-extrabold italic">S</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-semibold text-neutralText uppercase tracking-wider leading-none">Agency</span>
+<span class="text-xs font-bold text-headingText tracking-tight mt-0.5">Spark Pixel Team</span>
+</div>
+</div>
+<svg class="w-4 h-4 text-gray-400 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Navigation Menus -->
+<nav class="space-y-5 text-xs font-medium">
+<!-- Group: Main Menu -->
+<div class="space-y-1">
+<span class="text-[11px] font-semibold text-neutralText tracking-tight px-3 block mb-1.5">Main Menu</span>
+<!-- Active Item: Dashboard -->
+<a class="flex items-center justify-between px-3 py-2 rounded-xl bg-white text-headingText font-bold shadow-[0_2px_4px_rgba(0,0,0,0.02)] border border-[#ECEEF2]" href="#">
+<div class="flex items-center gap-2.5">
+<svg class="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 20 20">
+<path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
+</svg>
+<span class="">Dashboard</span>
+</div>
+</a>
+<!-- Inactive Item: Products -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Products</span>
+</a>
+<!-- Inactive Item: Transactions -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<rect height="16" rx="2" stroke-linecap="round" stroke-linejoin="round" width="18" x="3" y="4"></rect>
+<path d="M12 9v6m-3-3h6" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Transactions</span>
+</a>
+<!-- Inactive Item: Reports & Analytics -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Reports &amp; Analytics</span>
+</a>
+<!-- Inactive Item: Messages -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Messages</span>
+</a>
+<!-- Inactive Item: Team Performance -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Team Performance</span>
+</a>
+<!-- Inactive Item: Campaigns -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Campaigns</span>
+</a>
+</div>
+<!-- Group: Customers -->
+<div class="space-y-1 pt-1">
+<span class="text-[11px] font-semibold text-neutralText tracking-tight px-3 block mb-1.5">Customers</span>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Customer List</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Channels</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Order Management</span>
+</a>
+</div>
+<!-- Group: Management -->
+<div class="space-y-1 pt-1">
+<span class="text-[11px] font-semibold text-neutralText tracking-tight px-3 block mb-1.5">Management</span>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Roles &amp; Permissions</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Billing &amp; Subscription</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Integrations</span>
+</a>
+</div>
+<!-- Group: Settings -->
+<div class="space-y-1 pt-1">
+<span class="text-[11px] font-semibold text-neutralText tracking-tight px-3 block mb-1.5">Settings</span>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Customer Support</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Help Center</span>
+</a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors" href="#">
+<svg class="w-4 h-4 stroke-[1.8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">System Settings</span>
+</a>
+</div>
+</nav>
+</div>
+<!-- User Profile Badge at Bottom of Sidebar -->
+<div class="mt-8 pt-3 border-t border-[#EAECEF]">
+<div class="flex items-center justify-between p-2 rounded-xl bg-white border border-[#E8EBEE] shadow-xs cursor-pointer hover:border-gray-300 transition-all">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-gray-200 bg-gray-200 flex-shrink-0">
+<svg class="w-full h-full text-gray-500 fill-current" viewBox="0 0 24 24">
+<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path>
+</svg>
+</div>
+<div class="flex flex-col text-left">
+<span class="text-xs font-bold text-headingText leading-tight">Salung Prastyo</span>
+<span class="text-[10px] text-neutralText">Sales Operator</span>
+</div>
+</div>
+<svg class="w-3.5 h-3.5 text-gray-400 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContentArea -->
+<main class="flex-1 flex flex-col min-w-0 bg-[#F7F8FA]" data-purpose="primary-workspace">
+<!-- Top Header Bar -->
+<header class="h-16 px-6 sm:px-8 border-b border-[#E8EBEE] flex items-center justify-between gap-4">
+<!-- Breadcrumbs -->
+<div class="flex items-center gap-1.5 text-xs font-medium text-neutralText">
+<span class="hover:text-headingText cursor-pointer">Dashboard</span>
+<span class="text-gray-400">&gt;</span>
+<span class="text-headingText font-semibold">Overview</span>
+</div>
+<!-- Search Bar and Action Controls -->
+<div class="flex items-center gap-4">
+<!-- Search Input with Keyboard Shortcut -->
+<div class="relative hidden sm:flex items-center">
+<svg class="w-3.5 h-3.5 text-gray-400 absolute left-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<input class="w-56 lg:w-64 pl-8 pr-12 py-1.5 text-xs bg-white border border-[#E3E6EB] rounded-full focus:outline-none focus:border-black placeholder-gray-400 transition-colors shadow-xs" placeholder="Search..." type="text">
+<span class="absolute right-3 text-[10px] font-semibold text-gray-400 bg-gray-100 px-1 py-0.5 rounded border border-gray-200 pointer-events-none">⌘ K</span>
+</div>
+<!-- Notification Bell -->
+<button class="w-8 h-8 rounded-full bg-white border border-[#E3E6EB] flex items-center justify-center text-gray-600 hover:text-black hover:border-gray-400 transition-colors relative shadow-xs">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+<span class="w-1.5 h-1.5 bg-red-500 rounded-full absolute top-2 right-2"></span>
+</button>
+<!-- Drawer / Inbox Icon -->
+<button class="w-8 h-8 rounded-full bg-white border border-[#E3E6EB] flex items-center justify-center text-gray-600 hover:text-black hover:border-gray-400 transition-colors shadow-xs">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+</button>
+<!-- Top-right User Avatar Thumbnail -->
+<div class="w-8 h-8 rounded-full bg-gray-300 border border-gray-200 overflow-hidden cursor-pointer">
+<svg class="w-full h-full text-gray-500 fill-current" viewBox="0 0 24 24">
+<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"></path>
+</svg>
+</div>
+</div>
+</header>
+<!-- Dashboard Interior Body -->
+<div class="p-6 sm:p-8 space-y-6">
+<!-- Welcome Banner Row with Action Buttons -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<h1 class="text-2xl font-bold tracking-tight text-headingText">Welcome back, Salung</h1>
+<div class="flex items-center flex-wrap gap-2.5">
+<!-- Daily Filter -->
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white border border-[#E3E6EB] rounded-lg hover:border-gray-400 shadow-2xs transition-colors">
+<span class="">Daily</span>
+<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<!-- Date Picker Button -->
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[#E3E6EB] rounded-lg hover:border-gray-400 shadow-2xs transition-colors">
+<svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+<span class="font-medium text-headingText">6 Nov 2025</span>
+</button>
+<!-- Export CSV Dark CTA -->
+<button class="inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold bg-[#272B30] text-white rounded-lg hover:bg-black transition-colors shadow-xs" style="background-color: rgb(19, 143, 203);">
+<svg class="w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="">Export CSV</span>
+</button>
+</div>
+</div>
+<!-- BEGIN: KPICardsGrid -->
+<!-- 4-Column Grid for Metrics -->
+<section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" data-purpose="kpi-metrics">
+<!-- Card 1: Total Revenue -->
+<div class="bg-white rounded-2xl p-4 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+<div class="flex items-center justify-between text-neutralText">
+<span class="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Total Revenue</span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-2xl font-extrabold text-headingText tracking-tight">$20,320</span>
+<!-- Mini Sparkline Bars Indicator -->
+<div class="flex items-end gap-1 h-7">
+<div class="w-0.5 bg-gray-200 h-2 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-3.5 rounded-full"></div>
+<div class="w-0.5 bg-black h-6 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-4.5 rounded-full"></div>
+<div class="w-0.5 bg-black h-7 rounded-full"></div>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-[#F0F2F4] flex items-center justify-between text-[11px]">
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+<div class="flex items-center gap-1 font-semibold text-emerald-600" style="color: rgb(19, 143, 203);">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<span class="">+0,94 <span class="font-normal text-gray-400">last year</span></span>
+</div>
+</div>
+</div>
+<!-- Card 2: Total Orders -->
+<div class="bg-white rounded-2xl p-4 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+<div class="flex items-center justify-between text-neutralText">
+<span class="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Total Orders</span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<div class="flex items-baseline gap-1">
+<span class="text-2xl font-extrabold text-headingText tracking-tight">10,320</span>
+<span class="text-xs text-neutralText font-medium">Orders</span>
+</div>
+<div class="flex items-end gap-1 h-7">
+<div class="w-0.5 bg-gray-200 h-1.5 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-3 rounded-full"></div>
+<div class="w-0.5 bg-gray-400 h-4 rounded-full"></div>
+<div class="w-0.5 bg-black h-7 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-5 rounded-full"></div>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-[#F0F2F4] flex items-center justify-between text-[11px]">
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+<div class="flex items-center gap-1 font-semibold text-emerald-600" style="color: rgb(19, 143, 203);">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<span class="">+0,94 <span class="font-normal text-gray-400">last year</span></span>
+</div>
+</div>
+</div>
+<!-- Card 3: New Customers -->
+<div class="bg-white rounded-2xl p-4 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+<div class="flex items-center justify-between text-neutralText">
+<span class="text-[11px] font-bold tracking-wider text-gray-400 uppercase">New Customers</span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<div class="flex items-baseline gap-1">
+<span class="text-2xl font-extrabold text-headingText tracking-tight">4,305</span>
+<span class="text-xs text-neutralText font-medium">New Users</span>
+</div>
+<div class="flex items-end gap-1 h-7">
+<div class="w-0.5 bg-gray-200 h-3 rounded-full"></div>
+<div class="w-0.5 bg-black h-6.5 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-4 rounded-full"></div>
+<div class="w-0.5 bg-black h-7 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-2.5 rounded-full"></div>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-[#F0F2F4] flex items-center justify-between text-[11px]">
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+<div class="flex items-center gap-1 font-semibold text-emerald-600" style="color: rgb(19, 143, 203);">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<span class="">+0,94 <span class="font-normal text-gray-400">last year</span></span>
+</div>
+</div>
+</div>
+<!-- Card 4: Conversion Rate -->
+<div class="bg-white rounded-2xl p-4 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+<div class="flex items-center justify-between text-neutralText">
+<span class="text-[11px] font-bold tracking-wider text-gray-400 uppercase">Conversion Rate</span>
+</div>
+<div class="flex items-baseline justify-between mt-2">
+<span class="text-2xl font-extrabold text-headingText tracking-tight">3.9%</span>
+<div class="flex items-end gap-1 h-7">
+<div class="w-0.5 bg-gray-200 h-2 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-3.5 rounded-full"></div>
+<div class="w-0.5 bg-gray-400 h-5 rounded-full"></div>
+<div class="w-0.5 bg-black h-7 rounded-full"></div>
+<div class="w-0.5 bg-gray-300 h-3 rounded-full"></div>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-[#F0F2F4] flex items-center justify-between text-[11px]">
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+<div class="flex items-center gap-1 font-semibold text-emerald-600" style="color: rgb(19, 143, 203);">
+<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<span class="">+0,94 <span class="font-normal text-gray-400">last year</span></span>
+</div>
+</div>
+</div>
+</section>
+<!-- END: KPICardsGrid -->
+<!-- BEGIN: MiddleAnalyticsRow -->
+<!-- Two Column Middle Section (Sales Trend Bar Matrix & Revenue Breakdown) -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-6" data-purpose="analytics-charts">
+<!-- Left Column (8 Columns): Sales Trend Matrix Block Chart -->
+<div class="lg:col-span-8 bg-white rounded-2xl p-5 sm:p-6 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+<!-- Header & Filter Tabs -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#F4F5F7]">
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold uppercase tracking-wider text-gray-500">Sales Trend</h3>
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+</div>
+<!-- Time Granularity Selector -->
+<div class="flex items-center gap-1 bg-[#F5F6F8] p-1 rounded-xl text-xs font-semibold">
+<button class="px-3 py-1 rounded-lg text-neutralText hover:text-black transition-colors">Weekly</button>
+<button class="px-3 py-1 rounded-lg bg-white text-black shadow-xs font-bold" style="background-color: rgb(19, 143, 203); color: rgb(255, 255, 255);">Monthly</button>
+<button class="px-3 py-1 rounded-lg text-neutralText hover:text-black transition-colors">Yearly</button>
+</div>
+</div>
+<!-- Total Revenue Legend Row -->
+<div class="flex flex-wrap items-center justify-between gap-3 mt-4">
+<div class="flex items-baseline gap-2">
+<span class="text-xs text-neutralText font-medium">Total Revenue :</span>
+<span class="text-xl font-extrabold text-headingText" style="color: rgb(19, 143, 203);">$20,320</span>
+</div>
+<!-- Legend Dots -->
+<div class="flex items-center gap-5 text-xs font-medium">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-[#E0E2E7]"></span>
+<span class="text-neutralText text-[11px] font-bold tracking-tight">NEW USER</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-black"></span>
+<span class="text-headingText text-[11px] font-bold tracking-tight">EXISTING USER</span>
+</div>
+</div>
+</div>
+<!-- Block Bar Chart Canvas Representation -->
+<div class="relative mt-6 pt-2">
+<!-- Y-Axis Grid Lines & Labels -->
+<div class="space-y-6 text-[11px] text-gray-400 font-medium">
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">60k</span>
+<div class="flex-1 chart-grid-line"></div>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">50k</span>
+<div class="flex-1 chart-grid-line"></div>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">40k</span>
+<div class="flex-1 chart-grid-line"></div>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">30k</span>
+<div class="flex-1 chart-grid-line"></div>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">20k</span>
+<div class="flex-1 chart-grid-line"></div>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">10k</span>
+<div class="flex-1 chart-grid-line"></div>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-6 text-right">0k</span>
+<div class="flex-1 border-b border-[#E3E6EB]"></div>
+</div>
+</div>
+<!-- Overlay Columns of Stacked Pixel / Square Blocks -->
+<div class="absolute inset-0 left-9 right-0 flex items-end justify-between px-2 pb-6">
+<!-- JAN -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- FEB -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- MAR -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- APR -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- MAY -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- JUN (ACTIVE / HOVERED MONTH WITH TOOLTIP & STACK) -->
+<div class="relative flex flex-col items-center gap-[3px]">
+<!-- Vertical Dashed Highlight Guide -->
+<div class="absolute -top-36 bottom-0 w-[1px] border-l border-dashed border-gray-400 pointer-events-none" style="border-color: rgb(19, 143, 203);"></div>
+<!-- Floating Tooltip Box -->
+<div class="absolute -top-32 -left-12 z-20 bg-white border border-[#E1E4EA] rounded-xl p-3 shadow-lg w-32 space-y-1.5 text-left pointer-events-none">
+<span class="text-[11px] font-bold text-gray-500 block" style="color: rgb(19, 143, 203);">Jun 2025</span>
+<div class="space-y-1 text-xs">
+<div class="flex items-center gap-1.5 text-neutralText">
+<span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+<span class="text-[11px]">New User <strong class="text-headingText">38k</strong></span>
+</div>
+<div class="flex items-center gap-1.5 text-neutralText">
+<span class="w-1.5 h-1.5 rounded-full bg-black"></span>
+<span class="text-[11px]">Existing <strong class="text-headingText">18k</strong></span>
+</div>
+</div>
+</div>
+<!-- Stacked light gray blocks (New users) -->
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-[#E3E6EB] rounded-[1px]"></div>
+<!-- Stacked black blocks (Existing users) -->
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- JUL -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- AUG -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- SEP -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- OCT -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- NOV -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+<!-- DEC -->
+<div class="flex flex-col items-center gap-[3px]">
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+<div class="w-3.5 h-2 bg-black rounded-[1px]"></div>
+</div>
+</div>
+<!-- X-Axis Months -->
+<div class="flex justify-between items-center pl-10 pr-2 pt-2 text-[10px] font-bold text-gray-400">
+<span class="">JAN</span>
+<span class="">FEB</span>
+<span class="">MAR</span>
+<span class="">APR</span>
+<span class="">MAY</span>
+<span class="text-headingText font-extrabold" style="color: rgb(19, 143, 203);">JUN</span>
+<span class="">JUL</span>
+<span class="">AUG</span>
+<span class="">SEP</span>
+<span class="">OCT</span>
+<span class="">NOV</span>
+<span class="">DEC</span>
+</div>
+</div>
+</div>
+<!-- Right Column (4 Columns): Revenue Breakdown Card -->
+<div class="lg:col-span-4 bg-white rounded-2xl p-5 sm:p-6 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
+<div>
+<!-- Header -->
+<div class="flex items-center justify-between pb-2 border-b border-[#F4F5F7]">
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold uppercase tracking-wider text-gray-500">Revenue Breakdown</h3>
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+</div>
+<button class="text-gray-400 hover:text-black">
+<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+<circle cx="5" cy="10" r="1.5"></circle>
+<circle cx="10" cy="10" r="1.5"></circle>
+<circle cx="15" cy="10" r="1.5"></circle>
+</svg>
+</button>
+</div>
+<!-- Revenue Stat & Filter Pill -->
+<div class="mt-4 flex items-center justify-between">
+<div>
+<span class="text-[11px] text-neutralText font-medium">Revenue by Category</span>
+<h4 class="text-2xl font-extrabold text-headingText tracking-tight">$20,320</h4>
+</div>
+<button class="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-600 bg-gray-50 border border-[#E1E4EA] px-2.5 py-1 rounded-lg">
+<span class="">📅 Jan 1 - Aug 30</span>
+<svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+<!-- AI Insight Banner Box -->
+<div class="mt-4 p-2.5 bg-[#FAFBFD] border border-[#E9ECF0] rounded-xl flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors">
+<div class="flex items-center gap-2">
+<span class="text-base leading-none">✨</span>
+<span class="text-xs font-semibold text-headingText">Get AI insight for better analysis</span>
+</div>
+<div class="w-4 h-4 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-[10px]" style="background-color: rgb(19, 143, 203); color: rgb(255, 255, 255);">
+                  &gt;
+                </div>
+</div>
+</div>
+<!-- Revenue Slim Bar Chart Graphic -->
+<div class="mt-6 pt-4 border-t border-dashed border-gray-100">
+<div class="h-32 flex items-end justify-between px-1">
+<!-- Bar item sequence -->
+<div class="w-1.5 bg-black h-14 rounded-full"></div>
+<div class="w-1.5 bg-gray-300 h-22 rounded-full"></div>
+<div class="w-1.5 bg-black h-28 rounded-full"></div>
+<div class="w-1.5 bg-gray-300 h-16 rounded-full"></div>
+<div class="w-1.5 bg-black h-20 rounded-full"></div>
+<div class="w-1.5 bg-gray-300 h-10 rounded-full"></div>
+<div class="w-1.5 bg-black h-18 rounded-full"></div>
+<div class="w-1.5 bg-gray-300 h-12 rounded-full"></div>
+<div class="w-1.5 bg-black h-26 rounded-full"></div>
+<div class="w-1.5 bg-gray-300 h-14 rounded-full"></div>
+<div class="w-1.5 bg-black h-22 rounded-full"></div>
+<div class="w-1.5 bg-gray-300 h-16 rounded-full"></div>
+<div class="w-1.5 bg-black h-12 rounded-full"></div>
+</div>
+<div class="flex items-center justify-between text-[10px] text-gray-400 font-semibold mt-3 pt-1 border-t border-gray-100">
+<span class="">1 JAN</span>
+<span class="">···</span>
+<span class="">30 JAN 2025</span>
+</div>
+</div>
+</div>
+</section>
+<!-- END: MiddleAnalyticsRow -->
+<!-- BEGIN: RecentTransactionsTable -->
+<!-- Recent Transactions Data Section -->
+<section class="bg-white rounded-2xl p-5 sm:p-6 border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] space-y-4" data-purpose="transactions-table">
+<!-- Table Controls Header -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div class="flex items-center gap-1.5">
+<h3 class="text-xs font-bold uppercase tracking-wider text-gray-500">Recent Transactions</h3>
+<div class="w-3.5 h-3.5 rounded-full border border-gray-300 flex items-center justify-center text-[9px] text-gray-400 font-serif">i</div>
+</div>
+<!-- Table Actions: Search + CTA -->
+<div class="flex items-center gap-2.5">
+<div class="relative">
+<svg class="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<input class="pl-8 pr-3 py-1.5 text-xs bg-white border border-[#E2E5EA] rounded-lg focus:outline-none focus:border-black placeholder-gray-400 w-48 sm:w-56 shadow-2xs" placeholder="Search transactions..." type="text">
+</div>
+<button class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-[#1A1D1F] text-white rounded-lg hover:bg-black transition-colors shadow-xs" style="background-color: rgb(19, 143, 203);">
+<span class="">+</span>
+<span class="">Add Transaction</span>
+</button>
+<button class="w-8 h-8 rounded-lg border border-[#E2E5EA] flex items-center justify-center text-gray-400 hover:text-black">
+<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+<circle cx="5" cy="10" r="1.5"></circle>
+<circle cx="10" cy="10" r="1.5"></circle>
+<circle cx="15" cy="10" r="1.5"></circle>
+</svg>
+</button>
+</div>
+</div>
+<!-- Semantic Data Table Container -->
+<div class="overflow-x-auto">
+<table class="w-full text-left text-xs text-neutralText">
+<thead>
+<tr class="border-b border-[#ECEEF2] text-[11px] uppercase font-bold text-gray-400 tracking-wider">
+<th class="py-3 px-3 w-10" scope="col">
+<input class="rounded border-gray-300 text-black focus:ring-0 w-3.5 h-3.5" type="checkbox">
+</th>
+<th class="py-3 px-3" scope="col">
+<div class="flex items-center gap-1">
+<span class="">ID</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-4" scope="col">
+<div class="flex items-center gap-1">
+<span class="">Customer</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-4" scope="col">
+<div class="flex items-center gap-1">
+<span class="">Product</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-4" scope="col">
+<div class="flex items-center gap-1">
+<span class="">Status</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-4" scope="col">
+<div class="flex items-center gap-1">
+<span class="">Qty</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-4" scope="col">
+<div class="flex items-center gap-1">
+<span class="">Unit Price</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-4" scope="col">
+<div class="flex items-center gap-1">
+<span class="">Total Revenue</span>
+<span class="text-[9px] text-gray-400">⇅</span>
+</div>
+</th>
+<th class="py-3 px-3 text-right" scope="col">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-[#F1F3F5] text-xs font-semibold">
+<!-- Row 1 -->
+<tr class="hover:bg-gray-50/70 transition-colors">
+<td class="py-3.5 px-3">
+<input class="rounded border-gray-300 text-black focus:ring-0 w-3.5 h-3.5" type="checkbox">
+</td>
+<td class="py-3.5 px-3 font-medium text-gray-400">#04910</td>
+<td class="py-3.5 px-4 text-headingText font-bold">Ryan Korsgaard</td>
+<td class="py-3.5 px-4 text-neutralText">Ergo Office Chair</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-100" style="background-color: rgb(240, 248, 253); border-color: rgb(186, 227, 247); color: rgb(19, 143, 203);">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500" style="background-color: rgb(19, 143, 203);"></span>
+                      Success
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-headingText">12</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$3,450</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$41,400</td>
+<td class="py-3.5 px-3 text-right">
+<button class="text-gray-400 hover:text-black">
+<svg class="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
+<circle cx="5" cy="10" r="1.5"></circle>
+<circle cx="10" cy="10" r="1.5"></circle>
+<circle cx="15" cy="10" r="1.5"></circle>
+</svg>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-gray-50/70 transition-colors">
+<td class="py-3.5 px-3">
+<input class="rounded border-gray-300 text-black focus:ring-0 w-3.5 h-3.5" type="checkbox">
+</td>
+<td class="py-3.5 px-3 font-medium text-gray-400">#04911</td>
+<td class="py-3.5 px-4 text-headingText font-bold">Madelyn Lubin</td>
+<td class="py-3.5 px-4 text-neutralText">Sunset Desk 02</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-100" style="background-color: rgb(240, 248, 253); border-color: rgb(186, 227, 247); color: rgb(19, 143, 203);">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500" style="background-color: rgb(19, 143, 203);"></span>
+                      Success
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-headingText">20</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$2,980</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$89,200</td>
+<td class="py-3.5 px-3 text-right">
+<button class="text-gray-400 hover:text-black">
+<svg class="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
+<circle cx="5" cy="10" r="1.5"></circle>
+<circle cx="10" cy="10" r="1.5"></circle>
+<circle cx="15" cy="10" r="1.5"></circle>
+</svg>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-gray-50/70 transition-colors">
+<td class="py-3.5 px-3">
+<input class="rounded border-gray-300 text-black focus:ring-0 w-3.5 h-3.5" type="checkbox">
+</td>
+<td class="py-3.5 px-3 font-medium text-gray-400">#04912</td>
+<td class="py-3.5 px-4 text-headingText font-bold">Abram Bergson</td>
+<td class="py-3.5 px-4 text-neutralText">Eco Bookshelf</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-600 border border-amber-100">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      Pending
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-headingText">22</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$1,750</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$75,900</td>
+<td class="py-3.5 px-3 text-right">
+<button class="text-gray-400 hover:text-black">
+<svg class="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
+<circle cx="5" cy="10" r="1.5"></circle>
+<circle cx="10" cy="10" r="1.5"></circle>
+<circle cx="15" cy="10" r="1.5"></circle>
+</svg>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-gray-50/70 transition-colors">
+<td class="py-3.5 px-3">
+<input class="rounded border-gray-300 text-black focus:ring-0 w-3.5 h-3.5" type="checkbox">
+</td>
+<td class="py-3.5 px-3 font-medium text-gray-400">#04913</td>
+<td class="py-3.5 px-4 text-headingText font-bold">Phillip Mango</td>
+<td class="py-3.5 px-4 text-neutralText">Green Leaf Desk</td>
+<td class="py-3.5 px-4">
+<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+<span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                      Refunded
+                    </span>
+</td>
+<td class="py-3.5 px-4 text-headingText">24</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$1,950</td>
+<td class="py-3.5 px-4 text-headingText font-bold">$19,500</td>
+<td class="py-3.5 px-3 text-right">
+<button class="text-gray-400 hover:text-black">
+<svg class="w-4 h-4 inline-block" fill="currentColor" viewBox="0 0 20 20">
+<circle cx="5" cy="10" r="1.5"></circle>
+<circle cx="10" cy="10" r="1.5"></circle>
+<circle cx="15" cy="10" r="1.5"></circle>
+</svg>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<!-- END: RecentTransactionsTable -->
+</div>
+<!-- END: Dashboard Interior Body -->
+</main>
+<!-- END: MainContentArea -->
+</div>
+
+
+</body></html>
