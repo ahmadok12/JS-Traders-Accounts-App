@@ -34,33 +34,38 @@ export function renderGatepassView() {
   const userMap = new Map(users.map(u => [u.id, u.fullName]));
 
   const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search gatepasses by number, party, vehicle...',
+    searchPlaceholder: 'Search delivery notes & GRNs by number, party, vehicle...',
     dropdowns: [
       {
         id: 'gp-type-filter',
         label: 'Direction',
         value: 'all',
         options: [
-          { value: 'all', label: 'All Gatepasses' },
-          { value: 'outward', label: 'Outward (GDN) Only' },
-          { value: 'inward', label: 'Inward (GRN) Only' }
+          { value: 'all', label: 'All Movement Documents' },
+          { value: 'outward', label: 'Delivery Notes (Outward)' },
+          { value: 'inward', label: 'Goods Receipt Notes (Inward)' }
         ]
       }
     ],
-    primaryAction: { label: '+ Create Gatepass Outward' },
+    primaryAction: { label: '+ Create Delivery Note' },
     secondaryAction: { label: 'Generate from Sales Invoice', icon: '🧾' }
   });
 
   const columns = [
     {
       key: 'gatepassNumber',
-      label: 'Gatepass #',
+      label: 'Document #',
       render: row => `
         <div>
           <span class="font-bold text-[#138FCB] text-xs font-mono">${row.gatepassNumber}</span>
-          <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${row.gatepassType === 'inward' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
-            ${row.gatepassType === 'inward' ? 'INWARD (GRN)' : 'OUTWARD (GDN)'}
-          </span>
+          <div class="flex flex-wrap items-center gap-1 mt-1">
+            <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${row.gatepassType === 'inward' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
+              ${row.gatepassType === 'inward' ? 'GOODS RECEIPT NOTE (GRN)' : 'DELIVERY NOTE'}
+            </span>
+            <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${row.gatepassType === 'inward' ? 'bg-emerald-100/80 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">
+              ${row.gatepassType === 'inward' ? 'Stock Receipt (+)' : 'Stock Issue (-)'}
+            </span>
+          </div>
         </div>
       `
     },
@@ -164,7 +169,7 @@ export function renderGatepassView() {
     columns,
     data: gatepasses,
     actions,
-    emptyMessage: 'No gatepasses issued.'
+    emptyMessage: 'No delivery notes or goods receipt notes issued.'
   });
 
   return `
@@ -225,13 +230,18 @@ export function bindGatepassEvents(container, refreshCallback) {
       const columns = [
         {
           key: 'gatepassNumber',
-          label: 'Gatepass #',
+          label: 'Document #',
           render: row => `
             <div>
               <span class="font-bold text-[#138FCB] text-xs font-mono">${row.gatepassNumber}</span>
-              <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider ${row.gatepassType === 'inward' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
-                ${row.gatepassType === 'inward' ? 'INWARD (GRN)' : 'OUTWARD (GDN)'}
-              </span>
+              <div class="flex flex-wrap items-center gap-1 mt-1">
+                <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${row.gatepassType === 'inward' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-blue-50 text-blue-800 border border-blue-200'}">
+                  ${row.gatepassType === 'inward' ? 'GOODS RECEIPT NOTE (GRN)' : 'DELIVERY NOTE'}
+                </span>
+                <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${row.gatepassType === 'inward' ? 'bg-emerald-100/80 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">
+                  ${row.gatepassType === 'inward' ? 'Stock Receipt (+)' : 'Stock Issue (-)'}
+                </span>
+              </div>
             </div>
           `
         },
@@ -341,7 +351,7 @@ function openGenerateGatepassFromInvoiceModal(onSaved) {
   const contentHtml = `
     <div class="space-y-4 text-xs">
       <div class="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-blue-900">
-        🧾 <strong>Automatic Bundle Expansion:</strong> Generating a Gate Pass from a Sales Invoice automatically unpacks all Poultry Systems and Fixed Sets into their exact physical component items (e.g. Hangers, Feed Pans, Galvanized Pipes, Handles) with extra quantities preserved!
+        🧾 <strong>Automatic Bundle Expansion:</strong> Generating a Delivery Note from a Sales Invoice automatically unpacks all Poultry Systems and Fixed Sets into their exact physical component items (e.g. Hangers, Feed Pans, Galvanized Pipes, Handles) with extra quantities preserved!
       </div>
 
       <div class="space-y-2">
@@ -374,15 +384,15 @@ function openGenerateGatepassFromInvoiceModal(onSaved) {
       <div class="flex justify-end gap-3 pt-3 border-t border-slate-200">
         <button type="button" id="btn-cancel-gen-gp" class="px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold cursor-pointer">Cancel</button>
         <button type="button" id="btn-confirm-gen-gp" class="px-5 py-2 bg-[#138FCB] hover:bg-[#0E78AC] text-white rounded-xl font-bold shadow-xs cursor-pointer">
-          Generate Gatepass Outward
+          Generate Delivery Note
         </button>
       </div>
     </div>
   `;
 
   openModal({
-    title: 'Generate Gatepass Outward from Invoice',
-    subtitle: 'Automatically expands bundled systems into physical components for floor staff picking',
+    title: 'Generate Delivery Note from Invoice',
+    subtitle: 'Automatically expands bundled systems into physical components for floor staff picking & delivery',
     badge: 'Logistics Fulfillment',
     contentHtml,
     size: 'max-w-2xl',
@@ -392,7 +402,7 @@ function openGenerateGatepassFromInvoiceModal(onSaved) {
       modalEl.querySelector('#btn-confirm-gen-gp').onclick = () => {
         const selectedRadio = modalEl.querySelector('input[name="sel-invoice-id"]:checked');
         if (!selectedRadio) {
-          toast.show('Please select a sales invoice to generate the gate pass from.', 'error');
+          toast.show('Please select a sales invoice to generate the delivery note from.', 'error');
           return;
         }
 
@@ -403,7 +413,7 @@ function openGenerateGatepassFromInvoiceModal(onSaved) {
             userId: authService.getCurrentUser()?.id || 'user-admin'
           });
 
-          toast.show(`Gatepass ${gp.gatepassNumber} created with ${gp.lines.length} physical line items!`, 'success');
+          toast.show(`Delivery Note ${gp.gatepassNumber} created with ${gp.lines.length} physical line items!`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {
@@ -723,9 +733,9 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
   `;
 
   openModal({
-    title: isEdit ? 'Edit Draft Gatepass Outward' : 'Create Draft Gatepass Outward',
-    subtitle: isEdit ? `Modify dispatch details, stock allocation, or assigned staff for ${gatepassToEdit.gatepassNumber}` : 'Fill in the dispatch details and multi-location item breakdown to issue gatepass outward',
-    badge: isEdit ? gatepassToEdit.gatepassNumber : 'GP-DRAFT',
+    title: isEdit ? 'Edit Draft Delivery Note' : 'Create Draft Delivery Note',
+    subtitle: isEdit ? `Modify dispatch details, stock allocation, or assigned staff for ${gatepassToEdit.gatepassNumber}` : 'Fill in the dispatch details and multi-location item breakdown to issue delivery note',
+    badge: isEdit ? gatepassToEdit.gatepassNumber : 'DN-DRAFT',
     contentHtml,
     footerHtml,
     size: 'max-w-5xl',
@@ -1063,7 +1073,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
             lines,
             notes
           });
-          toast.show(`Draft Gatepass ${gatepassToEdit.gatepassNumber} updated! Assigned staff have been notified.`, 'success');
+          toast.show(`Draft Delivery Note ${gatepassToEdit.gatepassNumber} updated! Assigned staff have been notified.`, 'success');
         } else {
           gatepassService.createGatepass({
             gatepassType: 'outward',
@@ -1076,7 +1086,7 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
             notes,
             userId: authService.getCurrentUser().id
           });
-          toast.show(`Draft Gatepass Outward created with ${lines.length} product(s)! Assigned staff have been notified on their mobile app.`, 'success');
+          toast.show(`Draft Delivery Note created with ${lines.length} product(s)! Assigned staff have been notified on their mobile app.`, 'success');
         }
 
         closeModal();
@@ -1344,14 +1354,14 @@ function openGatepassDetailModal(gatepass, onSaved) {
             <svg class="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
             </svg>
-            <span>Archive / Void Gatepass</span>
+            <span>Archive / Void Document</span>
           </button>
         ` : gatepass.status === 'Voided' ? `
           <span class="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5 text-rose-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path>
             </svg>
-            <span>Gatepass Voided &amp; Archived</span>
+            <span>Document Voided &amp; Archived</span>
           </span>
         ` : ''}
       </div>
@@ -1364,7 +1374,7 @@ function openGatepassDetailModal(gatepass, onSaved) {
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path>
             </svg>
-            <span>${gatepass.gatepassType === 'inward' ? 'Verify &amp; Inward Stock' : 'Approve Gatepass &amp; Release Stock'}</span>
+            <span>${gatepass.gatepassType === 'inward' ? 'Verify &amp; Post Stock Receipt' : 'Approve Delivery Note &amp; Issue Stock'}</span>
           </button>
         ` : ''}
       </div>
@@ -1372,10 +1382,10 @@ function openGatepassDetailModal(gatepass, onSaved) {
   `;
 
   const isInward = gatepass.gatepassType === 'inward';
-  const modalTitle = isInward ? `Gatepass Inward (GRN) Document` : `Gatepass Outward Document`;
+  const modalTitle = isInward ? `Goods Receipt Note (GRN): ${gatepass.gatepassNumber}` : `Delivery Note: ${gatepass.gatepassNumber}`;
   const modalSubtitle = isInward
-    ? 'Verify incoming goods receipt, inspect physical items, and put away stock into warehouse'
-    : 'Review cargo breakdown, staff photo submissions, and authorize delivery dispatch';
+    ? 'Verify incoming physical goods receipt and post Stock Receipt (+Qty) to warehouse'
+    : 'Review cargo breakdown, staff photo submissions, and authorize Stock Issue (-Qty)';
 
   openModal({
     title: modalTitle,
@@ -1403,10 +1413,11 @@ function openGatepassDetailModal(gatepass, onSaved) {
       const voidBtn = modalEl.querySelector('#gp-void-btn');
       if (voidBtn) {
         voidBtn.onclick = () => {
-          const confirmed = window.confirm(`Are you sure you want to void / archive Gatepass ${gatepass.gatepassNumber}? This action will cancel this gatepass.`);
+          const docType = isInward ? 'Goods Receipt Note' : 'Delivery Note';
+          const confirmed = window.confirm(`Are you sure you want to void / archive ${docType} ${gatepass.gatepassNumber}? This action will cancel this document.`);
           if (!confirmed) return;
           gatepassService.voidGatepass(gatepass.id, authService.getCurrentUser()?.id);
-          toast.show(`Gatepass ${gatepass.gatepassNumber} has been voided and archived.`, 'warning');
+          toast.show(`${docType} ${gatepass.gatepassNumber} has been voided and archived.`, 'warning');
           closeModal();
           if (onSaved) onSaved();
         };
@@ -1447,8 +1458,8 @@ function openGatepassDetailModal(gatepass, onSaved) {
         approveBtn.onclick = () => {
           gatepassService.approveGatepass(gatepass.id, authService.getCurrentUser().id);
           const msg = isInward
-            ? `Gatepass Inward ${gatepass.gatepassNumber} verified! Inward stock has been added to warehouse balance.`
-            : `Gatepass ${gatepass.gatepassNumber} approved! Outward stock deducted from Warehouse & Office.`;
+            ? `Goods Receipt Note ${gatepass.gatepassNumber} verified! Stock Receipt posted to warehouse.`
+            : `Delivery Note ${gatepass.gatepassNumber} approved! Stock Issue posted from Warehouse & Office.`;
           toast.show(msg, 'success');
           closeModal();
           if (onSaved) onSaved();

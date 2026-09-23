@@ -46,8 +46,9 @@ export function renderStockMovementsView() {
         value: 'all',
         options: [
           { value: 'all', label: 'All Movement Types' },
+          { value: 'stock_issue', label: 'Stock Issue (-)' },
+          { value: 'stock_receipt', label: 'Stock Receipt (+)' },
           { value: 'opening_balance', label: 'Opening Balance' },
-          { value: 'delivery', label: 'Delivery Dispatch' },
           { value: 'adjustment_increase', label: 'Adjustment (+)' },
           { value: 'adjustment_decrease', label: 'Adjustment (-)' },
           { value: 'assembly_output', label: 'Assembly Output' },
@@ -61,23 +62,34 @@ export function renderStockMovementsView() {
     {
       key: 'movementNumber',
       label: 'Movement #',
-      render: row => `<span class="font-bold text-[#138FCB]">${row.movementNumber}</span>`
+      render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.movementNumber}</span>`
     },
     {
       key: 'date',
       label: 'Posting Date',
-      render: row => `<span class="text-slate-600 font-medium">${row.date}</span>`
+      render: row => `<span class="text-slate-600 font-medium font-mono">${row.date}</span>`
     },
     {
       key: 'movementType',
       label: 'Transaction Type',
       render: row => {
         const isPositive = row.quantity > 0;
+        let displayLabel = row.movementType.replace(/_/g, ' ');
+        let colorClass = isPositive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200';
+
+        if (row.movementType === 'delivery' || row.movementType === 'stock_issue') {
+          displayLabel = 'Stock Issue (-)';
+          colorClass = 'bg-rose-50 text-rose-700 border border-rose-200 font-bold';
+        } else if (row.movementType === 'receipt' || row.movementType === 'stock_receipt') {
+          displayLabel = 'Stock Receipt (+)';
+          colorClass = 'bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold';
+        } else if (row.movementType === 'opening_balance') {
+          displayLabel = 'Opening Balance';
+          colorClass = 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold';
+        }
         return `
-          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-            isPositive ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-700'
-          }">
-            ${row.movementType.replace(/_/g, ' ')}
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${colorClass}">
+            ${displayLabel}
           </span>
         `;
       }
@@ -143,14 +155,26 @@ export function renderStockMovementsView() {
 export function bindStockMovementsEvents(container, refreshCallback) {
   // Search input filter
   const searchInput = container.querySelector('#filter-search-input');
-  if (searchInput) {
-    searchInput.oninput = (e) => {
-      const q = e.target.value.toLowerCase().trim();
-      const rows = container.querySelectorAll('tbody tr');
-      rows.forEach(r => {
-        const text = r.textContent.toLowerCase();
-        r.style.display = text.includes(q) ? '' : 'none';
-      });
-    };
-  }
+  const typeFilter = container.querySelector('#movement-type-filter');
+
+  const filterRows = () => {
+    const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
+    const typeVal = typeFilter ? typeFilter.value : 'all';
+    const rows = container.querySelectorAll('tbody tr');
+
+    rows.forEach(r => {
+      const text = r.textContent.toLowerCase();
+      let matchSearch = !q || text.includes(q);
+      let matchType = true;
+      if (typeVal !== 'all') {
+        if (typeVal === 'stock_issue') matchType = text.includes('stock issue') || text.includes('delivery');
+        else if (typeVal === 'stock_receipt') matchType = text.includes('stock receipt') || text.includes('receipt');
+        else matchType = text.includes(typeVal.replace(/_/g, ' '));
+      }
+      r.style.display = (matchSearch && matchType) ? '' : 'none';
+    });
+  };
+
+  if (searchInput) searchInput.oninput = filterRows;
+  if (typeFilter) typeFilter.onchange = filterRows;
 }

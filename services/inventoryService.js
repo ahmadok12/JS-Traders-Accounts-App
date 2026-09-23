@@ -306,6 +306,15 @@ class InventoryService {
 
     return storageService.getById('physicalRolls', roll.id);
   }
+
+  // Stock Movements Ledger
+  getStockMovements() {
+    return storageService.getCollection('stockMovements') || [];
+  }
+
+  getMovements() {
+    return this.getStockMovements();
+  }
 }
 
 export const inventoryService = new InventoryService();

@@ -111,10 +111,15 @@ class InwardOrderService {
         const remaining = Math.max(0, exp - rec);
         return {
           ...line,
-          remainingQty: remaining
+          remainingQty: remaining,
+          pendingQty: remaining
         };
       })
       .filter(l => l.remainingQty > 0);
+  }
+
+  getPendingExpectedLines(inwardOrderId) {
+    return this.getRemainingExpectedLines(inwardOrderId);
   }
 
   // Called when a GRN is posted/approved to increment received quantities

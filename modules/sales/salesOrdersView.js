@@ -131,7 +131,7 @@ export function renderSalesOrdersView() {
 
   const actions = [
     { label: 'View', variant: 'secondary' },
-    { label: 'Create GDN', variant: 'primary' },
+    { label: 'Create Delivery Note', variant: 'primary' },
     { label: 'Print Voucher', variant: 'secondary' }
   ];
 
@@ -161,7 +161,7 @@ export function bindSalesOrdersEvents(container, refreshCallback) {
   const orders = salesService.getSalesOrders();
   const actions = [
     { label: 'View', variant: 'secondary', onClick: (row) => openOrderDetailModal(row, refreshCallback) },
-    { label: 'Create GDN', variant: 'primary', onClick: (row) => openCreateGDNModal(row, refreshCallback) },
+    { label: 'Create Delivery Note', variant: 'primary', onClick: (row) => openCreateDeliveryNoteModal(row, refreshCallback) },
     { label: 'Print Voucher', variant: 'secondary', onClick: (row) => printSalesOrderVoucher(row) }
   ];
   bindTableActions(container, actions, orders);
@@ -350,7 +350,7 @@ export function openOrderDetailModal(order, refreshCallback) {
                 <th class="py-2.5 px-3">Item Variant</th>
                 <th class="py-2.5 px-3 text-center">Ordered</th>
                 <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Delivered</th>
-                <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Remaining Delivery</th>
+                <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
                 <th class="py-2.5 px-3 text-center text-amber-700 font-bold">Invoiced</th>
                 <th class="py-2.5 px-3 text-right">Unit Price</th>
                 <th class="py-2.5 px-3 text-right">Line Total</th>
@@ -382,26 +382,26 @@ export function openOrderDetailModal(order, refreshCallback) {
         </div>
       </section>
 
-      <!-- SECTION 3: Linked Dispatches (Gatepass Outward / GDNs) -->
+      <!-- SECTION 3: Linked Dispatches (Delivery Notes / Stock Issues) -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>🚚</span>
-            <span>3. Linked Gatepass Outward Dispatches (${linkedGDNs.length})</span>
+            <span>3. Linked Delivery Notes (${linkedGDNs.length})</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-semibold">Physical inventory deducted when GDN approved</span>
+          <span class="text-[10px] text-slate-400 font-semibold">Physical inventory deducted via Stock Issue upon approval</span>
         </div>
 
         ${linkedGDNs.length === 0 ? `
           <div class="p-4 bg-slate-50/60 rounded-xl text-center text-slate-400">
-            No outward gatepasses created against this order yet.
+            No delivery notes issued against this order yet.
           </div>
         ` : `
           <div class="border border-slate-200/80 rounded-xl overflow-hidden">
             <table class="w-full text-left text-xs">
               <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th class="py-2 px-3">GDN Number</th>
+                  <th class="py-2 px-3">Delivery Note #</th>
                   <th class="py-2 px-3">Date</th>
                   <th class="py-2 px-3">Vehicle &amp; Driver</th>
                   <th class="py-2 px-3 text-center">Items Dispatched</th>
@@ -462,7 +462,7 @@ export function openOrderDetailModal(order, refreshCallback) {
         </button>
         ${!isCancelled && remainingLines.length > 0 ? `
           <button id="order-create-gdn-btn" type="button" class="inline-flex items-center space-x-2 px-4 py-2 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all cursor-pointer">
-            <span>🚚 Create GDN / Gatepass</span>
+            <span>🚚 Create Delivery Note</span>
           </button>
         ` : ''}
       </div>
@@ -516,7 +516,7 @@ export function openOrderDetailModal(order, refreshCallback) {
   });
 }
 
-export function openCreateGDNModal(order, onSaved) {
+export function openCreateDeliveryNoteModal(order, onSaved) {
   const remainingLines = salesService.getRemainingDeliveryLines(order.id);
   if (remainingLines.length === 0) {
     toast.show('This Sales Order has already been fully delivered.', 'warning');
@@ -535,7 +535,7 @@ export function openCreateGDNModal(order, onSaved) {
           <span class="text-[11px] text-slate-500 font-medium">Customer: <strong>${order.customerName || 'Customer'}</strong></span>
         </div>
         <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-          ${remainingLines.length} Item(s) Pending Dispatch
+          ${remainingLines.length} Item(s) Pending Delivery
         </span>
       </div>
 
@@ -564,8 +564,8 @@ export function openCreateGDNModal(order, onSaved) {
               <th class="py-2.5 px-3">Item Variant</th>
               <th class="py-2.5 px-3 text-center">Ordered</th>
               <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Delivered</th>
-              <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Remaining</th>
-              <th class="py-2.5 px-3 text-center w-32 text-indigo-700 font-bold">Dispatch Now</th>
+              <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
+              <th class="py-2.5 px-3 text-center w-32 text-indigo-700 font-bold">Deliver Now</th>
             </tr>
           </thead>
           <tbody id="gdn-lines-tbody" class="divide-y divide-slate-100">
@@ -591,8 +591,8 @@ export function openCreateGDNModal(order, onSaved) {
       </div>
 
       <div>
-        <label class="block font-bold text-slate-700 mb-1">Dispatch Notes / Gate Instructions</label>
-        <textarea id="gdn-notes-input" rows="2" placeholder="Urgent delivery, site drop-off instructions..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] text-slate-800 shadow-2xs resize-none"></textarea>
+        <label class="block font-bold text-slate-700 mb-1">Delivery Notes / Gate Instructions</label>
+        <textarea id="gdn-notes-input" rows="2" placeholder="Site delivery instructions, drop-off location..." class="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] text-slate-800 shadow-2xs resize-none"></textarea>
       </div>
     </form>
   `;
@@ -600,22 +600,22 @@ export function openCreateGDNModal(order, onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Outward stock moves only after gatepass approval</span>
+      <span>🛡️ Outward physical movement creates Stock Issue (-Qty) upon approval</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="gdn-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
         Cancel
       </button>
       <button id="gdn-submit-btn" type="button" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>🚚 Issue Gatepass Outward</span>
+        <span>🚚 Issue Delivery Note</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: `Create Gatepass Outward (GDN): ${order.orderNumber}`,
-    subtitle: 'Generate warehouse gatepass dispatch against remaining sales order requirements',
-    badge: 'GDN-NEW',
+    title: `Create Delivery Note: ${order.orderNumber}`,
+    subtitle: 'Generate physical Delivery Note for warehouse dispatch. Stock Issue will deduct inventory upon approval.',
+    badge: 'DELIVERY NOTE',
     contentHtml,
     footerHtml,
     size: 'max-w-2xl',
@@ -638,7 +638,7 @@ export function openCreateGDNModal(order, onSaved) {
           const qty = Number(qtyInput?.value) || 0;
           if (qty > 0) {
             if (qty > maxRem) {
-              toast.show(`Quantity cannot exceed remaining ${maxRem}.`, 'error');
+              toast.show(`Quantity cannot exceed pending ${maxRem}.`, 'error');
               hasError = true;
               return;
             }
@@ -667,7 +667,7 @@ export function openCreateGDNModal(order, onSaved) {
             lines,
             notes
           });
-          toast.show(`Gatepass Outward ${gp.gatepassNumber} created successfully!`, 'success');
+          toast.show(`Delivery Note ${gp.gatepassNumber} created successfully! Stock Issue will occur upon approval.`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {
@@ -677,6 +677,8 @@ export function openCreateGDNModal(order, onSaved) {
     }
   });
 }
+
+export const openCreateGDNModal = openCreateDeliveryNoteModal;
 
 export function printSalesOrderVoucher(order) {
   const parties = salesService.getParties(true);
@@ -742,8 +744,8 @@ export function printSalesOrderVoucher(order) {
         <div class="card">
           <div class="card-label">Order Fulfillment Status</div>
           <div>Status: <strong>${order.status}</strong></div>
-          <div>Linked Dispatches: <strong>${linkedGDNs.length} GDN(s)</strong></div>
-          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Note: Stock is deducted upon individual Gatepass Outward approval.</div>
+          <div>Linked Deliveries: <strong>${linkedGDNs.length} Delivery Note(s)</strong></div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Note: Stock is deducted upon individual Delivery Note approval (Stock Issue).</div>
         </div>
       </div>
 
@@ -754,7 +756,7 @@ export function printSalesOrderVoucher(order) {
             <th>Item Description</th>
             <th class="text-center">Ordered Qty</th>
             <th class="text-center">Delivered Qty</th>
-            <th class="text-center">Remaining</th>
+            <th class="text-center">Pending Qty</th>
             <th class="text-right">Unit Rate</th>
             <th class="text-right">Total Amount</th>
           </tr>
@@ -918,7 +920,7 @@ function openCreateOrderModal(onSaved) {
             <span class="text-slate-500">Total Contract Value:</span>
             <span id="so-total-calc" class="text-xl font-black text-[#138FCB] font-mono">Rs. 0</span>
           </div>
-          <p class="text-[10px] text-slate-400 italic">Does NOT reduce physical stock until GDN / Gatepass Outward is issued and approved.</p>
+          <p class="text-[10px] text-slate-400 italic">Does NOT reduce physical stock until a Delivery Note is approved (Stock Issue).</p>
         </section>
       </div>
     </form>

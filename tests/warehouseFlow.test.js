@@ -221,6 +221,47 @@ async function runTests() {
   console.log('');
 
   // -------------------------------------------------------------
+  // TEST 4: Terminology & Movement Ledger Alignment (Order -> Movement -> Stock)
+  // -------------------------------------------------------------
+  console.log('Test 4: Terminology Alignment & Ledger References');
+  // Pending line aliases
+  const pendingDelLines = salesService.getPendingDeliveryLines(so.id);
+  assert(Array.isArray(pendingDelLines), 'getPendingDeliveryLines returns array');
+  assert(pendingDelLines[0].pendingQty === 30, 'Sales Order line has pendingQty = 30');
+
+  const pendingInwLines = inwardOrderService.getPendingExpectedLines(sio.id);
+  assert(Array.isArray(pendingInwLines), 'getPendingExpectedLines returns array');
+  assert(pendingInwLines[0].pendingQty === 60, 'Inward Order line has pendingQty = 60');
+
+  // Test Delivery Note & GRN Aliases
+  const dnTest = gatepassService.createDeliveryNoteFromSalesOrder(so.id, {
+    warehouseId: 'wh-1',
+    lines: [{ variantId: testVariantId, warehouseQty: 10, officeQty: 0, quantity: 10, unit: 'PCS' }],
+    vehicleNumber: 'DN-TRK-1'
+  });
+  assert(dnTest && dnTest.id, `createDeliveryNoteFromSalesOrder created: ${dnTest.gatepassNumber}`);
+
+  gatepassService.approveDeliveryNote(dnTest.id, 'user-wh-mgr');
+  const movements = inventoryService.getMovements();
+  const dnMvt = movements.find(m => m.referenceDocId === dnTest.id && m.movementType === 'delivery');
+  assert(dnMvt && dnMvt.referenceDocType === 'delivery_note', 'Delivery Note creates stock issue movement with referenceDocType delivery_note');
+  assert(dnMvt.notes.includes('Stock Issue approved for Delivery Note'), 'Delivery Note movement notes state Stock Issue approved');
+
+  const grnTest = gatepassService.createGoodsReceiptNoteFromInwardOrder(sio.id, {
+    warehouseId: 'wh-1',
+    lines: [{ variantId: testVariantInId, warehouseQty: 15, officeQty: 0, quantity: 15, unit: 'PCS' }],
+    vehicleNumber: 'GRN-TRK-1'
+  });
+  assert(grnTest && grnTest.id, `createGoodsReceiptNoteFromInwardOrder created: ${grnTest.gatepassNumber}`);
+
+  gatepassService.approveGoodsReceiptNote(grnTest.id, 'user-wh-mgr');
+  const updatedMovements = inventoryService.getMovements();
+  const grnMvt = updatedMovements.find(m => m.referenceDocId === grnTest.id && m.movementType === 'receipt');
+  assert(grnMvt && grnMvt.referenceDocType === 'goods_receipt_note', 'GRN creates stock receipt movement with referenceDocType goods_receipt_note');
+  assert(grnMvt.notes.includes('Stock Receipt verified for Goods Receipt Note'), 'GRN movement notes state Stock Receipt verified');
+  console.log('');
+
+  // -------------------------------------------------------------
   // SUMMARY
   // -------------------------------------------------------------
   console.log(`========================================`);

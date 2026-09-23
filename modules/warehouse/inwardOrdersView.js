@@ -26,7 +26,7 @@ export function renderInwardOrdersView() {
   const whMap = new Map(warehouses.map(w => [w.id, w.name]));
 
   const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search inward orders by SIO #, supplier/party, ref...',
+    searchPlaceholder: 'Search inward orders by IO #, supplier/party, ref...',
     dropdowns: [
       {
         id: 'sio-status-filter',
@@ -42,7 +42,7 @@ export function renderInwardOrdersView() {
         ]
       }
     ],
-    primaryAction: { label: '+ New Stock Inward Order' }
+    primaryAction: { label: '+ New Inward Order' }
   });
 
   const columns = [
@@ -72,7 +72,7 @@ export function renderInwardOrdersView() {
     },
     {
       key: 'receiptProgress',
-      label: 'Receipt Progress (GRNs)',
+      label: 'Receipt Progress (Expected vs Received)',
       render: row => {
         let totalExp = 0;
         let totalRec = 0;
@@ -88,7 +88,7 @@ export function renderInwardOrdersView() {
               <span class="text-emerald-700">${totalRec} rec</span>
               <span class="text-slate-400 font-normal">/</span>
               <span class="text-slate-800">${totalExp} exp</span>
-              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} left)</span>` : ''}
+              ${remaining > 0 ? `<span class="text-blue-600 text-[10px]">(${remaining} pending)</span>` : ''}
             </div>
             <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
               <div class="h-full ${pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-blue-500' : 'bg-slate-300'}" style="width: ${pct}%"></div>
@@ -129,7 +129,7 @@ export function renderInwardOrdersView() {
     columns,
     data: orders,
     actions,
-    emptyMessage: 'No stock inward orders registered yet.'
+    emptyMessage: 'No inward orders registered yet.'
   });
 
   return `
@@ -323,9 +323,9 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
             <thead class="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
               <tr>
                 <th class="py-2.5 px-3">Item Variant</th>
-                <th class="py-2.5 px-3 text-center">Expected Qty</th>
-                <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Received Qty</th>
-                <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Remaining Expected</th>
+                <th class="py-2.5 px-3 text-center">Expected</th>
+                <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Received</th>
+                <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
                 <th class="py-2.5 px-3">Notes</th>
               </tr>
             </thead>
@@ -349,19 +349,19 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
         </div>
       </section>
 
-      <!-- SECTION 3: Linked Receipts (Gatepass Inward / GRNs) -->
+      <!-- SECTION 3: Linked Receipts (Goods Receipt Notes / GRNs) -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>📋</span>
-            <span>3. Linked Gatepass Inward Receipts (${linkedGRNs.length})</span>
+            <span>3. Linked Goods Receipt Notes (GRNs) (${linkedGRNs.length})</span>
           </h3>
-          <span class="text-[10px] text-slate-400 font-semibold">Physical stock added upon GRN approval</span>
+          <span class="text-[10px] text-slate-400 font-semibold">Physical stock added upon GRN approval (Stock Receipt)</span>
         </div>
 
         ${linkedGRNs.length === 0 ? `
           <div class="p-4 bg-slate-50/60 rounded-xl text-center text-slate-400">
-            No inward receipts recorded against this order yet.
+            No Goods Receipt Notes (GRNs) recorded against this order yet.
           </div>
         ` : `
           <div class="border border-slate-200/80 rounded-xl overflow-hidden">
@@ -429,7 +429,7 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
         </button>
         ${!isCancelled && remainingLines.length > 0 ? `
           <button id="sio-create-grn-btn" type="button" class="inline-flex items-center space-x-2 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all cursor-pointer">
-            <span>📥 Create GRN / Inward</span>
+            <span>📥 Create Goods Receipt Note (GRN)</span>
           </button>
         ` : ''}
       </div>
@@ -437,7 +437,7 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
   `;
 
   openModal({
-    title: `Stock Inward Order: ${order.orderNumber}`,
+    title: `Inward Order: ${order.orderNumber}`,
     subtitle: 'Expected incoming stock demand, receipt progress, and linked GRNs',
     badge: order.orderNumber,
     contentHtml,
@@ -466,14 +466,14 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
       if (voidBtn) {
         voidBtn.onclick = () => {
           confirmAction({
-            title: `Cancel Stock Inward Order: ${order.orderNumber}`,
-            message: 'Are you sure you want to cancel this Stock Inward Order? Pending expected items will no longer be available for receipt.',
+            title: `Cancel Inward Order: ${order.orderNumber}`,
+            message: 'Are you sure you want to cancel this Inward Order? Pending expected items will no longer be available for receipt.',
             confirmLabel: 'Yes, Cancel Order',
             isDestructive: true,
             onConfirm: () => {
               try {
                 inwardOrderService.cancelInwardOrder(order.id);
-                toast.show(`Stock Inward Order ${order.orderNumber} cancelled.`, 'success');
+                toast.show(`Inward Order ${order.orderNumber} cancelled.`, 'success');
                 closeModal();
                 if (refreshCallback) refreshCallback();
               } catch (err) {
@@ -490,7 +490,7 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
 export function openCreateGRNModal(order, onSaved) {
   const remainingLines = inwardOrderService.getRemainingExpectedLines(order.id);
   if (remainingLines.length === 0) {
-    toast.show('This Stock Inward Order has already been fully received.', 'warning');
+    toast.show('This Inward Order has already been fully received.', 'warning');
     return;
   }
   const variants = productService.getVariants();
@@ -501,7 +501,7 @@ export function openCreateGRNModal(order, onSaved) {
     <form id="create-grn-form" class="space-y-4 text-xs">
       <div class="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200/80 flex justify-between items-center">
         <div>
-          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Originating Inward Demand</span>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Originating Inward Order</span>
           <h4 class="text-sm font-extrabold text-slate-800 font-mono">${order.orderNumber}</h4>
           <span class="text-[11px] text-slate-500 font-medium">Party: <strong>${order.partyName || 'Supplier'}</strong></span>
         </div>
@@ -535,7 +535,7 @@ export function openCreateGRNModal(order, onSaved) {
               <th class="py-2.5 px-3">Item Variant</th>
               <th class="py-2.5 px-3 text-center">Expected</th>
               <th class="py-2.5 px-3 text-center text-emerald-700 font-bold">Received</th>
-              <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Remaining</th>
+              <th class="py-2.5 px-3 text-center text-blue-600 font-bold">Pending</th>
               <th class="py-2.5 px-3 text-center w-32 text-emerald-800 font-bold">Receive Now</th>
             </tr>
           </thead>
@@ -571,21 +571,21 @@ export function openCreateGRNModal(order, onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Inward stock is added only after gatepass approval</span>
+      <span>🛡️ Inward stock is added only after Goods Receipt Note (GRN) approval (Stock Receipt)</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="grn-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
         Cancel
       </button>
       <button id="grn-submit-btn" type="button" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>📥 Issue Gatepass Inward (GRN)</span>
+        <span>📥 Issue Goods Receipt Note (GRN)</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: `Create Gatepass Inward (GRN): ${order.orderNumber}`,
-    subtitle: 'Receive physical stock against pending expected stock inward requirements',
+    title: `Create Goods Receipt Note (GRN): ${order.orderNumber}`,
+    subtitle: 'Receive physical stock against pending expected inward requirements',
     badge: 'GRN-NEW',
     contentHtml,
     footerHtml,
@@ -629,7 +629,7 @@ export function openCreateGRNModal(order, onSaved) {
             lines,
             notes
           });
-          toast.show(`Gatepass Inward ${gp.gatepassNumber} created successfully!`, 'success');
+          toast.show(`Goods Receipt Note ${gp.gatepassNumber} created successfully!`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {
@@ -657,7 +657,7 @@ export function printInwardOrderVoucher(order) {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Stock Inward Order - ${order.orderNumber}</title>
+      <title>Inward Order - ${order.orderNumber}</title>
       <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; color: #1e293b; font-size: 13px; line-height: 1.5; }
         .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 20px; }
@@ -688,7 +688,7 @@ export function printInwardOrderVoucher(order) {
           <div style="font-size: 11px; color: #475569; margin-top: 4px;">Plot 45-B Industrial Area, Multan Road, Lahore • Tel: +92 300 1234567</div>
         </div>
         <div style="text-align: right;">
-          <div style="font-size: 20px; font-weight: 900; color: #059669;">STOCK INWARD ORDER</div>
+          <div style="font-size: 20px; font-weight: 900; color: #059669;">INWARD ORDER</div>
           <div style="font-size: 13px; font-weight: 800; font-family: monospace;">${order.orderNumber}</div>
           <div style="font-size: 11px; color: #64748b;">Date: ${order.date || 'Today'}</div>
         </div>
@@ -704,8 +704,8 @@ export function printInwardOrderVoucher(order) {
         <div class="card">
           <div class="card-label">Receipt Status</div>
           <div>Status: <strong>${order.status}</strong></div>
-          <div>Linked GRNs: <strong>${linkedGRNs.length} Inward Gatepass(es)</strong></div>
-          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Note: Stock is incremented upon physical Gatepass Inward verification.</div>
+          <div>Linked GRNs: <strong>${linkedGRNs.length} Goods Receipt Note(s)</strong></div>
+          <div style="font-size: 11px; color: #64748b; margin-top: 4px;">* Note: Physical stock is received upon Goods Receipt Note (GRN) approval (Stock Receipt).</div>
         </div>
       </div>
 
@@ -714,9 +714,9 @@ export function printInwardOrderVoucher(order) {
           <tr>
             <th>#</th>
             <th>Item Description</th>
-            <th class="text-center">Expected Qty</th>
-            <th class="text-center">Received Qty</th>
-            <th class="text-center">Remaining</th>
+            <th class="text-center">Expected</th>
+            <th class="text-center">Received</th>
+            <th class="text-center">Pending</th>
             <th>Item Notes / Specifications</th>
           </tr>
         </thead>
@@ -868,15 +868,15 @@ function openCreateInwardOrderModal(onSaved) {
         Cancel
       </button>
       <button type="submit" form="create-sio-form" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span>Save Stock Inward Order</span>
+        <span>Save Inward Order</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: 'New Stock Inward Order',
+    title: 'New Inward Order',
     subtitle: 'Register expected inbound goods demand for warehouse verification and putaway',
-    badge: 'SIO-NEW',
+    badge: 'IO-NEW',
     contentHtml,
     footerHtml,
     size: 'max-w-4xl',
@@ -959,7 +959,7 @@ function openCreateInwardOrderModal(onSaved) {
               notes,
               lines
             });
-            toast.show(`Stock Inward Order ${sio.orderNumber} created!`, 'success');
+            toast.show(`Inward Order ${sio.orderNumber} created!`, 'success');
             closeModal();
             if (onSaved) onSaved();
           } catch (err) {

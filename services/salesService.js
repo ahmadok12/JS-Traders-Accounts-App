@@ -180,10 +180,15 @@ class SalesService {
         const remaining = Math.max(0, ord - del);
         return {
           ...line,
-          remainingDeliveryQty: remaining
+          remainingDeliveryQty: remaining,
+          pendingQty: remaining
         };
       })
       .filter(l => l.remainingDeliveryQty > 0);
+  }
+
+  getPendingDeliveryLines(salesOrderId) {
+    return this.getRemainingDeliveryLines(salesOrderId);
   }
 
   // Called when a GDN / Gatepass Outward is posted/approved

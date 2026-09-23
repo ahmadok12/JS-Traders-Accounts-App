@@ -518,7 +518,7 @@ class GatepassService {
             quantity: Math.abs(qty),
             unitRate: Number(line.negotiatedRate || v.costPrice || 0),
             unit: line.unit || v.unit || 'PCS',
-            notes: `GRN Inward ${gp.gatepassNumber}`
+            notes: `Stock Receipt for GRN ${gp.gatepassNumber}`
           });
         }
       }
@@ -526,11 +526,11 @@ class GatepassService {
       if (inwardLines.length > 0) {
         inventoryService.postStockMovement({
           movementType: 'receipt',
-          referenceDocType: 'gatepass_inward',
+          referenceDocType: 'goods_receipt_note',
           referenceDocId: gp.id,
           warehouseId: targetWarehouse,
           lines: inwardLines,
-          notes: `Stock Inward verified for ${gp.gatepassNumber}`,
+          notes: `Stock Receipt verified for Goods Receipt Note ${gp.gatepassNumber}`,
           userId: approvedByUserId
         });
       }
@@ -607,7 +607,7 @@ class GatepassService {
             quantity: -Math.abs(line.warehouseQty),
             unitRate: line.negotiatedRate || 0,
             unit: line.unit,
-            notes: `Gatepass Outward ${gp.gatepassNumber} (Warehouse)`
+            notes: `Stock Issue for Delivery Note ${gp.gatepassNumber} (Warehouse)`
           });
         }
         if (line.officeQty > 0) {
@@ -616,7 +616,7 @@ class GatepassService {
             quantity: -Math.abs(line.officeQty),
             unitRate: line.negotiatedRate || 0,
             unit: line.unit,
-            notes: `Gatepass Outward ${gp.gatepassNumber} (Office)`
+            notes: `Stock Issue for Delivery Note ${gp.gatepassNumber} (Office)`
           });
         }
       }
@@ -626,11 +626,11 @@ class GatepassService {
     if (warehouseLines.length > 0) {
       inventoryService.postStockMovement({
         movementType: 'delivery',
-        referenceDocType: 'gatepass',
+        referenceDocType: 'delivery_note',
         referenceDocId: gp.id,
         warehouseId: 'wh-1',
         lines: warehouseLines,
-        notes: `Outward dispatch approved for ${gp.gatepassNumber}`,
+        notes: `Stock Issue approved for Delivery Note ${gp.gatepassNumber}`,
         userId: approvedByUserId
       });
     }
@@ -639,11 +639,11 @@ class GatepassService {
     if (officeLines.length > 0) {
       inventoryService.postStockMovement({
         movementType: 'delivery',
-        referenceDocType: 'gatepass',
+        referenceDocType: 'delivery_note',
         referenceDocId: gp.id,
         warehouseId: 'wh-2',
         lines: officeLines,
-        notes: `Office stock dispatch approved for ${gp.gatepassNumber}`,
+        notes: `Stock Issue (Office) approved for Delivery Note ${gp.gatepassNumber}`,
         userId: approvedByUserId
       });
     }
@@ -860,6 +860,39 @@ class GatepassService {
       status: newStatus,
       updatedAt: new Date().toISOString()
     });
+  }
+
+  // --- Clear & Consistent Document Aliases ---
+  getDeliveryNotes() {
+    return this.getOutwardGatepasses();
+  }
+
+  getGoodsReceiptNotes() {
+    return this.getInwardGatepasses();
+  }
+
+  createDeliveryNoteFromSalesOrder(salesOrderId, data) {
+    return this.createGDNFromSalesOrder(salesOrderId, data);
+  }
+
+  createGoodsReceiptNoteFromInwardOrder(inwardOrderId, data) {
+    return this.createGRNFromInwardOrder(inwardOrderId, data);
+  }
+
+  approveDeliveryNote(id, userId) {
+    return this.approveGatepass(id, userId);
+  }
+
+  voidDeliveryNote(id, userId) {
+    return this.voidGatepass(id, userId);
+  }
+
+  approveGoodsReceiptNote(id, userId) {
+    return this.approveGatepass(id, userId);
+  }
+
+  voidGoodsReceiptNote(id, userId) {
+    return this.voidGatepass(id, userId);
   }
 }
 
