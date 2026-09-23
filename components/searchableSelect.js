@@ -98,12 +98,12 @@ export function renderProductVariantPicker({
         </div>
       </div>
 
-      <!-- Tier 2: Variant Selector (Visible if variants exist) -->
-      <div class="pv-variant-section ${prodVariants.length > 0 ? '' : 'hidden'}">
+      <!-- Tier 2: Variant Selector (Visible ONLY if product has 2 or more variants) -->
+      <div class="pv-variant-section ${prodVariants.length > 1 ? '' : 'hidden'}">
         <div class="flex items-center gap-1.5 mb-1">
           <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Variant / SKU:</span>
           <span class="pv-var-count-badge text-[10px] font-semibold text-[#138FCB] bg-blue-50 px-1.5 py-0.2 rounded">
-            ${prodVariants.length > 1 ? `${prodVariants.length} options` : 'Single Standard SKU'}
+            ${prodVariants.length > 1 ? `${prodVariants.length} options` : ''}
           </span>
         </div>
 
@@ -210,7 +210,7 @@ export function bindProductVariantPicker(container, { products, variants, onVari
       if (prodVariants.length > 1) {
         countBadge.textContent = `${prodVariants.length} options`;
       } else {
-        countBadge.textContent = 'Single Standard SKU';
+        countBadge.textContent = '';
       }
     }
 
@@ -219,7 +219,7 @@ export function bindProductVariantPicker(container, { products, variants, onVari
     }
 
     if (varSection) {
-      varSection.classList.toggle('hidden', prodVariants.length === 0);
+      varSection.classList.toggle('hidden', prodVariants.length <= 1);
     }
   };
 
