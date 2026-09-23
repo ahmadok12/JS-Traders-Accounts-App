@@ -37,6 +37,7 @@ import { renderSalespersonPortalView, bindSalespersonPortalEvents } from '../../
 import { renderInvoicesView, bindInvoicesEvents } from '../../modules/sales/invoicesView.js';
 
 import { renderImportShipmentsView, bindImportShipmentsEvents } from '../../modules/purchasing/importShipmentsView.js';
+import { renderLandedCostView, bindLandedCostEvents } from '../../modules/purchasing/landedCostView.js';
 import { renderPurchaseBillsView, bindPurchaseBillsEvents } from '../../modules/purchasing/purchaseBillsView.js';
 import { renderSuppliersView, bindSuppliersEvents } from '../../modules/purchasing/suppliersView.js';
 
@@ -234,6 +235,11 @@ class AppController {
         html = renderImportShipmentsView();
         bindFn = bindImportShipmentsEvents;
         breadcrumbs = ['Purchasing', 'Import Shipments'];
+        break;
+      case 'purchasing-landed-cost':
+        html = renderLandedCostView();
+        bindFn = bindLandedCostEvents;
+        breadcrumbs = ['Purchasing', 'Landed Cost Engine'];
         break;
       case 'purchasing-bills':
         html = renderPurchaseBillsView();

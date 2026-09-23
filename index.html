@@ -69,188 +69,198 @@
         </div>
 
         <!-- Navigation Menus -->
-        <nav class="space-y-4 text-xs font-medium">
+        <!-- Navigation Menus -->
+        <nav class="space-y-3.5 text-xs font-medium">
 
-          <!-- 1. Overview -->
+          <!-- 1. Executive Overview -->
           <div class="space-y-1">
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Overview</span>
-            <a class="nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all cursor-pointer font-bold text-[#138FCB] bg-blue-50/80" data-route="dashboard" href="#">
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Executive</span>
+            <a class="nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all cursor-pointer font-bold text-[#138FCB] bg-blue-50/80" data-route="dashboard" href="#/dashboard">
               <svg class="w-4 h-4 text-[#138FCB]" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path>
               </svg>
-              <span>Dashboard</span>
+              <span>Dashboard & KPIs</span>
             </a>
           </div>
 
-          <!-- 2. Operations (Gatepass & Delivery) -->
+          <!-- 2. Accounting & Finance (Top-Level) -->
           <div class="space-y-1">
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Operations</span>
-            <a class="nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-gatepasses" href="#">
-              <span>🚚</span>
-              <span class="font-semibold">Gatepass</span>
-            </a>
-            <a class="nav-link flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-deliveries" href="#">
-              <span>📦</span>
-              <span class="font-semibold">Delivery</span>
-            </a>
+            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-accounting">
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-slate-700">
+                <span>📊</span>
+                <span>Accounting & Banking</span>
+              </span>
+              <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </button>
+            <div id="submenu-accounting" class="space-y-1 pl-2">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="accounting-coa" href="#/accounting-coa">
+                <span>📊 Chart of Accounts</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="accounting-journal" href="#/accounting-journal">
+                <span>📑 Journal Entries</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="accounting-banking" href="#/accounting-banking">
+                <span>🏦 Banking & Match</span>
+              </a>
+            </div>
           </div>
 
-          <!-- 3. Inventory -->
+          <!-- 3. Sales & Commercial (Top-Level) -->
+          <div class="space-y-1">
+            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-sales">
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-slate-700">
+                <span>💼</span>
+                <span>Sales & Customers</span>
+              </span>
+              <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </button>
+            <div id="submenu-sales" class="space-y-1 pl-2">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="sales-orders" href="#/sales-orders">
+                <span>📝 Sales Orders</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="sales-invoices" href="#/sales-invoices">
+                <span>🧾 Sales Invoices</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="sales-customers" href="#/sales-customers">
+                <span>👥 Customers & Farms</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="salesperson-portal" href="#/salesperson-portal">
+                <span>🏷 Salesperson Rates</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- 4. Purchasing, Imports & Shipping (Top-Level) -->
+          <div class="space-y-1">
+            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-purchasing">
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-slate-700">
+                <span>🚢</span>
+                <span>Purchasing & Shipping</span>
+              </span>
+              <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </button>
+            <div id="submenu-purchasing" class="space-y-1 pl-2">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-shipments" href="#/purchasing-shipments">
+                <span>🚢 Import Shipments & Containers</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-landed-cost" href="#/purchasing-landed-cost">
+                <span>⚖ Landed Cost Engine</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-bills" href="#/purchasing-bills">
+                <span>📄 Purchase Bills & AP</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-suppliers" href="#/purchasing-suppliers">
+                <span>🏭 Suppliers</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- 5. Operations & Dispatch -->
+          <div class="space-y-1">
+            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-operations">
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-slate-700">
+                <span>🚚</span>
+                <span>Operations & Dispatch</span>
+              </span>
+              <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+              </svg>
+            </button>
+            <div id="submenu-operations" class="space-y-1 pl-2">
+              <a class="nav-link flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-gatepasses" href="#/warehouse-gatepasses">
+                <span>🚚 Gatepasses & Outward</span>
+              </a>
+              <a class="nav-link flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-deliveries" href="#/warehouse-deliveries">
+                <span>📦 Delivery Tracking</span>
+              </a>
+              <a class="nav-link flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-staff" href="#/warehouse-staff">
+                <span>👥 Floor Staff Access</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- 6. Inventory & Warehouses -->
           <div class="space-y-1">
             <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-inventory">
-              <span class="uppercase tracking-wider">Inventory</span>
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-slate-700">
+                <span>📦</span>
+                <span>Inventory & Warehouses</span>
+              </span>
               <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
               </svg>
             </button>
             <div id="submenu-inventory" class="space-y-1 pl-2">
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-categories" href="#">
-                <span>📁 Categories</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-products" href="#">
-                <span>🏷 Products Master</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-variants" href="#">
-                <span>🧩 Variants / SKUs</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-stock" href="#">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-stock" href="#/inventory-stock">
                 <span>📦 Stock Balances</span>
               </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-movements" href="#">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-products" href="#/inventory-products">
+                <span>🏷 Products Master</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-variants" href="#/inventory-variants">
+                <span>🧩 Variants / SKUs</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-categories" href="#/inventory-categories">
+                <span>📁 Categories</span>
+              </a>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-movements" href="#/inventory-movements">
                 <span>📜 Stock Movements</span>
               </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-adjustments" href="#">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-adjustments" href="#/inventory-adjustments">
                 <span>⚖ Stock Adjustments</span>
               </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-rolls" href="#">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-rolls" href="#/inventory-rolls">
                 <span>📏 Roll / Cut-to-Length</span>
               </a>
-            </div>
-          </div>
-
-          <!-- 4. Assembly & Disassembly -->
-          <div class="space-y-1">
-            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-assembly">
-              <span class="uppercase tracking-wider">Assembly & Disassembly</span>
-              <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
-            </button>
-            <div id="submenu-assembly" class="space-y-1 pl-2">
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-assembly" href="#">
-                <span>⚙ Assembly</span>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-assembly" href="#/inventory-assembly">
+                <span>⚙ Assembly & Production</span>
               </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="inventory-disassembly" href="#">
-                <span>🔄 Disassembly</span>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-warehouses" href="#/warehouse-warehouses">
+                <span>🏢 Facilities & Locations</span>
               </a>
             </div>
           </div>
 
-          <!-- 5. Warehouses -->
-          <div class="space-y-1">
-            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-warehouse">
-              <span class="uppercase tracking-wider">Warehouses</span>
-              <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
-            </button>
-            <div id="submenu-warehouse" class="space-y-1 pl-2">
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-warehouses" href="#">
-                <span>🏢 Warehouses</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-locations" href="#">
-                <span>📍 Locations</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-stock-by-wh" href="#">
-                <span>📊 Stock by Warehouse</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="warehouse-staff" href="#">
-                <span>👥 Staff & Mobile Access</span>
-              </a>
-            </div>
-          </div>
-
-          <!-- 6. Reports -->
+          <!-- 7. Financial & Stock Reports -->
           <div class="space-y-1">
             <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-neutralText tracking-tight px-3 py-1 hover:text-slate-900 cursor-pointer" data-target="submenu-reports">
-              <span class="uppercase tracking-wider">Reports</span>
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-slate-700">
+                <span>📈</span>
+                <span>Reports & Analytics</span>
+              </span>
               <svg class="w-3.5 h-3.5 text-gray-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
               </svg>
             </button>
             <div id="submenu-reports" class="space-y-1 pl-2">
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="reports-standard" href="#">
-                <span>📈 Standard Reports</span>
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="reports-standard" href="#/reports-standard">
+                <span>📈 Standard P&L & Aging</span>
               </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="reports-builder" href="#">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="reports-builder" href="#/reports-builder">
                 <span>🛠 Report Builder</span>
               </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="invoice-templates" href="#">
+              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="invoice-templates" href="#/invoice-templates">
                 <span>🎨 Invoice Templates</span>
               </a>
             </div>
           </div>
 
-          <!-- 7. Configuration / Settings -->
+          <!-- 8. Configuration / Settings -->
           <div class="space-y-1 pt-1">
             <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 block mb-1">Configuration</span>
-            <a class="nav-link flex items-center gap-2 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="settings" href="#">
+            <a class="nav-link flex items-center gap-2 px-3 py-2 rounded-xl text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="settings" href="#/settings">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
                 <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
               </svg>
               <span>System Settings</span>
             </a>
-          </div>
-
-          <!-- 8. Link / Switcher to Main ERP Views (Integrated) -->
-          <div class="space-y-1 pt-2 border-t border-slate-100">
-            <button class="nav-group-toggle w-full flex items-center justify-between text-[11px] font-bold text-slate-500 tracking-tight px-3 py-1.5 rounded-lg hover:bg-slate-100/60 cursor-pointer" data-target="submenu-erp">
-              <span class="flex items-center gap-1.5 text-xs text-[#138FCB] font-bold">
-                <span>🌐</span>
-                <span>Main ERP Modules</span>
-              </span>
-              <svg class="w-3.5 h-3.5 text-slate-400 toggle-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-              </svg>
-            </button>
-            <div id="submenu-erp" class="space-y-1 pl-2 hidden">
-              <div class="text-[10px] font-bold uppercase text-slate-400 px-3 pt-1">Sales & Customers</div>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="sales-customers" href="#">
-                <span>👥 Customers & Farms</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="sales-orders" href="#">
-                <span>📝 Sales Orders</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="salesperson-portal" href="#">
-                <span>💼 Salesperson Rates</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="sales-invoices" href="#">
-                <span>🧾 Sales Invoices</span>
-              </a>
-
-              <div class="text-[10px] font-bold uppercase text-slate-400 px-3 pt-2">Purchasing & Imports</div>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-shipments" href="#">
-                <span>🚢 Import Shipments</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-bills" href="#">
-                <span>📄 Purchase Bills</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="purchasing-suppliers" href="#">
-                <span>🏭 Suppliers</span>
-              </a>
-
-              <div class="text-[10px] font-bold uppercase text-slate-400 px-3 pt-2">Accounting</div>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="accounting-coa" href="#">
-                <span>📊 Chart of Accounts</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="accounting-journal" href="#">
-                <span>📑 Journal Entries</span>
-              </a>
-              <a class="nav-link flex items-center gap-2 px-3 py-1.5 rounded-lg text-neutralText hover:text-headingText hover:bg-gray-100/70 transition-colors cursor-pointer" data-route="accounting-banking" href="#">
-                <span>🏦 Banking & Match</span>
-              </a>
-            </div>
           </div>
 
         </nav>
