@@ -161,21 +161,6 @@ function notifyPollClients() {
   }
 }
 
-const server = http.createServer((req, res) => {
-  // Global CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  const pathname = parsedUrl.pathname;
-
 const TRACKTAINER_API_KEY = process.env.TRACKTAINER_API_KEY || 'ca0853e15f63f20e1f02bc87166ed103bdeab9db';
 const TRACKTAINER_BASE_URL = 'https://api.tracktainer.com/v1';
 
@@ -300,6 +285,21 @@ setTimeout(() => {
     }
   });
 }, 2000);
+
+const server = http.createServer((req, res) => {
+  // Global CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = parsedUrl.pathname;
 
   // -------------------------------------------------------------
   // API ROUTE: Health check
