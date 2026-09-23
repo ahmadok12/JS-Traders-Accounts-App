@@ -401,7 +401,7 @@ function openCreateInvoiceModal(onSaved) {
           `;
 
           // Live stock preview
-          const summary = cutToLengthService.getSummary(product.id, 'wh-1');
+          const summary = cutToLengthService.getSummary(product.id, 'wh-1', varSelect.value);
           if (summary) {
             const rollsText = summary.rollsBySize.map(r => `<strong>${r.count}</strong> ${r.packagingName}`).join(' + ') || `${summary.fullRollsCount} Full Rolls`;
             ctlStockPill.innerHTML = `📦 <strong>Stock:</strong> ${rollsText} + <strong>${summary.loosePiecesFootage.toLocaleString()} ${summary.baseUnit}</strong> Loose (${summary.loosePiecesCount} pcs) • Total: <strong>${summary.totalFootage.toLocaleString()} ${summary.baseUnit}</strong>`;
@@ -493,6 +493,7 @@ function openCreateInvoiceModal(onSaved) {
           // Evaluate allocation
           const plan = cutToLengthService.planAllocation({
             productId: product.id,
+            variantId,
             warehouseId: 'wh-1',
             requestedQty: quantity,
             unit: chosenUnit,
@@ -507,6 +508,7 @@ function openCreateInvoiceModal(onSaved) {
               if (chosenAction === 'open_roll') {
                 const openPlan = cutToLengthService.planAllocation({
                   productId: product.id,
+                  variantId,
                   warehouseId: 'wh-1',
                   requestedQty: quantity,
                   unit: chosenUnit,
@@ -516,6 +518,7 @@ function openCreateInvoiceModal(onSaved) {
               } else if (chosenAction === 'multi_piece') {
                 const multiPlan = cutToLengthService.planAllocation({
                   productId: product.id,
+                  variantId,
                   warehouseId: 'wh-1',
                   requestedQty: quantity,
                   unit: chosenUnit,

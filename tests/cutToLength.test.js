@@ -266,18 +266,80 @@ async function runTests() {
   console.log('');
 
   // --------------------------------------------------------------------------
-  console.log('TEST 8: Auger 45mm Multi-Unit Verification (400 ft & 450 ft)');
+  console.log('TEST 8: Auger 45mm Separate Variant Inventory (400 ft & 450 ft)');
   // --------------------------------------------------------------------------
   const augerProd = productService.getProductById('prod-9');
   assert(augerProd !== undefined, 'Auger 45mm product exists');
   assertEquals(Boolean(augerProd.cut_to_length), true, 'Auger has cut_to_length = true');
-  assert(augerProd.packagingUnits.some(p => p.factor === 450), 'Has 450 ft roll packaging');
-  assert(augerProd.packagingUnits.some(p => p.factor === 400), 'Has 400 ft roll packaging');
 
-  const augerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
-  assertEquals(augerSummary.fullRollsCount, 8, 'Auger has 8 full rolls (5x 450 ft + 3x 400 ft)');
-  assertEquals(augerSummary.loosePiecesCount, 1, 'Auger has 1 loose piece (250 ft)');
-  assertEquals(augerSummary.totalFootage, 3700, 'Auger total continuous stock is 3,700 ft');
+  const augerVariants = productService.getVariantsByProduct('prod-9');
+  assertEquals(augerVariants.length, 2, 'Auger has 2 separate variants configured');
+  assert(augerVariants.some(v => v.id === 'var-9-450' && v.rollSize === 450), 'Has var-9-450 (450 ft Roll variant)');
+  assert(augerVariants.some(v => v.id === 'var-9-400' && v.rollSize === 400), 'Has var-9-400 (400 ft Roll variant)');
+
+  // Overall product summary
+  const overallSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+  assertEquals(overallSummary.fullRollsCount, 8, 'Overall Auger has 8 full rolls (5x 450 ft + 3x 400 ft)');
+  assertEquals(overallSummary.loosePiecesCount, 1, 'Overall Auger has 1 loose piece (250 ft)');
+  assertEquals(overallSummary.totalFootage, 3700, 'Overall continuous stock is 3,700 ft');
+
+  // Variant 450ft isolated summary
+  const summary450 = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-450');
+  assertEquals(summary450.fullRollsCount, 5, '450 ft variant has 5 full rolls');
+  assertEquals(summary450.loosePiecesCount, 1, '450 ft variant has 1 loose piece (250 ft)');
+  assertEquals(summary450.totalFootage, 2500, '450 ft variant total stock is 2,500 ft (5x450 + 250)');
+
+  // Variant 400ft isolated summary
+  const summary400 = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-400');
+  assertEquals(summary400.fullRollsCount, 3, '400 ft variant has 3 full rolls');
+  assertEquals(summary400.loosePiecesCount, 0, '400 ft variant has 0 loose pieces initially');
+  assertEquals(summary400.totalFootage, 1200, '400 ft variant total stock is 1,200 ft (3x400)');
+  console.log('');
+
+  // --------------------------------------------------------------------------
+  console.log('TEST 8B: Insufficient Loose Cut -> Open Roll & Keep 2 Loose Pieces');
+  console.log('(Loose piece is 250 ft; Customer requests 300 ft. Must cut 450ft roll -> leaves 2 loose pcs: 250 ft + 150 ft)');
+  // --------------------------------------------------------------------------
+  const plan300 = cutToLengthService.planAllocation({
+    productId: 'prod-9',
+    variantId: 'var-9-450',
+    warehouseId: 'wh-1',
+    requestedQty: 300,
+    unit: 'ft',
+    allowMultiPieces: false
+  });
+
+  assertEquals(plan300.canFulfill, true, 'Can fulfill 300 ft continuous cut');
+  assertEquals(plan300.type, 'OPEN_FULL_ROLL_CUT', 'Opens a full roll because existing loose piece (250 ft) < requested (300 ft)');
+  assertEquals(plan300.sourceUnit.cutLength, 300, 'Cuts exactly 300 ft from the full roll');
+  assertEquals(plan300.newLoosePiece.remainingLength, 150, 'New loose piece remainder is 150 ft (450 - 300)');
+
+  // Commit this allocation
+  cutToLengthService.commitAllocation(plan300, {
+    referenceDocType: 'salesInvoice',
+    referenceDocId: 'INV-TEST-300',
+    notes: 'Cut 300 ft for Poultry Shed line'
+  });
+
+  // Check 450ft variant summary: should now have 2 loose pieces!
+  const afterCut450 = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-450');
+  assertEquals(afterCut450.fullRollsCount, 4, '450 ft variant full rolls reduced from 5 to 4');
+  assertEquals(afterCut450.loosePiecesCount, 2, 'System successfully has 2 loose pieces now (250 ft and 150 ft)!');
+  assertEquals(afterCut450.loosePiecesFootage, 400, 'Loose footage is 400 ft (250 ft + 150 ft)');
+  assertEquals(afterCut450.totalFootage, 2200, '450 ft variant total stock is 2,200 ft (2,500 - 300)');
+
+  // Verify that 400ft variant was completely untouched
+  const afterCut400 = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-400');
+  assertEquals(afterCut400.fullRollsCount, 3, '400 ft variant full rolls untouched at 3');
+  assertEquals(afterCut400.loosePiecesCount, 0, '400 ft variant loose pieces untouched at 0');
+  assertEquals(afterCut400.totalFootage, 1200, '400 ft variant footage untouched at 1,200 ft');
+
+  // Verify stockBalances were updated accurately
+  const stockBalances = storageService.getCollection('stockBalances') || [];
+  const bal450 = stockBalances.find(b => b.warehouseId === 'wh-1' && b.variantId === 'var-9-450');
+  const bal400 = stockBalances.find(b => b.warehouseId === 'wh-1' && b.variantId === 'var-9-400');
+  assertEquals(bal450?.quantity, 2200, 'stockBalances entry for var-9-450 updated to 2,200 FT');
+  assertEquals(bal400?.quantity, 1200, 'stockBalances entry for var-9-400 intact at 1,200 FT');
   console.log('');
 
   // --------------------------------------------------------------------------
@@ -285,7 +347,7 @@ async function runTests() {
   console.log('(Verify Gatepass dispatches full rolls, cuts loose continuous ft, and notifies staff)');
   // --------------------------------------------------------------------------
   const initialWireSummary = cutToLengthService.getSummary('prod-4', 'wh-1');
-  const initialAugerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+  const initialAuger400Summary = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-400');
 
   // Create Gatepass Outward
   const gp = gatepassService.createGatepass({
@@ -305,7 +367,7 @@ async function runTests() {
         totalFeet: 5000
       },
       {
-        variantId: 'var-9', // Auger 45mm
+        variantId: 'var-9-400', // Auger 45mm 400ft variant
         warehouseQty: 600,
         officeQty: 0,
         unit: 'ft',
@@ -335,22 +397,22 @@ async function runTests() {
 
   // Verify physical stock deduction
   const afterWireSummary = cutToLengthService.getSummary('prod-4', 'wh-1');
-  const afterAugerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+  const afterAuger400Summary = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-400');
 
   assertEquals(afterWireSummary.fullRollsCount, initialWireSummary.fullRollsCount - 1, 'Full roll deducted intact (count - 1)');
   assertEquals(afterWireSummary.loosePiecesCount, initialWireSummary.loosePiecesCount, 'Loose pieces count unchanged for full roll dispatch');
   assertEquals(afterWireSummary.totalFootage, initialWireSummary.totalFootage - 5000, 'Total wire footage reduced by 5,000 ft');
 
-  assertEquals(afterAugerSummary.totalFootage, initialAugerSummary.totalFootage - 600, 'Total auger continuous footage reduced by 600 ft');
+  assertEquals(afterAuger400Summary.totalFootage, initialAuger400Summary.totalFootage - 600, 'Total auger 400ft footage reduced by 600 ft');
 
   // Void Gatepass & test rollback
   gatepassService.voidGatepass(gp.id, 'user-wh-mgr');
 
   const restoredWireSummary = cutToLengthService.getSummary('prod-4', 'wh-1');
-  const restoredAugerSummary = cutToLengthService.getSummary('prod-9', 'wh-1');
+  const restoredAuger400Summary = cutToLengthService.getSummary('prod-9', 'wh-1', 'var-9-400');
 
   assertEquals(restoredWireSummary.totalFootage, initialWireSummary.totalFootage, 'Wire footage 100% restored on gatepass void');
-  assertEquals(restoredAugerSummary.totalFootage, initialAugerSummary.totalFootage, 'Auger footage 100% restored on gatepass void');
+  assertEquals(restoredAuger400Summary.totalFootage, initialAuger400Summary.totalFootage, 'Auger 400ft footage 100% restored on gatepass void');
   console.log('');
 
   console.log('===============================================================');

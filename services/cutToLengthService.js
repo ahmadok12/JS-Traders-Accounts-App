@@ -30,10 +30,11 @@ class CutToLengthService {
   /**
    * Retrieves all physical units (Full rolls and loose pieces)
    */
-  getUnits(productId = null, warehouseId = null, includeConsumed = false) {
+  getUnits(productId = null, warehouseId = null, includeConsumed = false, variantId = null) {
     let units = storageService.getCollection(this.COLLECTION_UNITS) || [];
     if (productId) units = units.filter(u => u.productId === productId);
     if (warehouseId && warehouseId !== 'all') units = units.filter(u => u.warehouseId === warehouseId);
+    if (variantId && variantId !== 'all') units = units.filter(u => u.variantId === variantId);
     if (!includeConsumed) units = units.filter(u => u.status === 'AVAILABLE' && u.quantity > 0);
     return units;
   }
@@ -46,13 +47,13 @@ class CutToLengthService {
   }
 
   /**
-   * Comprehensive inventory summary for a Cut-to-Length product
+   * Comprehensive inventory summary for a Cut-to-Length product, optionally isolated by variantId
    */
-  getSummary(productId, warehouseId = null) {
+  getSummary(productId, warehouseId = null, variantId = null) {
     const product = productService.getProductById(productId);
     if (!product) return null;
 
-    const units = this.getUnits(productId, warehouseId, false);
+    const units = this.getUnits(productId, warehouseId, false, variantId);
     const fullRolls = units.filter(u => u.classification === 'FULL');
     const loosePieces = units.filter(u => u.classification === 'LOOSE');
 
@@ -60,7 +61,7 @@ class CutToLengthService {
     const loosePiecesFootage = loosePieces.reduce((sum, u) => sum + Number(u.quantity || 0), 0);
     const totalFootage = fullRollsFootage + loosePiecesFootage;
 
-    // Breakdown of full rolls by packaging size (e.g. 5000 ft vs 3280 ft)
+    // Breakdown of full rolls by packaging size (e.g. 5000 ft vs 3280 ft, or 450 ft vs 400 ft)
     const rollsBySize = {};
     fullRolls.forEach(r => {
       const sizeKey = `${r.initialQuantity} ${r.unit || 'ft'}`;
@@ -77,8 +78,32 @@ class CutToLengthService {
       rollsBySize[sizeKey].totalLength += Number(r.quantity || 0);
     });
 
+    // Variant breakdown if product has multiple variants (e.g. 400 ft vs 450 ft Auger)
+    const productVariants = productService.getVariantsByProduct(productId) || [];
+    const variantsBreakdown = productVariants.map(v => {
+      const vUnits = this.getUnits(productId, warehouseId, false, v.id);
+      const vFull = vUnits.filter(u => u.classification === 'FULL');
+      const vLoose = vUnits.filter(u => u.classification === 'LOOSE');
+      const vFullFootage = vFull.reduce((sum, u) => sum + Number(u.quantity || 0), 0);
+      const vLooseFootage = vLoose.reduce((sum, u) => sum + Number(u.quantity || 0), 0);
+      return {
+        variantId: v.id,
+        variantName: v.name,
+        sku: v.sku,
+        rollSize: v.rollSize || null,
+        fullRollsCount: vFull.length,
+        fullRollsFootage: vFullFootage,
+        loosePiecesCount: vLoose.length,
+        loosePiecesFootage: vLooseFootage,
+        totalFootage: vFullFootage + vLooseFootage,
+        loosePieces: vLoose,
+        fullRolls: vFull
+      };
+    });
+
     return {
       productId,
+      variantId,
       warehouseId,
       baseUnit: product.base_unit || 'ft',
       fullRollsCount: fullRolls.length,
@@ -87,6 +112,7 @@ class CutToLengthService {
       loosePiecesFootage,
       totalFootage,
       rollsBySize: Object.values(rollsBySize),
+      variantsBreakdown,
       fullRolls,
       loosePieces
     };
@@ -117,6 +143,7 @@ class CutToLengthService {
    */
   planAllocation({
     productId,
+    variantId = null,
     warehouseId = 'wh-1',
     requestedQty,
     unit = 'ft',
@@ -126,23 +153,29 @@ class CutToLengthService {
     const product = productService.getProductById(productId);
     if (!product) throw new Error('Product not found.');
 
-    const availableUnits = this.getUnits(productId, warehouseId, false);
+    const availableUnits = this.getUnits(productId, warehouseId, false, variantId);
     const packagingUnits = product.packagingUnits || [];
     const matchedPackaging = packagingUnits.find(p => p.name === unit || p.id === unit);
 
+    // If a variant is specified, look up its metadata
+    const variant = variantId ? storageService.getById('productVariants', variantId) : null;
+    if (variant && variant.rollSize && !preferredRollSize) {
+      preferredRollSize = Number(variant.rollSize);
+    }
+
     // CASE 1: SELLING COMPLETE FULL ROLL(S)
-    if (matchedPackaging) {
-      const rollSize = Number(matchedPackaging.factor);
+    if (matchedPackaging || (unit && unit.toLowerCase().includes('roll') && variant?.rollSize)) {
+      const rollSize = Number(matchedPackaging ? matchedPackaging.factor : variant.rollSize);
       const neededRolls = Math.round(Number(requestedQty));
 
       const matchingFullRolls = availableUnits.filter(
-        u => u.classification === 'FULL' && Number(u.initialQuantity) === rollSize
+        u => u.classification === 'FULL' && (Number(u.initialQuantity) === rollSize || (variantId && u.variantId === variantId))
       );
 
       if (matchingFullRolls.length < neededRolls) {
         return {
           canFulfill: false,
-          error: `Insufficient full rolls of size ${matchedPackaging.name}. Available: ${matchingFullRolls.length} rolls, Requested: ${neededRolls} rolls.`,
+          error: `Insufficient full rolls of size ${matchedPackaging?.name || (rollSize + ' ft')}. Available: ${matchingFullRolls.length} rolls, Requested: ${neededRolls} rolls.`,
           availableCount: matchingFullRolls.length,
           neededCount: neededRolls
         };
@@ -154,12 +187,14 @@ class CutToLengthService {
         canFulfill: true,
         type: 'FULL_ROLL_SALE',
         productId,
+        variantId: variantId || (allocatedRolls[0]?.variantId) || null,
         warehouseId,
-        packagingName: matchedPackaging.name,
+        packagingName: matchedPackaging?.name || `Roll (${rollSize} ${product.base_unit || 'ft'})`,
         rollSize,
         rollsToDeduct: allocatedRolls.map(r => ({
           unitId: r.id,
           code: r.code || r.id,
+          variantId: r.variantId || variantId || null,
           length: Number(r.quantity),
           classification: 'FULL'
         })),
@@ -189,12 +224,14 @@ class CutToLengthService {
         canFulfill: true,
         type: 'LOOSE_PIECE_CUT',
         productId,
+        variantId: variantId || sufficientLoosePiece.variantId || null,
         warehouseId,
         targetLength,
         baseUnit: product.base_unit || 'ft',
         sourceUnit: {
           unitId: sufficientLoosePiece.id,
           code: sufficientLoosePiece.code || sufficientLoosePiece.id,
+          variantId: sufficientLoosePiece.variantId || variantId || null,
           originalLength: currentQty,
           cutLength: targetLength,
           remainingLength: remaining,
@@ -221,12 +258,14 @@ class CutToLengthService {
         canFulfill: true,
         type: 'OPEN_FULL_ROLL_CUT',
         productId,
+        variantId: variantId || rollToOpen.variantId || null,
         warehouseId,
         targetLength,
         baseUnit: product.base_unit || 'ft',
         sourceUnit: {
           unitId: rollToOpen.id,
           code: rollToOpen.code || rollToOpen.id,
+          variantId: rollToOpen.variantId || variantId || null,
           originalLength: rollCapacity,
           cutLength: targetLength,
           packagingName: rollToOpen.packagingName,
@@ -237,7 +276,8 @@ class CutToLengthService {
           initialQuantity: rollCapacity,
           remainingLength: remaining,
           parentUnitId: rollToOpen.id,
-          unit: product.base_unit || 'ft'
+          unit: product.base_unit || 'ft',
+          variantId: rollToOpen.variantId || variantId || null
         } : null
       };
     }
@@ -277,29 +317,33 @@ class CutToLengthService {
         remainingNeeded -= cut;
       }
 
-      // If still needed, open a full roll
-      let newLooseFromRoll = null;
-      if (remainingNeeded > 0 && fullRolls.length > 0) {
-        const roll = fullRolls[0];
-        const rQty = Number(roll.quantity);
-        const cut = Math.min(remainingNeeded, rQty);
-        allocations.push({
-          unitId: roll.id,
-          code: roll.code || roll.id,
-          classification: 'FULL',
-          originalLength: rQty,
-          cutLength: cut,
-          remainingLength: 0,
-          becomesConsumed: true
-        });
-        remainingNeeded -= cut;
-        if (rQty - cut > 0) {
-          newLooseFromRoll = {
-            initialQuantity: rQty,
-            remainingLength: rQty - cut,
-            parentUnitId: roll.id,
-            unit: product.base_unit || 'ft'
-          };
+      // If still needed, open full roll(s)
+      const createdLoosePieces = [];
+      if (remainingNeeded > 0) {
+        for (const roll of fullRolls) {
+          if (remainingNeeded <= 0) break;
+          const rQty = Number(roll.quantity);
+          const cut = Math.min(remainingNeeded, rQty);
+          const remainder = rQty - cut;
+          allocations.push({
+            unitId: roll.id,
+            code: roll.code || roll.id,
+            classification: 'FULL',
+            originalLength: rQty,
+            cutLength: cut,
+            remainingLength: remainder,
+            becomesConsumed: true
+          });
+          remainingNeeded -= cut;
+          if (remainder > 0) {
+            createdLoosePieces.push({
+              initialQuantity: rQty,
+              remainingLength: remainder,
+              parentUnitId: roll.id,
+              unit: product.base_unit || 'ft',
+              variantId: roll.variantId || variantId || null
+            });
+          }
         }
       }
 
@@ -314,11 +358,13 @@ class CutToLengthService {
         canFulfill: true,
         type: 'MULTI_PIECE_ALLOCATION',
         productId,
+        variantId: variantId || null,
         warehouseId,
         targetLength,
         baseUnit: product.base_unit || 'ft',
         multiAllocations: allocations,
-        newLoosePiece: newLooseFromRoll
+        createdLoosePieces,
+        newLoosePiece: createdLoosePieces[0] || null
       };
     }
 
@@ -429,6 +475,7 @@ class CutToLengthService {
         newLooseUnit = storageService.insert(this.COLLECTION_UNITS, {
           code: looseCode,
           productId: plan.productId,
+          variantId: plan.newLoosePiece.variantId || plan.variantId || src.variantId || null,
           warehouseId: plan.warehouseId,
           classification: 'LOOSE',
           quantity: plan.newLoosePiece.remainingLength,
@@ -461,22 +508,26 @@ class CutToLengthService {
       });
       txRecords.push(tx);
     } else if (plan.type === 'MULTI_PIECE_ALLOCATION') {
-      let createdLoose = null;
-      if (plan.newLoosePiece) {
+      const createdLooseMap = new Map();
+      const looseToCreate = plan.createdLoosePieces || (plan.newLoosePiece ? [plan.newLoosePiece] : []);
+
+      for (const lp of looseToCreate) {
         const looseCode = generateLooseCode();
-        createdLoose = storageService.insert(this.COLLECTION_UNITS, {
+        const createdLoose = storageService.insert(this.COLLECTION_UNITS, {
           code: looseCode,
           productId: plan.productId,
+          variantId: lp.variantId || plan.variantId || null,
           warehouseId: plan.warehouseId,
           classification: 'LOOSE',
-          quantity: plan.newLoosePiece.remainingLength,
-          initialQuantity: plan.newLoosePiece.initialQuantity,
+          quantity: lp.remainingLength,
+          initialQuantity: lp.initialQuantity,
           unit: plan.baseUnit,
-          parentUnitId: plan.newLoosePiece.parentUnitId,
+          parentUnitId: lp.parentUnitId,
           status: 'AVAILABLE',
           createdAt: timestamp,
           notes: `Created from opening full roll in multi-piece allocation`
         });
+        createdLooseMap.set(lp.parentUnitId, createdLoose);
       }
 
       for (const item of plan.multiAllocations) {
@@ -486,6 +537,8 @@ class CutToLengthService {
           status: isConsumed ? 'CONSUMED' : 'AVAILABLE',
           updatedAt: timestamp
         });
+
+        const createdLooseForThis = createdLooseMap.get(item.unitId);
 
         const tx = storageService.insert(this.COLLECTION_TXS, {
           transactionType: item.classification === 'FULL' ? 'ROLL_OPEN' : 'SALE_CUT',
@@ -498,7 +551,8 @@ class CutToLengthService {
           originalLength: item.originalLength,
           issuedLength: item.cutLength,
           remainingLength: item.remainingLength,
-          resultingUnitId: item.classification === 'FULL' ? (createdLoose?.id || null) : item.unitId,
+          resultingUnitId: item.classification === 'FULL' ? (createdLooseForThis?.id || null) : item.unitId,
+          resultingCode: item.classification === 'FULL' ? (createdLooseForThis?.code || null) : item.code,
           newClassification: isConsumed ? 'CONSUMED' : 'LOOSE',
           userId,
           notes: notes || `Multi-piece cut ${item.cutLength} ${plan.baseUnit} from ${item.code} on ${referenceDocType} ${referenceDocId}`,
@@ -509,7 +563,7 @@ class CutToLengthService {
     }
 
     // Sync cached stock balance for this product / variant in the warehouse
-    this.syncProductStockBalance(plan.productId, plan.warehouseId);
+    this.syncProductStockBalance(plan.productId, plan.warehouseId, plan.variantId);
 
     return {
       success: true,
@@ -563,8 +617,10 @@ class CutToLengthService {
             });
           } else {
             // Loose piece was already partially used, create a returned piece
+            const srcUnit = storageService.getById(this.COLLECTION_UNITS, tx.sourceUnitId);
             this.addLoosePiece({
               productId: tx.productId,
+              variantId: srcUnit?.variantId || null,
               warehouseId: tx.warehouseId,
               length: tx.issuedLength,
               unit: 'ft',
@@ -572,6 +628,15 @@ class CutToLengthService {
               userId
             });
           }
+        } else {
+          // Full roll was completely consumed with 0 remainder loose piece
+          storageService.update(this.COLLECTION_UNITS, tx.sourceUnitId, {
+            quantity: tx.originalLength,
+            status: 'AVAILABLE',
+            consumedAt: null,
+            consumedByDocType: null,
+            consumedByDocId: null
+          });
         }
       }
 
@@ -603,6 +668,7 @@ class CutToLengthService {
    */
   receiveFullRolls({
     productId,
+    variantId = null,
     warehouseId = 'wh-1',
     count = 1,
     rollSize,
@@ -617,12 +683,17 @@ class CutToLengthService {
     const existing = storageService.getCollection(this.COLLECTION_UNITS) || [];
     const rollCountStart = existing.filter(u => u.classification === 'FULL').length;
 
+    const variants = productService.getVariantsByProduct(productId) || [];
+    const matchedVariant = variantId ? variants.find(v => v.id === variantId) : variants.find(v => Number(v.rollSize) === Number(rollSize));
+    const targetVariantId = matchedVariant ? matchedVariant.id : (variantId || (variants[0]?.id || null));
+
     const created = [];
     for (let i = 0; i < count; i++) {
       const code = `R${String(rollCountStart + i + 1).padStart(3, '0')}`;
       const roll = storageService.insert(this.COLLECTION_UNITS, {
         code,
         productId,
+        variantId: targetVariantId,
         warehouseId,
         classification: 'FULL',
         quantity: Number(rollSize),
@@ -655,7 +726,7 @@ class CutToLengthService {
       });
     }
 
-    this.syncProductStockBalance(productId, warehouseId);
+    this.syncProductStockBalance(productId, warehouseId, targetVariantId);
     return created;
   }
 
@@ -664,6 +735,7 @@ class CutToLengthService {
    */
   addLoosePiece({
     productId,
+    variantId = null,
     warehouseId = 'wh-1',
     length,
     unit = 'ft',
@@ -675,9 +747,13 @@ class CutToLengthService {
     const looseCount = existing.filter(u => u.classification === 'LOOSE').length + 1;
     const code = `L${String(looseCount).padStart(3, '0')}`;
 
+    const variants = productService.getVariantsByProduct(productId) || [];
+    const targetVariantId = variantId || (variants[0]?.id || null);
+
     const piece = storageService.insert(this.COLLECTION_UNITS, {
       code,
       productId,
+      variantId: targetVariantId,
       warehouseId,
       classification: 'LOOSE',
       quantity: Number(length),
@@ -707,7 +783,7 @@ class CutToLengthService {
       createdAt: timestamp
     });
 
-    this.syncProductStockBalance(productId, warehouseId);
+    this.syncProductStockBalance(productId, warehouseId, targetVariantId);
     return piece;
   }
 
@@ -790,6 +866,7 @@ class CutToLengthService {
         newLooseUnit = storageService.insert(this.COLLECTION_UNITS, {
           code: looseCode,
           productId: unit.productId,
+          variantId: unit.variantId || null,
           warehouseId: unit.warehouseId,
           classification: 'LOOSE',
           quantity: remaining,
@@ -820,7 +897,7 @@ class CutToLengthService {
         createdAt: timestamp
       });
 
-      this.syncProductStockBalance(unit.productId, unit.warehouseId);
+      this.syncProductStockBalance(unit.productId, unit.warehouseId, unit.variantId);
       return { success: true, unitConsumed: true, remainingPiece: newLooseUnit };
     } else {
       const origQty = Number(unit.quantity);
@@ -851,7 +928,7 @@ class CutToLengthService {
         createdAt: timestamp
       });
 
-      this.syncProductStockBalance(unit.productId, unit.warehouseId);
+      this.syncProductStockBalance(unit.productId, unit.warehouseId, unit.variantId);
       return { success: true, unitConsumed: isConsumed, remainingPiece: storageService.getById(this.COLLECTION_UNITS, unit.id) };
     }
   }
@@ -859,33 +936,37 @@ class CutToLengthService {
   /**
    * Syncs the total footage of physical units back to stockBalances
    * so that warehouse summaries, balances, and reports always match physical stock.
+   * If variantId is provided, syncs that specific variant; otherwise syncs all variants of the product.
    */
-  syncProductStockBalance(productId, warehouseId) {
-    const summary = this.getSummary(productId, warehouseId);
-    if (!summary) return;
+  syncProductStockBalance(productId, warehouseId, variantId = null) {
+    const variants = productService.getVariantsByProduct(productId) || [];
+    if (variants.length === 0) return;
 
-    // Find any variant belonging to this product
-    const variants = productService.getVariantsByProduct(productId);
-    const variantId = variants.length > 0 ? variants[0].id : null;
-    if (!variantId) return;
-
+    const targets = variantId ? variants.filter(v => v.id === variantId) : variants;
     const balances = storageService.getCollection('stockBalances') || [];
-    const entry = balances.find(b => b.warehouseId === warehouseId && b.variantId === variantId);
 
-    if (entry) {
-      storageService.update('stockBalances', entry.id, {
-        quantity: summary.totalFootage,
-        unit: summary.baseUnit.toUpperCase(),
-        lastMovementAt: new Date().toISOString()
-      });
-    } else {
-      storageService.insert('stockBalances', {
-        warehouseId,
-        variantId,
-        quantity: summary.totalFootage,
-        averageCost: variants[0]?.costPrice || 0,
-        unit: summary.baseUnit.toUpperCase()
-      });
+    for (const v of targets) {
+      const summary = this.getSummary(productId, warehouseId, v.id);
+      if (!summary) continue;
+
+      const entry = balances.find(b => b.warehouseId === warehouseId && b.variantId === v.id);
+
+      if (entry) {
+        storageService.update('stockBalances', entry.id, {
+          quantity: summary.totalFootage,
+          unit: summary.baseUnit.toUpperCase(),
+          lastMovementAt: new Date().toISOString()
+        });
+      } else {
+        storageService.insert('stockBalances', {
+          id: `bal-${warehouseId}-${v.id}`,
+          warehouseId,
+          variantId: v.id,
+          quantity: summary.totalFootage,
+          averageCost: v.costPrice || 0,
+          unit: summary.baseUnit.toUpperCase()
+        });
+      }
     }
   }
 }

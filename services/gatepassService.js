@@ -316,6 +316,7 @@ class GatepassService {
         if (line.warehouseQty > 0) {
           const plan = cutToLengthService.planAllocation({
             productId: product.id,
+            variantId: line.variantId,
             warehouseId: 'wh-1',
             requestedQty: line.warehouseQty,
             unit: line.packagingName || line.unit || 'ft',
@@ -335,6 +336,7 @@ class GatepassService {
         if (line.officeQty > 0) {
           const plan = cutToLengthService.planAllocation({
             productId: product.id,
+            variantId: line.variantId,
             warehouseId: 'wh-2',
             requestedQty: line.officeQty,
             unit: line.packagingName || line.unit || 'ft',

@@ -13,6 +13,7 @@ import { toast } from '../../components/toast.js';
 // State management for view
 let currentSelectedProductId = null;
 let currentWarehouseId = 'all';
+let currentVariantId = 'all';
 let currentActiveTab = 'physical'; // 'physical' | 'audit'
 
 export function renderRollInventoryView() {
@@ -33,10 +34,12 @@ export function renderRollInventoryView() {
 
   if (!currentSelectedProductId || !ctlProducts.some(p => p.id === currentSelectedProductId)) {
     currentSelectedProductId = ctlProducts[0].id;
+    currentVariantId = 'all';
   }
 
   const selectedProduct = productService.getProductById(currentSelectedProductId);
-  const summary = cutToLengthService.getSummary(currentSelectedProductId, currentWarehouseId);
+  const productVariants = productService.getVariantsByProduct(currentSelectedProductId) || [];
+  const summary = cutToLengthService.getSummary(currentSelectedProductId, currentWarehouseId, currentVariantId);
   const transactions = cutToLengthService.getTransactions(currentSelectedProductId, 100);
 
   const baseUnit = selectedProduct?.base_unit || 'ft';
@@ -57,6 +60,21 @@ export function renderRollInventoryView() {
               `).join('')}
             </select>
           </div>
+
+          <!-- Variation Selector (shown if product has multiple variants e.g. 400ft vs 450ft) -->
+          ${productVariants.length > 1 ? `
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Variation / Roll Size</label>
+              <select id="ctl-variant-select" class="border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 bg-slate-50 focus:outline-none focus:border-[#138FCB] cursor-pointer">
+                <option value="all" ${currentVariantId === 'all' ? 'selected' : ''}>All Variations</option>
+                ${productVariants.map(v => `
+                  <option value="${v.id}" ${v.id === currentVariantId ? 'selected' : ''}>
+                    ${v.sku} (${v.rollSize ? `${v.rollSize} ft Roll` : v.name})
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+          ` : ''}
 
           <!-- Warehouse Selector -->
           <div>
@@ -330,6 +348,16 @@ export function bindRollInventoryEvents(container, refreshCallback) {
   if (prodSelect) {
     prodSelect.onchange = (e) => {
       currentSelectedProductId = e.target.value;
+      currentVariantId = 'all';
+      if (refreshCallback) refreshCallback();
+    };
+  }
+
+  // Variant switch
+  const varSelect = container.querySelector('#ctl-variant-select');
+  if (varSelect) {
+    varSelect.onchange = (e) => {
+      currentVariantId = e.target.value;
       if (refreshCallback) refreshCallback();
     };
   }
@@ -404,6 +432,7 @@ export function bindRollInventoryEvents(container, refreshCallback) {
  */
 function openReceiveModal(productId, onSaved) {
   const product = productService.getProductById(productId);
+  const productVariants = productService.getVariantsByProduct(productId) || [];
   const warehouses = warehouseService.getWarehouses();
   const packagingUnits = product.packagingUnits || [
     { factor: product.full_unit_quantity || 5000, name: `Roll (${product.full_unit_quantity || 5000} ${product.base_unit || 'ft'})` }
@@ -417,6 +446,15 @@ function openReceiveModal(productId, onSaved) {
           ${warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
         </select>
       </div>
+
+      ${productVariants.length > 1 ? `
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Product Variation *</label>
+          <select id="ctl-rec-variant" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-[#138FCB]">
+            ${productVariants.map(v => `<option value="${v.id}">${v.sku} (${v.name})</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
 
       <div>
         <label class="block font-bold text-slate-700 mb-1">Roll Packaging Size *</label>
@@ -456,6 +494,8 @@ function openReceiveModal(productId, onSaved) {
       modalEl.querySelector('#ctl-receive-form').onsubmit = (e) => {
         e.preventDefault();
         const warehouseId = modalEl.querySelector('#ctl-rec-warehouse').value;
+        const varSelect = modalEl.querySelector('#ctl-rec-variant');
+        const variantId = varSelect ? varSelect.value : null;
         const packSelect = modalEl.querySelector('#ctl-rec-packaging');
         const rollSize = Number(packSelect.value);
         const packagingName = packSelect.options[packSelect.selectedIndex].getAttribute('data-name');
@@ -465,6 +505,7 @@ function openReceiveModal(productId, onSaved) {
         try {
           cutToLengthService.receiveFullRolls({
             productId,
+            variantId,
             warehouseId,
             count,
             rollSize,
@@ -490,6 +531,7 @@ function openReceiveModal(productId, onSaved) {
  */
 function openAddLooseModal(productId, onSaved) {
   const product = productService.getProductById(productId);
+  const productVariants = productService.getVariantsByProduct(productId) || [];
   const warehouses = warehouseService.getWarehouses();
   const baseUnit = product.base_unit || 'ft';
 
@@ -501,6 +543,15 @@ function openAddLooseModal(productId, onSaved) {
           ${warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
         </select>
       </div>
+
+      ${productVariants.length > 1 ? `
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Product Variation *</label>
+          <select id="ctl-loose-variant" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-semibold focus:outline-none focus:border-[#138FCB]">
+            ${productVariants.map(v => `<option value="${v.id}">${v.sku} (${v.name})</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
 
       <div>
         <label class="block font-bold text-slate-700 mb-1">Piece Length (${baseUnit}) *</label>
@@ -529,12 +580,15 @@ function openAddLooseModal(productId, onSaved) {
       modalEl.querySelector('#ctl-loose-form').onsubmit = (e) => {
         e.preventDefault();
         const warehouseId = modalEl.querySelector('#ctl-loose-warehouse').value;
+        const varSelect = modalEl.querySelector('#ctl-loose-variant');
+        const variantId = varSelect ? varSelect.value : null;
         const length = Number(modalEl.querySelector('#ctl-loose-length').value);
         const reason = modalEl.querySelector('#ctl-loose-reason').value.trim();
 
         try {
           cutToLengthService.addLoosePiece({
             productId,
+            variantId,
             warehouseId,
             length,
             unit: baseUnit,

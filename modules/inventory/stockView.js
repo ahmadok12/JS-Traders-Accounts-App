@@ -73,7 +73,7 @@ export function renderStockView() {
       align: 'right',
       render: row => {
         if (row.product?.cut_to_length) {
-          const ctlSummary = cutToLengthService.getSummary(row.product.id, row.warehouseId);
+          const ctlSummary = cutToLengthService.getSummary(row.product.id, row.warehouseId, row.variantId);
           if (ctlSummary) {
             return `
               <div class="text-right">

@@ -557,8 +557,8 @@ function openCreateGatepassModal(onSaved, gatepassToEdit = null) {
           const rollFactor = Number(selectedOption?.getAttribute('data-factor')) || 1;
           const packName = selectedOption?.value || baseUnit;
 
-          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1');
-          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2');
+          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1', vId);
+          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2', vId);
 
           if (ctlStockPill && whSummary) {
             ctlStockPill.innerHTML = `
