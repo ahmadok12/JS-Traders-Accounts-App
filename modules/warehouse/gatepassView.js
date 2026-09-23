@@ -170,15 +170,6 @@ export function bindGatepassEvents(container, refreshCallback) {
     { label: 'View Draft', onClick: (row) => openGatepassDetailModal(row, refreshCallback) }
   ];
   bindTableActions(container, actions, gatepasses);
-
-  // Auto-refresh table when staff submits photos or updates gatepass
-  if (refreshCallback) {
-    storageService.subscribe('gatepasses', () => {
-      if (document.getElementById('gatepass-view-container')) {
-        refreshCallback();
-      }
-    });
-  }
 }
 
 function openCreateGatepassModal(onSaved, gatepassToEdit = null) {

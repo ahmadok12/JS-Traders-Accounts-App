@@ -55,6 +55,18 @@ class AppController {
     this.currentRoute = 'dashboard';
     this.mainWorkspace = null;
     this.breadcrumbContainer = null;
+    this.isRendering = false;
+    this.renderScheduled = false;
+  }
+
+  scheduleRender() {
+    if (this.renderScheduled) return;
+    this.renderScheduled = true;
+    const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : setTimeout;
+    raf(() => {
+      this.renderScheduled = false;
+      this.renderCurrentRoute();
+    }, 16);
   }
 
   init() {
@@ -65,15 +77,14 @@ class AppController {
     this.bindHeaderControls();
     this.bindKeyboardShortcuts();
 
-    // Listen to session & storage changes
+    // Listen to session & storage changes safely debounced
     authService.onSessionChange(() => {
       this.updateHeaderProfile();
-      this.renderCurrentRoute();
+      this.scheduleRender();
     });
 
     storageService.subscribe('*', () => {
-      // Re-render current route if active
-      this.renderCurrentRoute();
+      this.scheduleRender();
     });
 
     // Hash routing for deep linking and back/forward browser history
@@ -112,11 +123,13 @@ class AppController {
   }
 
   renderCurrentRoute() {
-    if (!this.mainWorkspace) return;
+    if (this.isRendering || !this.mainWorkspace) return;
+    this.isRendering = true;
 
-    let html = '';
-    let bindFn = null;
-    let breadcrumbs = ['ERP', 'Overview'];
+    try {
+      let html = '';
+      let bindFn = null;
+      let breadcrumbs = ['ERP', 'Overview'];
 
     switch (this.currentRoute) {
       case 'dashboard':
@@ -301,7 +314,10 @@ class AppController {
     this.mainWorkspace.innerHTML = html;
 
     if (bindFn) {
-      bindFn(this.mainWorkspace, () => this.renderCurrentRoute());
+      bindFn(this.mainWorkspace, () => this.scheduleRender());
+    }
+    } finally {
+      this.isRendering = false;
     }
   }
 

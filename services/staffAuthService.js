@@ -28,83 +28,90 @@ class StaffAuthService {
       console.warn('Error reading staff session:', e);
       this.currentStaff = null;
     }
+    this.staffSeeded = false;
   }
 
-  // Get list of all staff members managed by Warehouse Manager
+  ensureDefaultStaff() {
+    if (this.staffSeeded) return;
+    this.staffSeeded = true;
+
+    try {
+      const users = storageService.getCollection('users') || [];
+      const staffDefinitions = [
+        {
+          id: 'user-office-mudassar',
+          fullName: 'Mudassar',
+          username: 'mudassar_office',
+          pin: '5678',
+          roleCode: 'warehouse_staff',
+          staffType: 'office_staff',
+          email: 'mudassar@jstraders.pk',
+          phone: '+92 302 7775678',
+          activeWarehouseId: 'wh-2',
+          status: 'Active'
+        },
+        {
+          id: 'user-wh-alitoor',
+          fullName: 'Ali Toor',
+          username: 'ali_toor',
+          pin: '1111',
+          roleCode: 'warehouse_staff',
+          staffType: 'warehouse_staff',
+          email: 'alitoor@jstraders.pk',
+          phone: '+92 301 5551111',
+          activeWarehouseId: 'wh-1',
+          status: 'Active'
+        },
+        {
+          id: 'user-wh-alichhota',
+          fullName: 'Ali Chhota',
+          username: 'ali_chhota',
+          pin: '2222',
+          roleCode: 'warehouse_staff',
+          staffType: 'warehouse_staff',
+          email: 'alichhota@jstraders.pk',
+          phone: '+92 301 5552222',
+          activeWarehouseId: 'wh-1',
+          status: 'Active'
+        },
+        {
+          id: 'user-wh-zain',
+          fullName: 'Zain',
+          username: 'zain',
+          pin: '3333',
+          roleCode: 'warehouse_staff',
+          staffType: 'warehouse_staff',
+          email: 'zain@jstraders.pk',
+          phone: '+92 301 5553333',
+          activeWarehouseId: 'wh-1',
+          status: 'Active'
+        }
+      ];
+
+      let changed = false;
+      staffDefinitions.forEach(staffDef => {
+        const existing = users.find(u => u.id === staffDef.id || u.username === staffDef.username);
+        if (!existing) {
+          users.push(staffDef);
+          changed = true;
+        }
+      });
+
+      if (changed && storageService.db) {
+        storageService.db.users = users;
+        try {
+          localStorage.setItem('js_traders_erp_db_v1', JSON.stringify(storageService.db));
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('Error ensuring default staff:', e);
+    }
+  }
+
+  // Get list of all staff members managed by Warehouse Manager (pure read)
   getStaffMembers() {
-    let users = storageService.getCollection('users');
-    
-    // Auto-clean legacy demo staff accounts if present
-    ['user-wh-staff', 'user-office-staff'].forEach(legacyId => {
-      if (users.some(u => u.id === legacyId || u.username === 'bilal_staff' || u.username === 'usman_office')) {
-        const found = users.find(u => u.id === legacyId || u.username === 'bilal_staff' || u.username === 'usman_office');
-        if (found) storageService.delete('users', found.id);
-      }
-    });
-
-    // Ensure current staff members exist
-    const staffDefinitions = [
-      {
-        id: 'user-office-mudassar',
-        fullName: 'Mudassar',
-        username: 'mudassar_office',
-        pin: '5678',
-        roleCode: 'warehouse_staff',
-        staffType: 'office_staff',
-        email: 'mudassar@jstraders.pk',
-        phone: '+92 302 7775678',
-        activeWarehouseId: 'wh-2',
-        status: 'Active'
-      },
-      {
-        id: 'user-wh-alitoor',
-        fullName: 'Ali Toor',
-        username: 'ali_toor',
-        pin: '1111',
-        roleCode: 'warehouse_staff',
-        staffType: 'warehouse_staff',
-        email: 'alitoor@jstraders.pk',
-        phone: '+92 301 5551111',
-        activeWarehouseId: 'wh-1',
-        status: 'Active'
-      },
-      {
-        id: 'user-wh-alichhota',
-        fullName: 'Ali Chhota',
-        username: 'ali_chhota',
-        pin: '2222',
-        roleCode: 'warehouse_staff',
-        staffType: 'warehouse_staff',
-        email: 'alichhota@jstraders.pk',
-        phone: '+92 301 5552222',
-        activeWarehouseId: 'wh-1',
-        status: 'Active'
-      },
-      {
-        id: 'user-wh-zain',
-        fullName: 'Zain',
-        username: 'zain',
-        pin: '3333',
-        roleCode: 'warehouse_staff',
-        staffType: 'warehouse_staff',
-        email: 'zain@jstraders.pk',
-        phone: '+92 301 5553333',
-        activeWarehouseId: 'wh-1',
-        status: 'Active'
-      }
-    ];
-
-    staffDefinitions.forEach(staffDef => {
-      const liveUsers = storageService.getCollection('users');
-      const existing = liveUsers.find(u => u.id === staffDef.id || u.username === staffDef.username);
-      if (!existing) {
-        storageService.insert('users', staffDef);
-      } else if (existing.fullName !== staffDef.fullName || existing.pin !== staffDef.pin || existing.staffType !== staffDef.staffType) {
-        storageService.update('users', existing.id, staffDef);
-      }
-    });
-
-    users = storageService.getCollection('users');
+    this.ensureDefaultStaff();
+    const users = storageService.getCollection('users') || [];
     return users.filter(u => u.roleCode === 'warehouse_staff' || u.staffType);
   }
 

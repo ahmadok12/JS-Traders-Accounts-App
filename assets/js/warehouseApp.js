@@ -32,6 +32,18 @@ class WarehouseAppController {
     this.currentRoute = 'warehouse-gatepasses';
     this.workspace = null;
     this.breadcrumbContainer = null;
+    this.isRendering = false;
+    this.renderScheduled = false;
+  }
+
+  scheduleRender() {
+    if (this.renderScheduled) return;
+    this.renderScheduled = true;
+    const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : setTimeout;
+    raf(() => {
+      this.renderScheduled = false;
+      this.renderCurrentRoute();
+    }, 16);
   }
 
   init() {
@@ -53,7 +65,7 @@ class WarehouseAppController {
     });
 
     storageService.subscribe('*', () => {
-      this.renderCurrentRoute();
+      this.scheduleRender();
     });
 
     const initialRoute = window.location.hash.replace(/^#\/?/, '') || 'warehouse-gatepasses';
@@ -82,11 +94,13 @@ class WarehouseAppController {
   }
 
   renderCurrentRoute() {
-    if (!this.workspace) return;
+    if (this.isRendering || !this.workspace) return;
+    this.isRendering = true;
 
-    let html = '';
-    let bindFn = null;
-    let breadcrumbs = ['Warehouse Portal'];
+    try {
+      let html = '';
+      let bindFn = null;
+      let breadcrumbs = ['Warehouse Portal'];
 
     switch (this.currentRoute) {
       case 'warehouse-gatepasses':
@@ -196,7 +210,10 @@ class WarehouseAppController {
     this.maskSensitiveCosts(this.workspace);
 
     if (bindFn) {
-      bindFn(this.workspace, () => this.renderCurrentRoute());
+      bindFn(this.workspace, () => this.scheduleRender());
+    }
+    } finally {
+      this.isRendering = false;
     }
   }
 

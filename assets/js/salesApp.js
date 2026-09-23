@@ -20,6 +20,18 @@ class SalesAppController {
     this.currentRoute = 'customers-ledger';
     this.workspace = null;
     this.breadcrumbContainer = null;
+    this.isRendering = false;
+    this.renderScheduled = false;
+  }
+
+  scheduleRender() {
+    if (this.renderScheduled) return;
+    this.renderScheduled = true;
+    const raf = typeof requestAnimationFrame !== 'undefined' ? requestAnimationFrame : setTimeout;
+    raf(() => {
+      this.renderScheduled = false;
+      this.renderCurrentRoute();
+    }, 16);
   }
 
   init() {
@@ -40,7 +52,7 @@ class SalesAppController {
     });
 
     storageService.subscribe('*', () => {
-      this.renderCurrentRoute();
+      this.scheduleRender();
     });
 
     const initialRoute = window.location.hash.replace(/^#\/?/, '') || 'customers-ledger';
@@ -69,10 +81,12 @@ class SalesAppController {
   }
 
   renderCurrentRoute() {
-    if (!this.workspace) return;
+    if (this.isRendering || !this.workspace) return;
+    this.isRendering = true;
 
-    let html = '';
-    let bindFn = null;
+    try {
+      let html = '';
+      let bindFn = null;
     let breadcrumbs = ['Sales Portal'];
 
     switch (this.currentRoute) {
@@ -115,6 +129,9 @@ class SalesAppController {
 
     if (bindFn) {
       bindFn(this.workspace);
+    }
+    } finally {
+      this.isRendering = false;
     }
   }
 

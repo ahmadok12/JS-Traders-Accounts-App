@@ -759,7 +759,7 @@ class StorageService {
     const merged = { ...this.db, ...incomingDb };
 
     // Smart-merge core operational collections
-    const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements'];
+    const collections = ['gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockBalances', 'stockMovements', 'users'];
     for (const col of collections) {
       const localArr = Array.isArray(this.db[col]) ? this.db[col] : [];
       const incArr = Array.isArray(incomingDb[col]) ? incomingDb[col] : [];
@@ -809,13 +809,11 @@ class StorageService {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
     } catch (e) {}
 
-    this.notifyListeners('gatepasses');
-    this.notifyListeners('staffNotifications');
     this.notifyListeners('*');
 
-    // If local had records that the server was missing, immediately push to server!
-    if (hadLocalOnlyData) {
-      this.pushToServer();
+    // If local had records that the server was missing, push with throttle
+    if (hadLocalOnlyData && !this.isPushing) {
+      setTimeout(() => this.pushToServer(), 300);
     }
   }
 
@@ -876,9 +874,9 @@ class StorageService {
           if (data.changed && data.db && data.version > this.syncVersion) {
             this.mergeIncomingDb(data.db, data.version);
           }
-        } else {
-          await new Promise(r => setTimeout(r, 1500));
         }
+        // Yield on every cycle so the loop never blocks the main browser thread
+        await new Promise(r => setTimeout(r, 400));
       } catch (err) {
         await new Promise(r => setTimeout(r, 2000));
       }
@@ -888,7 +886,6 @@ class StorageService {
   save() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.db));
-      this.notifyListeners('*');
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
@@ -914,12 +911,21 @@ class StorageService {
   }
 
   notifyListeners(collection) {
+    // Snapshot callbacks into a new Set to prevent infinite loop if a callback adds new subscribers during iteration
+    const toCall = new Set();
     if (this.listeners.has(collection)) {
-      this.listeners.get(collection).forEach(cb => cb());
+      this.listeners.get(collection).forEach(cb => toCall.add(cb));
     }
     if (this.listeners.has('*')) {
-      this.listeners.get('*').forEach(cb => cb());
+      this.listeners.get('*').forEach(cb => toCall.add(cb));
     }
+    toCall.forEach(cb => {
+      try {
+        cb();
+      } catch (e) {
+        console.error('Error in storage subscriber:', e);
+      }
+    });
   }
 
   // Generic query operations
