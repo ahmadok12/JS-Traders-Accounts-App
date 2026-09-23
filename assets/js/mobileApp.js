@@ -784,6 +784,9 @@ class MobileStaffApp {
               ${relevantLines.map((line, idx) => {
                 const fetchQty = isOffice ? Number(line.officeQty) : Number(line.warehouseQty);
                 const name = varMap.get(line.variantId) || 'Poultry Equipment';
+                const isRoll = Boolean(line.isRoll);
+                const isLoose = line.unit === 'ft';
+                const packLabel = line.packagingName || line.unit || 'PCS';
 
                 return `
                   <div class="p-3.5 bg-white border border-slate-200 rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
@@ -791,15 +794,19 @@ class MobileStaffApp {
                       <input type="checkbox" id="check-item-${idx}" class="w-5 h-5 rounded-lg text-[#138FCB] focus:ring-0 cursor-pointer">
                       <div>
                         <strong class="text-xs font-bold text-slate-900 block leading-snug">${name}</strong>
-                        <span class="text-[10px] text-slate-500 font-medium">
-                          Location: ${isOffice ? '🏢 Office Shelf' : '📦 Warehouse Yard / Racks'}
-                        </span>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                          <span class="text-[10px] text-slate-500 font-medium">
+                            Location: ${isOffice ? '🏢 Office Shelf' : '📦 Warehouse Yard / Racks'}
+                          </span>
+                          ${isRoll ? `<span class="text-[9px] font-bold text-[#138FCB] bg-blue-50 px-1.5 py-0.2 rounded">📦 Full Roll</span>` : (isLoose ? `<span class="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded">✂️ Loose Cut</span>` : '')}
+                        </div>
                       </div>
                     </div>
                     <div class="text-right">
                       <span class="text-xs font-black ${isOffice ? 'text-amber-800 bg-amber-50 border border-amber-200' : 'text-blue-700 bg-blue-50 border border-blue-200'} px-2.5 py-1 rounded-xl inline-block">
-                        ${fetchQty} ${line.unit || 'PCS'}
+                        ${fetchQty} ${packLabel}
                       </span>
+                      ${isRoll ? `<span class="block text-[9px] font-bold text-blue-600 mt-0.5">(${(fetchQty * Number(line.rollSize)).toLocaleString()} ft)</span>` : (isLoose ? `<span class="block text-[9px] font-bold text-amber-700 mt-0.5">Continuous Cut</span>` : '')}
                     </div>
                   </div>
                 `;
