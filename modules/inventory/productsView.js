@@ -534,7 +534,6 @@ function renderProductsTableContent(filteredProducts, categories) {
                                 <tr class="text-[10px] font-bold uppercase text-slate-400 border-b border-slate-100">
                                   <th class="py-1.5 px-3">SKU Code</th>
                                   <th class="py-1.5 px-3">Variant Model / Name</th>
-                                  <th class="py-1.5 px-3">Specifications / Attributes</th>
                                   <th class="py-1.5 px-3 text-right">Cost Price</th>
                                   <th class="py-1.5 px-3 text-right">Selling Price</th>
                                   <th class="py-1.5 px-3 text-right">Live Stock (WH / Off / Total)</th>
@@ -549,7 +548,6 @@ function renderProductsTableContent(filteredProducts, categories) {
                                   const cost = Number(v.costPrice) || 0;
                                   const price = Number(v.sellingPrice) || 0;
                                   const margin = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
-                                  const attrs = Object.entries(v.attributes || {});
 
                                   return `
                                     <tr class="hover:bg-slate-50/60">
@@ -558,17 +556,6 @@ function renderProductsTableContent(filteredProducts, categories) {
                                       </td>
                                       <td class="py-2 px-3 font-semibold text-slate-800">
                                         ${v.name}
-                                      </td>
-                                      <td class="py-2 px-3">
-                                        ${attrs.length > 0 ? `
-                                          <div class="flex flex-wrap gap-1">
-                                            ${attrs.map(([k, val]) => `
-                                              <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-medium border border-slate-200/50">
-                                                <strong>${k}:</strong> ${val}
-                                              </span>
-                                            `).join('')}
-                                          </div>
-                                        ` : '<span class="text-slate-400 text-[10px]">Standard</span>'}
                                       </td>
                                       <td class="py-2 px-3 text-right font-mono font-semibold text-slate-600">
                                         PKR ${cost.toLocaleString()}
@@ -1471,17 +1458,6 @@ export function openProductDetailModal(product, refreshCallback) {
                       </span>
                     </div>
 
-                    <!-- Attributes -->
-                    ${v.attributes && Object.keys(v.attributes).length > 0 ? `
-                      <div class="flex flex-wrap gap-1.5 pt-0.5">
-                        ${Object.entries(v.attributes).map(([k, val]) => `
-                          <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium border border-slate-200/60">
-                            <strong>${k}:</strong> ${val}
-                          </span>
-                        `).join('')}
-                      </div>
-                    ` : ''}
-
                     <!-- Prices & Stock -->
                     <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
                       <div>
@@ -1607,222 +1583,13 @@ export function openProductDetailModal(product, refreshCallback) {
  * Add Variant for a Specific Product Modal
  */
 export function openAddVariantModal(product, onSaved) {
-  const units = storageService.getCollection('units');
-  const baseUnit = units.find(u => u.id === product.baseUnitId);
-  const existingVariants = productService.getVariantsByProduct(product.id);
-  const nextSkuIndex = String(existingVariants.length + 1).padStart(2, '0');
-  const suggestedSku = `${product.code}-V${nextSkuIndex}`;
-
-  const contentHtml = `
-    <form id="add-variant-form" class="space-y-5 text-xs">
-      <!-- Parent Product Context Card -->
-      <section class="bg-blue-50/50 p-4 rounded-xl border border-blue-200/70 flex items-center justify-between">
-        <div>
-          <span class="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Parent Product Master</span>
-          <h4 class="font-bold text-slate-800 text-sm">${product.businessName} (${product.customerName})</h4>
-          <span class="text-[11px] font-mono text-slate-500 font-semibold">${product.code}</span>
-        </div>
-        <div class="text-right">
-          <span class="text-[10px] text-slate-400 font-semibold block">Base Unit</span>
-          <span class="font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-blue-200 text-xs">${baseUnit ? baseUnit.code : 'PCS'}</span>
-        </div>
-      </section>
-
-      <!-- Variant Information Section -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <span>🏷️</span>
-            <span>Variant Specification &amp; Pricing</span>
-          </h3>
-          <span class="text-[10px] text-slate-400 font-medium">All fields marked with <span class="text-red-500 font-bold">*</span> are required</span>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-name">Variant Name / Model <span class="text-red-500">*</span></label>
-            <input type="text" id="var-name" required placeholder="e.g. 16-inch Galvanized China Heavy" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-sku">SKU Code <span class="text-red-500">*</span></label>
-            <input type="text" id="var-sku" required value="${suggestedSku}" placeholder="e.g. FP-CN-16-HG" class="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-cost">Base Cost Price (PKR) <span class="text-red-500">*</span></label>
-            <input type="number" id="var-cost" required min="0" step="any" placeholder="0" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-price">Selling Price (PKR) <span class="text-red-500">*</span></label>
-            <input type="number" id="var-price" required min="0" step="any" placeholder="0" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-emerald-800 bg-white shadow-2xs">
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-unit">Packaging Unit</label>
-            <input type="text" id="var-unit" value="${baseUnit ? baseUnit.code : 'PCS'}" placeholder="PCS" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-        </div>
-      </section>
-
-      <!-- Attributes (Dynamic Specs) -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <span>⚙️</span>
-            <span>Variant Attributes (Optional)</span>
-          </h3>
-          <span class="text-[10px] text-slate-400 font-medium">Origin, Material, Gauge &amp; Sizing</span>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-attr-origin">Origin Country</label>
-            <input type="text" id="var-attr-origin" placeholder="e.g. China, Local, Turkey" class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] py-2 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-attr-material">Material / Quality</label>
-            <input type="text" id="var-attr-material" placeholder="e.g. Galvanized Steel, Polypropylene" class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] py-2 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="var-attr-size">Size / Gauge</label>
-            <input type="text" id="var-attr-size" placeholder="e.g. 16-inch, 2mm, 150m" class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] py-2 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-        </div>
-      </section>
-
-      <!-- Section 3: Roll & Cut-to-Length Configuration -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
-          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-            <span>📏</span>
-            <span>Roll / Cut-to-Length Packaging</span>
-          </h3>
-          <span class="text-[10px] font-medium text-slate-400">Variant-level roll length definition</span>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <input type="checkbox" id="add-var-is-ctl" ${product && (product.cut_to_length || product.enableRollTracking) ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
-          <label for="add-var-is-ctl" class="font-semibold text-slate-700 cursor-pointer">Enable Roll &amp; Cut-to-Length for this Variant</label>
-        </div>
-
-        <div id="add-var-ctl-config-box" class="${product && (product.cut_to_length || product.enableRollTracking) ? '' : 'hidden'} grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="add-var-roll-length">Standard Roll Length <span class="text-red-500">*</span></label>
-            <input type="number" id="add-var-roll-length" min="1" step="any" value="${product?.packagingUnits?.[0]?.factor || 5000}" placeholder="5000" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-            <span class="text-[10px] text-slate-400">e.g. 5000, 450, 400</span>
-          </div>
-
-          <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="add-var-roll-unit">Measurement Unit</label>
-            <input type="text" id="add-var-roll-unit" value="${product?.base_unit || 'ft'}" placeholder="ft" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-        </div>
-      </section>
-    </form>
-  `;
-
-  const footerHtml = `
-    <div class="flex items-center space-x-2 text-xs text-slate-400">
-      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ Instant SKU cataloging</span>
-    </div>
-    <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
-      <button id="add-var-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
-        Cancel
-      </button>
-      <button type="submit" form="add-variant-form" class="inline-flex items-center space-x-2 px-5 py-2.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
-        <span class="text-sm font-extrabold leading-none">+</span>
-        <span>Save &amp; Add Variant</span>
-      </button>
-    </div>
-  `;
-
-  openModal({
-    title: `Add Variant to ${product.businessName}`,
-    subtitle: 'Create a new SKU with custom pricing, packaging unit, and physical attributes',
-    badge: product.code,
-    contentHtml,
-    footerHtml,
-    size: 'max-w-2xl',
-    onOpen: (modalEl) => {
-      const cancelBtn = modalEl.querySelector('#add-var-cancel-btn');
-      if (cancelBtn) cancelBtn.onclick = () => closeModal();
-
-      const ctlCheckbox = modalEl.querySelector('#add-var-is-ctl');
-      const ctlBox = modalEl.querySelector('#add-var-ctl-config-box');
-      if (ctlCheckbox && ctlBox) {
-        ctlCheckbox.onchange = (e) => {
-          ctlBox.classList.toggle('hidden', !e.target.checked);
-        };
-      }
-
-      modalEl.querySelector('#add-variant-form').onsubmit = (e) => {
-        e.preventDefault();
-        const name = modalEl.querySelector('#var-name').value.trim();
-        const sku = modalEl.querySelector('#var-sku').value.trim();
-        const costPrice = Number(modalEl.querySelector('#var-cost').value) || 0;
-        const sellingPrice = Number(modalEl.querySelector('#var-price').value) || 0;
-        const unit = modalEl.querySelector('#var-unit').value.trim() || 'PCS';
-
-        const isCutToLength = modalEl.querySelector('#add-var-is-ctl')?.checked || false;
-        const rollLength = isCutToLength ? (Number(modalEl.querySelector('#add-var-roll-length')?.value) || 5000) : null;
-        const rollUnit = isCutToLength ? (modalEl.querySelector('#add-var-roll-unit')?.value.trim() || 'ft') : null;
-
-        const origin = modalEl.querySelector('#var-attr-origin').value.trim();
-        const material = modalEl.querySelector('#var-attr-material').value.trim();
-        const size = modalEl.querySelector('#var-attr-size').value.trim();
-
-        const attributes = {};
-        if (origin) attributes.Origin = origin;
-        if (material) attributes.Material = material;
-        if (size) attributes.Size = size;
-
-        try {
-          const created = productService.createVariant({
-            productId: product.id,
-            name,
-            sku,
-            costPrice,
-            sellingPrice,
-            unit,
-            isCutToLength,
-            rollLength,
-            rollSize: rollLength,
-            rollUnit,
-            attributes,
-            isActive: true
-          });
-
-          if (isCutToLength && created?.id) {
-            cutToLengthService.saveVariantStock('wh-1', created.id, {
-              fullRolls: 5,
-              rollLength,
-              loosePieces: [],
-              unit: rollUnit || 'ft'
-            });
-          }
-
-          toast.show(`Variant SKU "${sku}" added successfully to ${product.businessName}.`, 'success');
-          closeModal();
-          if (onSaved) onSaved();
-        } catch (err) {
-          toast.show(err.message, 'error');
-        }
-      };
-    }
-  });
+  openProductModal(product, onSaved, { addVariant: true });
 }
 
 /**
  * Edit or Create Product Master Modal
  */
-export function openProductModal(product = null, onSaved) {
+export function openProductModal(product = null, onSaved, options = {}) {
   const isEdit = !!product;
   const categories = productService.getCategories();
   const units = storageService.getCollection('units');
@@ -1911,9 +1678,14 @@ export function openProductModal(product = null, onSaved) {
           </div>
 
           <div class="flex flex-col justify-end">
-            <div class="flex items-center gap-2 p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl">
-              <input type="checkbox" id="prod-roll-tracking" ${product && (product.cut_to_length || product.enableRollTracking) ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
-              <label for="prod-roll-tracking" class="font-bold text-slate-800 cursor-pointer">☑ Cut to Length</label>
+            <div id="prod-ctl-wrapper" class="flex flex-col gap-1 p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl transition-all">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" id="prod-roll-tracking" ${product && (product.cut_to_length || product.enableRollTracking) ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0 cursor-pointer">
+                <label id="prod-ctl-label" for="prod-roll-tracking" class="font-bold text-slate-800 cursor-pointer">☑ Cut to Length</label>
+              </div>
+              <div id="prod-ctl-disabled-notice" class="hidden text-[10px] text-amber-700 font-medium">
+                Disabled: Configured per variant SKU below
+              </div>
             </div>
           </div>
         </div>
@@ -1982,7 +1754,7 @@ export function openProductModal(product = null, onSaved) {
       </section>
 
       <!-- SECTION 3: Product Variants & SKUs (Direct Variant Definition) -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="product-variants-section">
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="product-variants-section" id="modal-variants-section">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div>
             <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
@@ -1995,6 +1767,11 @@ export function openProductModal(product = null, onSaved) {
             <span class="text-sm font-extrabold leading-none">+</span>
             <span>Add Variant Row</span>
           </button>
+        </div>
+
+        <div id="no-variants-notice" class="p-4 text-center border border-dashed border-slate-200 rounded-xl bg-slate-50/60 text-slate-500 hidden">
+          <p class="font-bold text-xs text-slate-700">Standard Product (No SKUs)</p>
+          <p class="text-[11px] text-slate-400 mt-1">This product does not have separate SKUs. Cut-to-length is configured above at product level. Click "+ Add Variant Row" to define variants.</p>
         </div>
 
         <div id="modal-variants-list" class="space-y-3">
@@ -2115,12 +1892,13 @@ export function openProductModal(product = null, onSaved) {
 
       // SECTION 3: Dynamic Variant Cards Lifecycle
       let variantCounter = 0;
+
       const renderVariantCard = (v = null, isExisting = false) => {
         variantCounter++;
         const card = document.createElement('div');
-        const isCtlNow = rollCheckbox ? rollCheckbox.checked : false;
-        const currentBaseUnit = (ctlBaseUnitInput ? ctlBaseUnitInput.value.trim() : '') || 'ft';
         const defaultRollLen = 5000;
+        const currentRollUnit = v?.rollUnit || (ctlBaseUnitInput ? ctlBaseUnitInput.value.trim() : '') || product?.base_unit || 'ft';
+        const isVarCtl = Boolean(v?.isCutToLength || v?.cut_to_length || v?.rollLength || (isEdit && product?.cut_to_length));
 
         card.className = 'modal-variant-card p-3.5 bg-slate-50/80 hover:bg-slate-50 rounded-xl border border-slate-200/90 shadow-2xs space-y-3 transition-all';
         card.setAttribute('data-is-existing', isExisting ? '1' : '0');
@@ -2159,11 +1937,11 @@ export function openProductModal(product = null, onSaved) {
 
             <div class="sm:col-span-3 space-y-1">
               <label class="text-[11px] font-semibold text-slate-700">Packaging Unit</label>
-              <input type="text" class="mvar-unit w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${v?.unit || (isCtlNow ? currentBaseUnit : 'PCS')}" placeholder="${isCtlNow ? currentBaseUnit : 'PCS'}">
+              <input type="text" class="mvar-unit w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${v?.unit || (isVarCtl ? currentRollUnit : 'PCS')}" placeholder="${isVarCtl ? currentRollUnit : 'PCS'}">
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
             <div class="sm:col-span-3 space-y-1">
               <label class="text-[11px] font-semibold text-slate-700">Cost Price (PKR)</label>
               <input type="number" min="0" step="any" class="mvar-cost w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${v?.costPrice || 0}">
@@ -2171,27 +1949,70 @@ export function openProductModal(product = null, onSaved) {
 
             <div class="sm:col-span-3 space-y-1">
               <label class="text-[11px] font-semibold text-slate-700">
-                <span class="mvar-price-label">${isCtlNow ? `Rate (PKR/${currentBaseUnit})` : 'Selling Price (PKR)'}</span>
+                <span class="mvar-price-label">${isVarCtl ? `Rate (PKR/${currentRollUnit})` : 'Selling Price (PKR)'}</span>
               </label>
               <input type="number" min="0" step="any" class="mvar-price w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-emerald-800 focus:border-[#138FCB]" value="${v?.sellingPrice || 0}">
             </div>
 
-            <div class="mvar-ctl-fields sm:col-span-6 grid grid-cols-2 gap-2 ${isCtlNow ? '' : 'hidden'}">
-              <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-blue-900">Standard Roll Length</label>
-                <input type="number" min="1" step="any" class="mvar-roll-len w-full text-xs font-bold rounded-lg border border-blue-200 bg-white py-1.5 px-2.5 text-blue-900 focus:border-[#138FCB]" value="${v?.rollLength || defaultRollLen}" placeholder="5000">
+            <div class="sm:col-span-6 flex flex-col justify-end">
+              <div class="flex items-center gap-2 p-2 bg-blue-50/70 border border-blue-100 rounded-lg">
+                <input type="checkbox" class="mvar-ctl-checkbox rounded border-slate-300 text-[#138FCB] focus:ring-0 cursor-pointer" ${isVarCtl ? 'checked' : ''}>
+                <label class="text-[11px] font-bold text-slate-800 cursor-pointer">☑ Cut to Length (Roll / Continuous)</label>
               </div>
-              <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-blue-900">Roll Unit</label>
-                <input type="text" class="mvar-roll-unit w-full text-xs font-bold rounded-lg border border-blue-200 bg-white py-1.5 px-2.5 text-blue-900 focus:border-[#138FCB]" value="${v?.rollUnit || currentBaseUnit}" placeholder="${currentBaseUnit}">
-              </div>
+            </div>
+          </div>
+
+          <div class="mvar-ctl-fields grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-blue-50/40 rounded-xl border border-blue-100 ${isVarCtl ? '' : 'hidden'}">
+            <div class="space-y-1">
+              <label class="text-[11px] font-semibold text-blue-900">Standard Roll Length</label>
+              <input type="number" min="1" step="any" class="mvar-roll-len w-full text-xs font-bold rounded-lg border border-blue-200 bg-white py-1.5 px-2.5 text-blue-900 focus:border-[#138FCB]" value="${v?.rollLength || defaultRollLen}" placeholder="5000">
+              <span class="text-[10px] text-blue-600">Full roll packaging size</span>
+            </div>
+            <div class="space-y-1">
+              <label class="text-[11px] font-semibold text-blue-900">Base Length Unit (Customizable)</label>
+              <input type="text" class="mvar-roll-unit w-full text-xs font-bold rounded-lg border border-blue-200 bg-white py-1.5 px-2.5 text-blue-900 focus:border-[#138FCB]" value="${currentRollUnit}" placeholder="ft">
+              <span class="text-[10px] text-blue-600">e.g. ft, m</span>
             </div>
           </div>
         `;
 
+        const ctlCheckbox = card.querySelector('.mvar-ctl-checkbox');
+        const ctlFields = card.querySelector('.mvar-ctl-fields');
+        const priceLabel = card.querySelector('.mvar-price-label');
+        const unitInput = card.querySelector('.mvar-unit');
+        const rollUnitInput = card.querySelector('.mvar-roll-unit');
+
+        if (ctlCheckbox) {
+          ctlCheckbox.onchange = () => {
+            const isChecked = ctlCheckbox.checked;
+            if (ctlFields) ctlFields.classList.toggle('hidden', !isChecked);
+            const u = rollUnitInput?.value.trim() || 'ft';
+            if (priceLabel) priceLabel.textContent = isChecked ? `Rate (PKR/${u})` : 'Selling Price (PKR)';
+            if (unitInput) {
+              if (isChecked && (!unitInput.value || unitInput.value === 'PCS')) {
+                unitInput.value = u;
+              } else if (!isChecked && unitInput.value === u) {
+                unitInput.value = 'PCS';
+              }
+            }
+          };
+        }
+
+        if (rollUnitInput) {
+          rollUnitInput.oninput = () => {
+            const u = rollUnitInput.value.trim() || 'ft';
+            if (ctlCheckbox?.checked && priceLabel) {
+              priceLabel.textContent = `Rate (PKR/${u})`;
+            }
+          };
+        }
+
         const rmBtn = card.querySelector('.remove-variant-card-btn');
         if (rmBtn) {
-          rmBtn.onclick = () => card.remove();
+          rmBtn.onclick = () => {
+            card.remove();
+            syncCutToLengthState();
+          };
         }
 
         return card;
@@ -2200,6 +2021,42 @@ export function openProductModal(product = null, onSaved) {
       const variantsList = modalEl.querySelector('#modal-variants-list');
       const addVariantRowBtn = modalEl.querySelector('#modal-add-variant-row-btn');
 
+      const syncCutToLengthState = () => {
+        const cards = variantsList.querySelectorAll('.modal-variant-card');
+        const count = cards.length;
+        const noVarNotice = modalEl.querySelector('#no-variants-notice');
+        if (noVarNotice) {
+          noVarNotice.classList.toggle('hidden', count > 0);
+        }
+
+        const rollCheckbox = modalEl.querySelector('#prod-roll-tracking');
+        const ctlBox = modalEl.querySelector('#prod-ctl-config-box');
+        const ctlDisabledNotice = modalEl.querySelector('#prod-ctl-disabled-notice');
+        const ctlWrapper = modalEl.querySelector('#prod-ctl-wrapper');
+
+        if (count > 0) {
+          // SKUs present: disable product-level CTL and manage per variant
+          if (rollCheckbox) {
+            rollCheckbox.disabled = true;
+            rollCheckbox.classList.add('cursor-not-allowed', 'opacity-50');
+          }
+          if (ctlDisabledNotice) ctlDisabledNotice.classList.remove('hidden');
+          if (ctlBox) ctlBox.classList.add('hidden');
+          if (ctlWrapper) ctlWrapper.classList.add('bg-slate-50', 'border-slate-200');
+        } else {
+          // No SKUs: enable product-level CTL
+          if (rollCheckbox) {
+            rollCheckbox.disabled = false;
+            rollCheckbox.classList.remove('cursor-not-allowed', 'opacity-50');
+          }
+          if (ctlDisabledNotice) ctlDisabledNotice.classList.add('hidden');
+          if (ctlBox) {
+            ctlBox.classList.toggle('hidden', !rollCheckbox?.checked);
+          }
+          if (ctlWrapper) ctlWrapper.classList.remove('bg-slate-50', 'border-slate-200');
+        }
+      };
+
       if (isEdit && product) {
         const existingVariants = productService.getVariantsByProduct(product.id);
         existingVariants.forEach(v => {
@@ -2207,13 +2064,22 @@ export function openProductModal(product = null, onSaved) {
         });
       }
 
-      if (!isEdit || variantsList.children.length === 0) {
-        variantsList.appendChild(renderVariantCard(null, false));
+      if (options?.addVariant) {
+        const newCard = renderVariantCard(null, false);
+        variantsList.appendChild(newCard);
+        setTimeout(() => {
+          const varSec = modalEl.querySelector('#modal-variants-section');
+          if (varSec) varSec.scrollIntoView({ behavior: 'smooth' });
+          newCard.querySelector('.mvar-name')?.focus();
+        }, 100);
       }
+
+      syncCutToLengthState();
 
       if (addVariantRowBtn) {
         addVariantRowBtn.onclick = () => {
           variantsList.appendChild(renderVariantCard(null, false));
+          syncCutToLengthState();
         };
       }
 
@@ -2232,9 +2098,17 @@ export function openProductModal(product = null, onSaved) {
         const isActive = modalEl.querySelector('#prod-active').checked;
 
         // Cut to length multi-packaging data
-        const cut_to_length = enableRollTracking;
+        const variantCards = modalEl.querySelectorAll('.modal-variant-card');
+        const hasVariants = variantCards.length > 0;
         const base_unit = modalEl.querySelector('#prod-ctl-base-unit')?.value.trim() || 'ft';
         const full_unit = modalEl.querySelector('#prod-ctl-full-unit-name')?.value.trim() || 'roll';
+
+        let cut_to_length = false;
+        if (hasVariants) {
+          cut_to_length = Array.from(variantCards).some(c => c.querySelector('.mvar-ctl-checkbox')?.checked);
+        } else {
+          cut_to_length = enableRollTracking;
+        }
 
         const packagingUnits = [];
         if (enableRollTracking && rollContainer) {
@@ -2260,7 +2134,7 @@ export function openProductModal(product = null, onSaved) {
           productType,
           lowStockLevel,
           negativeStockAllowed,
-          enableRollTracking,
+          enableRollTracking: cut_to_length,
           cut_to_length,
           base_unit,
           full_unit,
@@ -2279,20 +2153,19 @@ export function openProductModal(product = null, onSaved) {
           toast.show('Product created successfully.', 'success');
         }
 
-        // Process variant cards defined in modal
-        const variantCards = modalEl.querySelectorAll('.modal-variant-card');
         const targetProdId = savedProduct.id;
         const prodCode = savedProduct.code;
 
         variantCards.forEach((card, idx) => {
           const isExisting = card.getAttribute('data-is-existing') === '1';
-          const name = card.querySelector('.mvar-name')?.value.trim() || (variantCards.length === 1 ? savedProduct.customerName : `Model ${idx + 1}`);
+          const name = card.querySelector('.mvar-name')?.value.trim() || `Model ${idx + 1}`;
           const sku = card.querySelector('.mvar-sku')?.value.trim() || `${prodCode}-V${String(idx + 1).padStart(2, '0')}`;
           const costPrice = Number(card.querySelector('.mvar-cost')?.value) || 0;
           const sellingPrice = Number(card.querySelector('.mvar-price')?.value) || 0;
-          const unit = card.querySelector('.mvar-unit')?.value.trim() || (cut_to_length ? base_unit : 'PCS');
-          const rollLength = Number(card.querySelector('.mvar-roll-len')?.value) || 5000;
-          const rollUnit = card.querySelector('.mvar-roll-unit')?.value.trim() || base_unit;
+          const isVarCtl = card.querySelector('.mvar-ctl-checkbox')?.checked ?? false;
+          const rollLength = isVarCtl ? (Number(card.querySelector('.mvar-roll-len')?.value) || 5000) : null;
+          const rollUnit = isVarCtl ? (card.querySelector('.mvar-roll-unit')?.value.trim() || base_unit) : null;
+          const unit = card.querySelector('.mvar-unit')?.value.trim() || (isVarCtl ? rollUnit : 'PCS');
 
           if (isExisting) {
             const vId = card.getAttribute('data-var-id');
@@ -2303,11 +2176,13 @@ export function openProductModal(product = null, onSaved) {
                 costPrice,
                 sellingPrice,
                 unit,
-                isCutToLength: cut_to_length,
-                rollLength: cut_to_length ? rollLength : undefined,
-                rollUnit: cut_to_length ? rollUnit : undefined
+                isCutToLength: isVarCtl,
+                cut_to_length: isVarCtl,
+                rollLength,
+                rollUnit,
+                base_unit: rollUnit
               });
-              if (cut_to_length) {
+              if (isVarCtl) {
                 const stockRec = cutToLengthService.getVariantStock('wh-1', vId);
                 cutToLengthService.saveVariantStock('wh-1', vId, {
                   fullRolls: stockRec?.fullRolls !== undefined ? stockRec.fullRolls : 5,
@@ -2325,12 +2200,14 @@ export function openProductModal(product = null, onSaved) {
               costPrice,
               sellingPrice,
               unit,
-              isCutToLength: cut_to_length,
-              rollLength: cut_to_length ? rollLength : null,
-              rollUnit: cut_to_length ? rollUnit : null
+              isCutToLength: isVarCtl,
+              cut_to_length: isVarCtl,
+              rollLength,
+              rollUnit,
+              base_unit: rollUnit
             });
 
-            if (cut_to_length && createdVar?.id) {
+            if (isVarCtl && createdVar?.id) {
               cutToLengthService.saveVariantStock('wh-1', createdVar.id, {
                 fullRolls: 5,
                 rollLength,

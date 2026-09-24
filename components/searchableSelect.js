@@ -8,11 +8,7 @@
  */
 
 function renderAttributePills(attributes, isFaded = false) {
-  if (!attributes || Object.keys(attributes).length === 0) return '';
-  return Object.entries(attributes).map(([k, v]) => {
-    const bgClass = isFaded ? 'bg-white/80 border-slate-200/80 text-slate-500' : 'bg-slate-100 border-slate-200 text-slate-600';
-    return `<span class="${bgClass} border px-1.5 py-0.2 rounded text-[9px] font-medium">${k}: ${v}</span>`;
-  }).join('');
+  return '';
 }
 
 function renderVariantOptionsHtml(prodVariants, selectedVarId) {
@@ -120,16 +116,15 @@ export function renderProductVariantPicker({
       </div>
     `;
   } else {
-    variantTriggerClass = 'bg-slate-50 border border-dashed border-slate-200 text-slate-400 cursor-default opacity-70';
-    variantInnerHtml = `
-      <div class="font-medium text-slate-400 text-xs italic">Standard Product (No SKUs)</div>
-    `;
+    variantTriggerClass = 'hidden';
+    variantInnerHtml = '';
   }
 
+  const hasVariants = prodVariants.length > 0;
   const variantOptionsHtml = renderVariantOptionsHtml(prodVariants, varId);
 
   return `
-    <div class="pv-picker-container relative text-xs grid grid-cols-1 sm:grid-cols-2 gap-2 items-start" data-row-id="${rowId}">
+    <div class="pv-picker-container relative text-xs grid grid-cols-1 ${hasVariants ? 'sm:grid-cols-2' : ''} gap-2 items-start" data-row-id="${rowId}">
       <!-- Hidden inputs for form extraction -->
       <input type="hidden" class="pv-selected-product-id" value="${prodId}">
       <input type="hidden" class="pv-selected-variant-id gp-item-var" value="${varId}" data-unit="${currentUnit}">
@@ -190,7 +185,7 @@ export function renderProductVariantPicker({
       </div>
 
       <!-- Tier 2: Variant Selector Card (Right Side, Next to Product) -->
-      <div class="pv-variant-container relative">
+      <div class="pv-variant-container relative ${hasVariants ? '' : 'hidden'}">
         <div class="pv-variant-trigger flex items-center justify-between p-2 rounded-xl shadow-2xs transition-all min-h-[58px] ${variantTriggerClass}">
           ${variantInnerHtml}
           <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1 pv-var-arrow transition-transform ${isMulti ? '' : 'hidden'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -221,6 +216,7 @@ export function bindProductVariantPicker(container, { products, variants, onVari
   const prodSearch = container.querySelector('.pv-product-search');
   const prodArrow = container.querySelector('.pv-arrow');
 
+  const varContainer = container.querySelector('.pv-variant-container');
   const varTrigger = container.querySelector('.pv-variant-trigger');
   const varMenu = container.querySelector('.pv-variant-menu');
   const varArrow = container.querySelector('.pv-var-arrow');
@@ -242,9 +238,10 @@ export function bindProductVariantPicker(container, { products, variants, onVari
   };
 
   const renderSingleVariantTrigger = (variant) => {
+    if (varContainer) varContainer.classList.remove('hidden');
+    container.classList.add('sm:grid-cols-2');
     if (!varTrigger) return;
     varTrigger.className = 'pv-variant-trigger flex items-center justify-between p-2 rounded-xl bg-slate-100/70 border border-slate-200/90 text-slate-500 shadow-2xs cursor-default transition-all opacity-85 min-h-[58px]';
-    const attrPills = renderAttributePills(variant.attributes, true);
     varTrigger.innerHTML = `
       <div class="truncate w-full pr-1">
         <div class="flex items-center justify-between gap-1">
@@ -253,7 +250,6 @@ export function bindProductVariantPicker(container, { products, variants, onVari
         </div>
         <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
           <span class="pv-var-sku font-mono font-semibold text-slate-500">${variant.sku}</span>
-          ${attrPills ? `<span class="pv-var-attrs flex items-center gap-1">${attrPills}</span>` : ''}
         </div>
       </div>
     `;
@@ -261,6 +257,8 @@ export function bindProductVariantPicker(container, { products, variants, onVari
   };
 
   const renderEmptyMultiVariantTrigger = (matchingVariants) => {
+    if (varContainer) varContainer.classList.remove('hidden');
+    container.classList.add('sm:grid-cols-2');
     if (!varTrigger) return;
     varTrigger.className = 'pv-variant-trigger flex items-center justify-between p-2 rounded-xl bg-amber-50/60 border border-dashed border-amber-300 hover:border-amber-400 shadow-2xs cursor-pointer transition-all min-h-[58px]';
     varTrigger.innerHTML = `
@@ -282,9 +280,10 @@ export function bindProductVariantPicker(container, { products, variants, onVari
   };
 
   const renderSelectedVariantTrigger = (variant) => {
+    if (varContainer) varContainer.classList.remove('hidden');
+    container.classList.add('sm:grid-cols-2');
     if (!varTrigger) return;
     varTrigger.className = 'pv-variant-trigger flex items-center justify-between p-2 rounded-xl bg-white border border-[#138FCB] shadow-2xs cursor-pointer transition-all hover:border-[#0E78AC] min-h-[58px]';
-    const attrPills = renderAttributePills(variant.attributes, false);
     varTrigger.innerHTML = `
       <div class="truncate w-full pr-1">
         <div class="flex items-center justify-between gap-1">
@@ -293,7 +292,6 @@ export function bindProductVariantPicker(container, { products, variants, onVari
         </div>
         <div class="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-500">
           <span class="pv-var-sku font-mono font-semibold text-[#138FCB]">${variant.sku}</span>
-          ${attrPills ? `<span class="pv-var-attrs flex items-center gap-1">${attrPills}</span>` : ''}
         </div>
       </div>
       <svg class="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1 pv-var-arrow transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -304,12 +302,8 @@ export function bindProductVariantPicker(container, { products, variants, onVari
   };
 
   const renderZeroVariantTrigger = () => {
-    if (!varTrigger) return;
-    varTrigger.className = 'pv-variant-trigger flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-slate-400 shadow-2xs cursor-default min-h-[58px] opacity-70';
-    varTrigger.innerHTML = `
-      <div class="font-medium text-slate-400 text-xs italic">Standard Product (No SKUs)</div>
-    `;
-    if (varArrow) varArrow.classList.add('hidden');
+    if (varContainer) varContainer.classList.add('hidden');
+    container.classList.remove('sm:grid-cols-2');
   };
 
   const bindVariantOptions = (matchingVariants) => {
@@ -444,6 +438,8 @@ export function bindProductVariantPicker(container, { products, variants, onVari
       } else {
         // Zero Variants
         hiddenVarId.value = '';
+        hiddenVarId.removeAttribute('data-unit');
+        if (hiddenUnit) hiddenUnit.value = selectedProd.baseUnit || 'PCS';
         renderZeroVariantTrigger();
 
         if (onVariantChanged) {

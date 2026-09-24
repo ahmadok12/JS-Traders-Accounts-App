@@ -61,23 +61,6 @@ export function renderVariantsView() {
         return prod ? `<span class="font-medium text-slate-700">${prod.businessName}</span>` : '-';
       }
     },
-    {
-      key: 'attributes',
-      label: 'Attributes',
-      render: row => {
-        const attrs = Object.entries(row.attributes || {});
-        if (attrs.length === 0) return '<span class="text-slate-400 text-[10px]">None</span>';
-        return `
-          <div class="flex flex-wrap gap-1">
-            ${attrs.map(([k, v]) => `
-              <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${k === 'Origin' && v === 'China' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-100 text-slate-700'}">
-                ${k}: ${v}
-              </span>
-            `).join('')}
-          </div>
-        `;
-      }
-    },
     ...(canViewCost ? [
       {
         key: 'costPrice',
@@ -171,10 +154,6 @@ function updateVariantsTable(container, filteredData, refreshCallback) {
     { key: 'sku', label: 'SKU / Code', render: row => `<div><div class="font-bold text-[#138FCB] font-mono">${row.sku}</div><div class="text-[10px] text-slate-400 font-mono">${row.code}</div></div>` },
     { key: 'name', label: 'Variant Name', render: row => `<span class="font-bold text-slate-800">${row.name}</span>` },
     { key: 'product', label: 'Parent Product', render: row => { const prod = prodMap.get(row.productId); return prod ? `<span class="font-medium text-slate-700">${prod.businessName}</span>` : '-'; } },
-    { key: 'attributes', label: 'Attributes', render: row => {
-      const attrs = Object.entries(row.attributes || {});
-      return attrs.length === 0 ? '<span class="text-slate-400 text-[10px]">None</span>' : `<div class="flex flex-wrap gap-1">${attrs.map(([k, v]) => `<span class="px-2 py-0.5 rounded text-[10px] font-semibold ${k === 'Origin' && v === 'China' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-slate-100 text-slate-700'}">${k}: ${v}</span>`).join('')}</div>`;
-    }},
     ...(canViewCost ? [{ key: 'costPrice', label: 'Standard Cost', align: 'right', render: row => `<span class="font-semibold text-slate-600 font-mono">Rs. ${Number(row.costPrice || 0).toLocaleString()}</span>` }] : []),
     { key: 'sellingPrice', label: 'Selling Price', align: 'right', render: row => `<span class="font-bold text-[#138FCB] font-mono">Rs. ${Number(row.sellingPrice || 0).toLocaleString()}</span>` },
     { key: 'isActive', label: 'Status', render: row => `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${row.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">${row.isActive ? 'Active' : 'Inactive / Void'}</span>` }
@@ -250,18 +229,7 @@ export function openVariantDetailModal(variant, refreshCallback) {
         ` : ''}
 
         <!-- Dynamic attributes -->
-        ${variant.attributes && Object.keys(variant.attributes).length > 0 ? `
-          <div class="p-3 bg-slate-50/50 rounded-xl border border-slate-100 space-y-1.5">
-            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">SKU Attributes</span>
-            <div class="flex flex-wrap gap-2">
-              ${Object.entries(variant.attributes).map(([k, v]) => `
-                <span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 shadow-2xs">
-                  <strong>${k}:</strong> ${v}
-                </span>
-              `).join('')}
-            </div>
-          </div>
-        ` : ''}
+        
       </section>
 
       <!-- Section 2: Live Stock Breakdown -->
@@ -431,7 +399,7 @@ function openVariantModal(variant = null, onSaved) {
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
             <span>⚙️</span>
-            <span>2. Dynamic Attributes &amp; Pricing</span>
+            <span>2. Pricing Configuration</span>
           </h3>
         </div>
 
@@ -544,8 +512,6 @@ function openVariantModal(variant = null, onSaved) {
         const sku = modalEl.querySelector('#var-sku').value.trim();
         const barcode = modalEl.querySelector('#var-barcode').value.trim();
         const unit = modalEl.querySelector('#var-unit').value.trim() || 'PCS';
-        const origin = modalEl.querySelector('#var-origin').value;
-        const material = modalEl.querySelector('#var-material').value.trim();
         const sellingPrice = Number(modalEl.querySelector('#var-selling').value) || 0;
         const costPrice = canViewCost ? (Number(modalEl.querySelector('#var-cost')?.value) || 0) : (variant?.costPrice || 0);
         const isActive = modalEl.querySelector('#var-active').checked;
@@ -553,10 +519,7 @@ function openVariantModal(variant = null, onSaved) {
         const isCutToLength = modalEl.querySelector('#var-is-ctl')?.checked || false;
         const rollLength = isCutToLength ? (Number(modalEl.querySelector('#var-roll-length')?.value) || 5000) : null;
         const rollUnit = isCutToLength ? (modalEl.querySelector('#var-roll-unit')?.value.trim() || 'ft') : null;
-
-        const attributes = { ...(variant?.attributes || {}) };
-        if (origin) attributes.Origin = origin;
-        if (material) attributes.Material = material;
+        const attributes = {};
 
         let targetVarId = variant?.id;
         if (isEdit) {

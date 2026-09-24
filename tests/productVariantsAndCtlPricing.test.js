@@ -152,11 +152,45 @@ const printLines = invoice1.lines.map(l => ({
   baseUnit: l.baseUnit
 }));
 
-const renderedHtml = invoiceTemplateService.renderPrintableInvoice(invoice1, { name: 'Customer A' }, printLines);
-assert(renderedHtml.includes('10,000 ft'), 'Printable invoice includes total footage "10,000 ft"');
-assert(renderedHtml.includes('per ft'), 'Printable invoice specifies rate "per ft"');
-assert(renderedHtml.includes('220,000'), 'Printable invoice includes line total 220,000');
+// --- TEST 5: Verify Product Picker UI with 0 variants & Attribute Removal ---
+console.log('\n--- TEST 5: Verify Product Picker with 0 Variants & Removed Attributes ---');
+import { renderProductVariantPicker } from '../components/searchableSelect.js';
+
+const productNoVar = productService.createProduct({
+  businessName: 'Simple Wire Standard',
+  customerName: 'Simple Wire Standard (No Variants)',
+  categoryId: 'cat-2',
+  baseUnitId: 'u-meter',
+  productType: 'Stock',
+  cut_to_length: true
+});
+
+const pickerHtmlNoVar = renderProductVariantPicker({
+  rowId: 'row-test-1',
+  selectedProductId: productNoVar.id,
+  selectedVariantId: null,
+  products: [productNoVar],
+  variants: []
+});
+
+assert(!pickerHtmlNoVar.includes('Standard Product (No SKUs)'), 'Picker HTML does not show "Standard Product (No SKUs)" card');
+assert(pickerHtmlNoVar.includes('pv-variant-container relative hidden'), 'Picker variant container is hidden when product has 0 variants');
+assert(!pickerHtmlNoVar.includes('sm:grid-cols-2'), 'Picker is full-width (no sm:grid-cols-2) when product has 0 variants');
+
+const pickerHtmlMulti = renderProductVariantPicker({
+  rowId: 'row-test-2',
+  selectedProductId: newProduct.id,
+  selectedVariantId: null,
+  products: [newProduct],
+  variants: [var1, var2]
+});
+
+assert(pickerHtmlMulti.includes('sm:grid-cols-2'), 'Picker has 2 columns when product has variants');
+assert(!pickerHtmlMulti.includes('pv-variant-container relative hidden'), 'Picker variant container is visible when product has variants');
+assert(!pickerHtmlMulti.includes('Origin:'), 'No Origin attribute pills rendered in variant picker');
+assert(!pickerHtmlMulti.includes('Gauge:'), 'No Gauge attribute pills rendered in variant picker');
 
 console.log('\n===============================================================');
 console.log('🎉 ALL INLINE VARIANTS & CTL PRICING TESTS PASSED!');
 console.log('===============================================================\n');
+

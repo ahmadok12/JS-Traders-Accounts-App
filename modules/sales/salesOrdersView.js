@@ -956,8 +956,9 @@ function openCreateOrderModal(onSaved) {
     const packagingUnits = isCtl ? (selectedProduct.packagingUnits || []) : [];
     const curPackaging = initialPackaging || (packagingUnits.length > 0 ? packagingUnits[0].name : baseUnit);
 
-    const whStock = vId ? inventoryService.getBalance('wh-1', vId) : 0;
-    const officeStock = vId ? inventoryService.getBalance('wh-2', vId) : 0;
+    const itemId = vId || selectedProduct?.id;
+    const whStock = itemId ? inventoryService.getBalance('wh-1', itemId) : 0;
+    const officeStock = itemId ? inventoryService.getBalance('wh-2', itemId) : 0;
     const wVal = (whQty !== '' && whQty !== null && whQty !== undefined) ? whQty : '';
     const oVal = (offQty !== '' && offQty !== null && offQty !== undefined) ? offQty : '';
     const lineTotal = (Number(wVal) || 0) + (Number(oVal) || 0);
@@ -1002,13 +1003,13 @@ function openCreateOrderModal(onSaved) {
         </td>
         <td class="p-2.5 text-center align-top">
           <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded-lg border border-blue-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
-            ${vId ? `WH Stock: ${whStock.toLocaleString()} ${baseUnit}` : 'WH Stock: —'}
+            ${(vId || selectedProduct) ? `WH Stock: ${whStock.toLocaleString()} ${baseUnit}` : 'WH Stock: —'}
           </span>
           <input type="number" min="0" value="${wVal}" placeholder="0" class="so-wh-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] focus:ring-2 focus:ring-blue-100 py-1.5 px-2 bg-white text-blue-900 shadow-2xs">
         </td>
         <td class="p-2.5 text-center align-top">
           <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded-lg border border-amber-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
-            ${vId ? `Office Stock: ${officeStock.toLocaleString()} ${baseUnit}` : 'Office Stock: —'}
+            ${(vId || selectedProduct) ? `Office Stock: ${officeStock.toLocaleString()} ${baseUnit}` : 'Office Stock: —'}
           </span>
           <input type="number" min="0" value="${oVal}" placeholder="0" class="so-office-qty w-20 mx-auto text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 py-1.5 px-2 bg-white text-amber-900 shadow-2xs">
         </td>
@@ -1242,7 +1243,8 @@ function openCreateOrderModal(onSaved) {
       let rowCounter = 1;
 
       const updateRowCalculations = (row) => {
-        const varInput = row.querySelector('.pv-var-input');
+        const varInput = row.querySelector('.pv-selected-variant-id') || row.querySelector('.pv-var-input');
+        const prodInput = row.querySelector('.pv-selected-product-id');
         const whIndicator = row.querySelector('.wh-stock-indicator');
         const offIndicator = row.querySelector('.office-stock-indicator');
         const whQtyInput = row.querySelector('.so-wh-qty');
@@ -1253,7 +1255,11 @@ function openCreateOrderModal(onSaved) {
         const ctlStockPill = row.querySelector('.so-ctl-stock-pill');
 
         const vId = varInput ? varInput.value : '';
-        if (!vId) {
+        const pId = prodInput ? prodInput.value : '';
+        const selectedVariant = variants.find(v => v.id === vId);
+        const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : products.find(p => p.id === pId);
+
+        if (!selectedProduct && !selectedVariant) {
           if (whIndicator) whIndicator.textContent = 'WH Stock: —';
           if (offIndicator) offIndicator.textContent = 'Office Stock: —';
           if (totalDisplay) totalDisplay.textContent = '—';
@@ -1268,16 +1274,15 @@ function openCreateOrderModal(onSaved) {
           return;
         }
 
-        const selectedVariant = variants.find(v => v.id === vId);
-        const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
         const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
         const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
+        const itemId = vId || (selectedProduct ? selectedProduct.id : '');
 
         if (isCtl && ctlContainer && packagingSelect) {
           ctlContainer.classList.remove('hidden');
 
-          const whStockRec = cutToLengthService.getVariantStock('wh-1', vId);
-          const offStockRec = cutToLengthService.getVariantStock('wh-2', vId);
+          const whStockRec = cutToLengthService.getVariantStock('wh-1', itemId);
+          const offStockRec = cutToLengthService.getVariantStock('wh-2', itemId);
 
           const rollLength = whStockRec?.rollLength || Number(selectedVariant?.rollLength) || 5000;
           const whRolls = whStockRec ? whStockRec.fullRolls : 0;
@@ -1441,9 +1446,9 @@ function openCreateOrderModal(onSaved) {
           row._simWh = null;
           row._simOff = null;
 
-          const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : 'PCS';
-          const wStock = inventoryService.getBalance('wh-1', vId);
-          const oStock = inventoryService.getBalance('wh-2', vId);
+          const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : (selectedProduct?.baseUnitId || 'PCS');
+          const wStock = inventoryService.getBalance('wh-1', itemId);
+          const oStock = inventoryService.getBalance('wh-2', itemId);
 
           if (whIndicator) whIndicator.textContent = `WH Stock: ${wStock.toLocaleString()} ${unit}`;
           if (offIndicator) offIndicator.textContent = `Office Stock: ${oStock.toLocaleString()} ${unit}`;
