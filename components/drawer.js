@@ -5,6 +5,8 @@
  * without losing scroll position or navigating away from master data tables.
  */
 
+import { hasEnteredData, snapshotFormInitialState, confirmDiscardChanges } from './unsavedChangesGuard.js';
+
 let activeDrawerElement = null;
 let activeBackdropElement = null;
 let activeCloseCallback = null;
@@ -29,7 +31,7 @@ export function openDrawer({
   width = 'max-w-md sm:max-w-lg',
   onClose = null
 }) {
-  closeDrawer(); // Close any currently open drawer
+  closeDrawer(true); // Close any currently open drawer immediately
 
   activeCloseCallback = onClose;
 
@@ -86,28 +88,75 @@ export function openDrawer({
     drawer.classList.add('translate-x-0');
   });
 
-  // Event handlers
-  backdrop.addEventListener('click', () => closeDrawer());
+  // Event handlers with unsaved data guard
+  const attemptClose = () => {
+    if (activeDrawerElement && activeDrawerElement.dataset.isSubmitting !== 'true' && hasEnteredData(activeDrawerElement)) {
+      confirmDiscardChanges({
+        title: 'Discard Drawer Changes?',
+        message: 'You have entered data in this panel. If you close now, your unsaved changes will be lost.',
+        confirmLabel: 'Discard & Close',
+        cancelLabel: 'Keep Editing',
+        onDiscard: () => {
+          closeDrawer(true);
+        }
+      });
+    } else {
+      closeDrawer(true);
+    }
+  };
+
+  backdrop.addEventListener('click', attemptClose);
   const closeBtn = drawer.querySelector('#app-drawer-close-btn');
   if (closeBtn) {
-    closeBtn.addEventListener('click', () => closeDrawer());
+    closeBtn.addEventListener('click', attemptClose);
   }
 
   // Keyboard escape listener
   document.addEventListener('keydown', handleKeydown);
+
+  // Snapshot initial state
+  requestAnimationFrame(() => {
+    snapshotFormInitialState(drawer);
+  });
 }
 
 function handleKeydown(e) {
   if (e.key === 'Escape' && activeDrawerElement) {
-    closeDrawer();
+    if (document.getElementById('unsaved-changes-confirm-overlay')) return;
+    if (activeDrawerElement.dataset.isSubmitting !== 'true' && hasEnteredData(activeDrawerElement)) {
+      confirmDiscardChanges({
+        title: 'Discard Drawer Changes?',
+        message: 'You have entered data in this panel. If you close now, your unsaved changes will be lost.',
+        confirmLabel: 'Discard & Close',
+        cancelLabel: 'Keep Editing',
+        onDiscard: () => {
+          closeDrawer(true);
+        }
+      });
+    } else {
+      closeDrawer(true);
+    }
   }
 }
 
 /**
  * Close active slide-over drawer with smooth transition
  */
-export function closeDrawer() {
+export function closeDrawer(force = false) {
   if (!activeDrawerElement) return;
+
+  if (!force && activeDrawerElement.dataset.isSubmitting !== 'true' && hasEnteredData(activeDrawerElement)) {
+    confirmDiscardChanges({
+      title: 'Discard Drawer Changes?',
+      message: 'You have entered data in this panel. If you close now, your unsaved changes will be lost.',
+      confirmLabel: 'Discard & Close',
+      cancelLabel: 'Keep Editing',
+      onDiscard: () => {
+        closeDrawer(true);
+      }
+    });
+    return;
+  }
 
   document.removeEventListener('keydown', handleKeydown);
 

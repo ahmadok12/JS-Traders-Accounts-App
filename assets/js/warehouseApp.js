@@ -7,8 +7,15 @@
 import { authService } from '../../services/authService.js';
 import { storageService } from '../../services/storageService.js';
 import { toast } from '../../components/toast.js';
+import { closeModal } from '../../components/modal.js';
 import { openDrawer, closeDrawer } from '../../components/drawer.js';
 import { openPortalSwitcherModal } from '../../components/portalSwitcherModal.js';
+import {
+  initUnsavedChangesGuard,
+  hasAnyUnsavedData,
+  confirmDiscardChanges,
+  snapshotFormInitialState
+} from '../../components/unsavedChangesGuard.js';
 
 // Warehouse & Inventory Views
 import { renderStockView, bindStockEvents } from '../../modules/inventory/stockView.js';
@@ -70,11 +77,37 @@ class WarehouseAppController {
       this.scheduleRender();
     });
 
+    initUnsavedChangesGuard();
+
     const initialRoute = window.location.hash.replace(/^#\/?/, '') || 'warehouse-gatepasses';
-    this.navigateTo(initialRoute, false);
+    this.proceedNavigation(initialRoute, false);
   }
 
   navigateTo(route, updateHash = true) {
+    if (this.currentRoute && this.currentRoute !== route && hasAnyUnsavedData()) {
+      confirmDiscardChanges({
+        title: 'Discard Unsaved Changes?',
+        message: 'You have entered data into a form or dialog on this screen. If you leave now, all your unsaved changes will be lost.',
+        confirmLabel: 'Discard & Leave',
+        cancelLabel: 'Stay on Page',
+        onDiscard: () => {
+          closeModal(null, true);
+          closeDrawer(true);
+          this.proceedNavigation(route, updateHash);
+        },
+        onCancel: () => {
+          if (window.location.hash !== `#/${this.currentRoute}`) {
+            history.replaceState(null, '', `#/${this.currentRoute}`);
+          }
+        }
+      });
+      return;
+    }
+
+    this.proceedNavigation(route, updateHash);
+  }
+
+  proceedNavigation(route, updateHash = true) {
     this.currentRoute = route;
 
     if (updateHash && window.location.hash !== `#/${route}`) {
@@ -245,6 +278,10 @@ class WarehouseAppController {
     if (bindFn) {
       bindFn(this.workspace, () => this.scheduleRender());
     }
+
+    requestAnimationFrame(() => {
+      snapshotFormInitialState(this.workspace);
+    });
     } finally {
       this.isRendering = false;
     }

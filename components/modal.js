@@ -3,6 +3,8 @@
  * Adheres strictly to the ERP design language in Design/code 1.html & user uploaded design.
  */
 
+import { hasEnteredData, snapshotFormInitialState, confirmDiscardChanges } from './unsavedChangesGuard.js';
+
 export function openModal({
   title,
   subtitle = '',
@@ -18,8 +20,8 @@ export function openModal({
   onOpen = null,
   onClose = null
 }) {
-  // Remove any existing active modal
-  closeModal();
+  // Remove any existing active modal immediately
+  closeModal(null, true);
 
   const finalHtml = contentHtml || content || '';
   const finalSize = width || size || 'max-w-5xl';
@@ -126,43 +128,85 @@ export function openModal({
 
   document.body.appendChild(overlay);
 
+  // Safe close handler that checks for unsaved form data
+  const attemptClose = () => {
+    if (overlay.dataset.isSubmitting !== 'true' && hasEnteredData(overlay)) {
+      confirmDiscardChanges({
+        title: 'Discard Unsaved Changes?',
+        message: 'You have entered data into this form. If you close now, all your unsaved changes will be lost.',
+        confirmLabel: 'Discard & Close',
+        cancelLabel: 'Keep Editing',
+        onDiscard: () => {
+          closeModal(onClose, true);
+        }
+      });
+    } else {
+      closeModal(onClose, true);
+    }
+  };
+
   // Close handlers
   const closeBtn = overlay.querySelector('#modal-close-btn');
   if (closeBtn) {
-    closeBtn.onclick = () => closeModal(onClose);
+    closeBtn.onclick = attemptClose;
   }
 
   const defaultCloseBtn = overlay.querySelector('#modal-default-close-btn');
   if (defaultCloseBtn) {
-    defaultCloseBtn.onclick = () => closeModal(onClose);
+    defaultCloseBtn.onclick = attemptClose;
   }
 
   overlay.onclick = (e) => {
     if (e.target === overlay) {
-      closeModal(onClose);
+      attemptClose();
     }
   };
 
   const keyHandler = (e) => {
     if (e.key === 'Escape') {
-      closeModal(onClose);
-      document.removeEventListener('keydown', keyHandler);
+      // If a confirmation prompt is already open, let the prompt handle Escape
+      if (document.getElementById('unsaved-changes-confirm-overlay')) return;
+      attemptClose();
     }
   };
   document.addEventListener('keydown', keyHandler);
+  overlay._keyHandler = keyHandler;
 
   if (onOpen) {
     onOpen(overlay);
   }
 
+  // Snapshot initial form values right after initialization
+  requestAnimationFrame(() => {
+    snapshotFormInitialState(overlay);
+  });
+
   return overlay;
 }
 
-export function closeModal(onClose = null) {
+export function closeModal(onClose = null, force = false) {
   const overlay = document.getElementById('active-modal-overlay');
-  if (overlay) {
-    overlay.remove();
-    if (onClose) onClose();
+  if (!overlay) return;
+
+  // If close was requested programmatically without force, still guard if data entered
+  if (!force && overlay.dataset.isSubmitting !== 'true' && hasEnteredData(overlay)) {
+    confirmDiscardChanges({
+      title: 'Discard Unsaved Changes?',
+      message: 'You have entered data into this form. If you close now, all your unsaved changes will be lost.',
+      confirmLabel: 'Discard & Close',
+      cancelLabel: 'Keep Editing',
+      onDiscard: () => {
+        closeModal(onClose, true);
+      }
+    });
+    return;
   }
+
+  if (overlay._keyHandler) {
+    document.removeEventListener('keydown', overlay._keyHandler);
+  }
+
+  overlay.remove();
+  if (onClose) onClose();
 }
 

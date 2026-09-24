@@ -16,6 +16,7 @@ import { storageService } from '../../services/storageService.js';
 import { ImageCompressor } from '../../utils/imageCompressor.js';
 import { soundAlert } from '../../utils/soundAlert.js';
 import { openPortalSwitcherModal } from '../../components/portalSwitcherModal.js';
+import { initUnsavedChangesGuard } from '../../components/unsavedChangesGuard.js';
 
 class MobileStaffApp {
   constructor() {
@@ -57,6 +58,7 @@ class MobileStaffApp {
     this.initWakeLock();
     this.bindGlobalEvents();
     this.setupRealtimeListeners();
+    initUnsavedChangesGuard();
 
     // Check staff session
     this.currentStaff = staffAuthService.getCurrentStaff();
