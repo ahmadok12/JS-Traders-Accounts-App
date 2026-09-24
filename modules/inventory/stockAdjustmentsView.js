@@ -14,6 +14,7 @@ import { renderTable } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { toast } from '../../components/toast.js';
+import { renderSearchableDropdown, bindSearchableDropdown } from '../../components/searchableSelect.js';
 
 export function renderStockAdjustmentsView() {
   const adjustments = inventoryService.getStockAdjustments() || [];
@@ -380,7 +381,18 @@ export function openAdjustmentModal(onSaved) {
 
   // Helper to get variant display info
   const getVariantInfo = (variantId) => {
-    const v = variants.find(item => item.id === variantId) || variants[0];
+    if (!variantId) {
+      return {
+        variant: null,
+        product: null,
+        name: 'Select an Item',
+        sku: 'SKU-0000',
+        category: 'No item selected',
+        unit: 'PCS',
+        costPrice: 0
+      };
+    }
+    const v = variants.find(item => item.id === variantId);
     const p = v ? prodMap.get(v.productId) : null;
     return {
       variant: v,
@@ -397,24 +409,14 @@ export function openAdjustmentModal(onSaved) {
   let selectedWarehouseId = warehouses[0]?.id || 'wh-1';
   let activeEntryMode = 'delta'; // 'delta' or 'final'
 
-  // Initialize with 1 line
-  const linesState = [
-    {
-      id: `line-${Date.now()}-1`,
-      variantId: variants[0]?.id || '',
-      currentStock: inventoryService.getBalance(selectedWarehouseId, variants[0]?.id || ''),
-      deltaQty: 0,
-      newFinalStock: inventoryService.getBalance(selectedWarehouseId, variants[0]?.id || ''),
-      unit: variants[0]?.unit || 'PCS',
-      mode: 'delta'
-    }
-  ];
+  // Initialize with 0 lines by default (clean state per ERP standard)
+  const linesState = [];
 
   const contentHtml = `
-    <form id="stock-adjustment-modal-form" class="space-y-5 text-slate-800">
+    <form id="stock-adjustment-modal-form" class="space-y-5 text-slate-800 overflow-visible">
       
       <!-- CARD 1: LOCATION & AUDIT DETAILS -->
-      <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 overflow-visible">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-2">
             <span class="p-1.5 rounded-lg bg-blue-50 text-[#138FCB]">
@@ -428,18 +430,22 @@ export function openAdjustmentModal(onSaved) {
           <span class="text-[11px] text-slate-400 font-medium">All fields marked with <span class="text-rose-500">*</span> are required</span>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs overflow-visible">
           <!-- Warehouse Selector -->
-          <div>
+          <div class="overflow-visible">
             <label class="block font-bold text-slate-700 mb-1">Target Warehouse <span class="text-rose-500">*</span></label>
-            <div class="relative">
-              <select id="modal-adj-warehouse" required class="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-semibold focus:outline-none focus:border-[#138FCB] focus:bg-white transition-all appearance-none cursor-pointer">
-                ${warehouses.map(w => `<option value="${w.id}" ${w.id === selectedWarehouseId ? 'selected' : ''}>${w.name} (${w.city || 'Depot'})</option>`).join('')}
-              </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            ${renderSearchableDropdown({
+              id: 'modal-adj-warehouse',
+              placeholder: 'Select Target Warehouse...',
+              value: selectedWarehouseId,
+              required: true,
+              options: warehouses.map(w => ({
+                value: w.id,
+                label: `${w.name} (${w.city || 'Depot'})`,
+                subtext: w.address || w.type || 'Warehouse',
+                badge: w.type || 'Warehouse'
+              }))
+            })}
           </div>
 
           <!-- Adjustment Date -->
@@ -449,22 +455,23 @@ export function openAdjustmentModal(onSaved) {
           </div>
 
           <!-- Audit Reason Category -->
-          <div>
+          <div class="overflow-visible">
             <label class="block font-bold text-slate-700 mb-1">Audit Reason Category <span class="text-rose-500">*</span></label>
-            <div class="relative">
-              <select id="modal-adj-category" required class="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-slate-800 font-medium focus:outline-none focus:border-[#138FCB] focus:bg-white transition-all appearance-none cursor-pointer">
-                <option value="Physical Cycle Count Variance">Physical Cycle Count Variance</option>
-                <option value="Damaged / Expired Goods Write-off">Damaged / Expired Goods Write-off</option>
-                <option value="Surplus / Found Inventory">Surplus / Found Inventory (+)</option>
-                <option value="Missing / Unaccounted Stock">Missing / Unaccounted Stock (-)</option>
-                <option value="Periodic Warehouse Audit">Periodic Warehouse Audit</option>
-                <option value="Internal Production Scrap">Internal Production Scrap</option>
-                <option value="Other / Discrepancy Correction">Other / Discrepancy Correction</option>
-              </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
-              </div>
-            </div>
+            ${renderSearchableDropdown({
+              id: 'modal-adj-category',
+              placeholder: 'Select Audit Reason...',
+              value: 'Physical Cycle Count Variance',
+              required: true,
+              options: [
+                { value: 'Physical Cycle Count Variance', label: 'Physical Cycle Count Variance', subtext: 'Discrepancy in regular physical audit' },
+                { value: 'Damaged / Expired Goods Write-off', label: 'Damaged / Expired Goods Write-off', subtext: 'Scrap or write-down bad inventory' },
+                { value: 'Surplus / Found Inventory', label: 'Surplus / Found Inventory (+)', subtext: 'Discovered untracked physical stock' },
+                { value: 'Missing / Unaccounted Stock', label: 'Missing / Unaccounted Stock (-)', subtext: 'Shrinkage or lost inventory' },
+                { value: 'Periodic Warehouse Audit', label: 'Periodic Warehouse Audit', subtext: 'Scheduled end-of-period audit' },
+                { value: 'Internal Production Scrap', label: 'Internal Production Scrap', subtext: 'Manufacturing / assembly scrap' },
+                { value: 'Other / Discrepancy Correction', label: 'Other / Discrepancy Correction', subtext: 'Manual adjustment memo' }
+              ]
+            })}
           </div>
         </div>
 
@@ -486,7 +493,7 @@ export function openAdjustmentModal(onSaved) {
       </div>
 
       <!-- CARD 2: ITEMS & ADJUSTMENTS -->
-      <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4 overflow-visible">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-2">
             <span class="p-1.5 rounded-lg bg-blue-50 text-[#138FCB]">
@@ -495,7 +502,7 @@ export function openAdjustmentModal(onSaved) {
               </svg>
             </span>
             <span class="text-xs font-bold text-slate-800 uppercase tracking-wider">Inventory Items to Adjust</span>
-            <span id="items-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#138FCB] border border-blue-100">1 Item</span>
+            <span id="items-count-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#138FCB] border border-blue-100">0 Items</span>
           </div>
           
           <div class="text-[11px] text-slate-500 flex items-center gap-1.5">
@@ -516,11 +523,11 @@ export function openAdjustmentModal(onSaved) {
         </div>
 
         <!-- Table Container -->
-        <div class="overflow-x-auto border border-slate-100 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200/90 rounded-xl overflow-visible bg-white">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead>
               <tr class="bg-slate-50/80 text-slate-500 font-semibold border-b border-slate-200/80">
-                <th class="py-3 px-4 font-bold uppercase tracking-wider text-[10px]">Item & SKU</th>
+                <th class="py-3 px-4 font-bold uppercase tracking-wider text-[10px] w-7/16">Item & SKU</th>
                 <th class="py-3 px-3 font-bold uppercase tracking-wider text-[10px] text-center w-28">Current Stock</th>
                 <th class="py-3 px-3 font-bold uppercase tracking-wider text-[10px] text-center w-36" id="th-delta-header">
                   Quantity Change (+/-)
@@ -528,11 +535,11 @@ export function openAdjustmentModal(onSaved) {
                 <th class="py-3 px-3 font-bold uppercase tracking-wider text-[10px] text-center w-36" id="th-final-header">
                   New Final Stock
                 </th>
-                <th class="py-3 px-3 font-bold uppercase tracking-wider text-[10px] text-center w-36">Net Variance</th>
+                <th class="py-3 px-3 font-bold uppercase tracking-wider text-[10px] text-center w-32">Net Variance</th>
                 <th class="py-3 px-3 text-center w-12"></th>
               </tr>
             </thead>
-            <tbody id="adjustment-lines-tbody" class="divide-y divide-slate-100">
+            <tbody id="adjustment-lines-tbody" class="divide-y divide-slate-100 overflow-visible">
               <!-- Dynamically rendered lines -->
             </tbody>
           </table>
@@ -590,7 +597,7 @@ export function openAdjustmentModal(onSaved) {
             <div class="space-y-2 text-xs">
               <div class="flex justify-between items-center text-slate-600">
                 <span>Total Items Adjusted:</span>
-                <span id="summary-total-items" class="font-bold text-slate-800 font-mono">1 item</span>
+                <span id="summary-total-items" class="font-bold text-slate-800 font-mono">0 items</span>
               </div>
               <div class="flex justify-between items-center text-slate-600">
                 <span>Total Quantity to Add (+):</span>
@@ -624,6 +631,9 @@ export function openAdjustmentModal(onSaved) {
         <span id="modal-warning-text">Negative stock disallowed for one or more selected items.</span>
       </div>
 
+      <!-- Extra breathing room for dropdowns -->
+      <div class="h-10"></div>
+
       <!-- FOOTER ACTIONS -->
       <div class="flex justify-end gap-3 pt-3 border-t border-slate-100">
         <button type="button" id="adj-modal-cancel-btn" class="px-4 py-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-xs transition-colors cursor-pointer">
@@ -654,7 +664,6 @@ export function openAdjustmentModal(onSaved) {
     size: 'max-w-4xl',
     onOpen: (modalEl) => {
       const form = modalEl.querySelector('#stock-adjustment-modal-form');
-      const warehouseSelect = modalEl.querySelector('#modal-adj-warehouse');
       const tbody = modalEl.querySelector('#adjustment-lines-tbody');
       const addLineBtn = modalEl.querySelector('#btn-add-adj-line');
       const cancelBtn = modalEl.querySelector('#adj-modal-cancel-btn');
@@ -666,6 +675,33 @@ export function openAdjustmentModal(onSaved) {
       const btnModeFinal = modalEl.querySelector('#btn-mode-final');
       const thDeltaHeader = modalEl.querySelector('#th-delta-header');
       const thFinalHeader = modalEl.querySelector('#th-final-header');
+
+      // Bind Warehouse Searchable Dropdown
+      const whDropdown = modalEl.querySelector('[data-dropdown-id="modal-adj-warehouse"]');
+      if (whDropdown) {
+        bindSearchableDropdown(whDropdown, {
+          onChange: (newWhId) => {
+            selectedWarehouseId = newWhId;
+            linesState.forEach(line => {
+              if (line.variantId) {
+                line.currentStock = inventoryService.getBalance(selectedWarehouseId, line.variantId);
+                if (line.mode === 'final') {
+                  line.deltaQty = line.newFinalStock - line.currentStock;
+                } else {
+                  line.newFinalStock = line.currentStock + line.deltaQty;
+                }
+              }
+            });
+            renderAllLines();
+          }
+        });
+      }
+
+      // Bind Category Searchable Dropdown
+      const catDropdown = modalEl.querySelector('[data-dropdown-id="modal-adj-category"]');
+      if (catDropdown) {
+        bindSearchableDropdown(catDropdown);
+      }
 
       // Mode switch handler
       const setEntryMode = (mode) => {
@@ -694,6 +730,7 @@ export function openAdjustmentModal(onSaved) {
         let hasNegativeError = false;
 
         linesState.forEach(line => {
+          if (!line.variantId) return;
           const delta = Number(line.deltaQty) || 0;
           if (delta > 0) totalAdded += delta;
           if (delta < 0) totalDeducted += Math.abs(delta);
@@ -715,7 +752,7 @@ export function openAdjustmentModal(onSaved) {
         const summaryNetDelta = modalEl.querySelector('#summary-net-delta');
         const summaryOverallType = modalEl.querySelector('#summary-overall-type');
 
-        const lineCount = linesState.length;
+        const lineCount = linesState.filter(l => Boolean(l.variantId)).length;
         if (itemsCountBadge) itemsCountBadge.textContent = `${lineCount} ${lineCount === 1 ? 'Item' : 'Items'}`;
         if (summaryTotalItems) summaryTotalItems.textContent = `${lineCount} ${lineCount === 1 ? 'item' : 'items'}`;
 
@@ -749,9 +786,9 @@ export function openAdjustmentModal(onSaved) {
       // Render a single line in table
       const renderLineRow = (line, index) => {
         const info = getVariantInfo(line.variantId);
-        const currentStock = line.currentStock;
-        const delta = line.deltaQty;
-        const finalStock = line.newFinalStock;
+        const currentStock = Number(line.currentStock) || 0;
+        const delta = Number(line.deltaQty) || 0;
+        const finalStock = Number(line.newFinalStock) || 0;
 
         const isPositive = delta > 0;
         const isNegative = delta < 0;
@@ -759,21 +796,36 @@ export function openAdjustmentModal(onSaved) {
 
         const tr = document.createElement('tr');
         tr.id = `line-row-${line.id}`;
-        tr.className = 'hover:bg-slate-50/60 transition-colors';
+        tr.className = 'hover:bg-slate-50/60 transition-colors overflow-visible';
+
+        const lineDdId = `adj-var-dd-${line.id}`;
+        const varOptions = variants.map(v => {
+          const p = prodMap.get(v.productId);
+          const cat = p ? (p.customerName || p.businessName || 'General Stock') : 'General Stock';
+          const bal = inventoryService.getBalance(selectedWarehouseId, v.id);
+          return {
+            value: v.id,
+            label: v.name,
+            subtext: `${v.sku} • ${cat}`,
+            badge: `${bal.toLocaleString()} ${v.unit || 'PCS'}`
+          };
+        });
 
         tr.innerHTML = `
           <!-- Item / Variant Dropdown -->
-          <td class="py-3 px-4">
-            <div class="space-y-1">
-              <select class="line-variant-select w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-800 text-xs focus:outline-none focus:border-[#138FCB]">
-                ${variants.map(v => `
-                  <option value="${v.id}" ${v.id === line.variantId ? 'selected' : ''}>
-                    ${v.name} (${v.sku})
-                  </option>
-                `).join('')}
-              </select>
+          <td class="py-3 px-4 w-7/16 overflow-visible">
+            <div class="space-y-1 overflow-visible">
+              ${renderSearchableDropdown({
+                id: lineDdId,
+                name: `variantId-${line.id}`,
+                placeholder: 'Select Product / SKU...',
+                value: line.variantId || '',
+                required: true,
+                menuWidth: 'w-[320px] sm:w-[380px]',
+                options: varOptions
+              })}
               <div class="line-item-category text-[11px] text-slate-400 font-medium px-1">
-                ${info.category} • Base: ${info.unit}
+                ${line.variantId ? `${info.category} • Base: ${info.unit}` : 'Select a product to inspect on-hand balance'}
               </div>
             </div>
           </td>
@@ -781,7 +833,7 @@ export function openAdjustmentModal(onSaved) {
           <!-- Current Stock (Read-Only Pill) -->
           <td class="py-3 px-3 text-center">
             <span class="line-current-stock-badge inline-block px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
-              ${currentStock.toLocaleString()} ${line.unit}
+              ${line.variantId ? `${currentStock.toLocaleString()} ${line.unit}` : '—'}
             </span>
           </td>
 
@@ -795,7 +847,7 @@ export function openAdjustmentModal(onSaved) {
           <!-- New Final Stock (Physical Count) -->
           <td class="py-3 px-3">
             <div class="relative">
-              <input type="number" step="any" min="0" class="line-final-input w-full text-center font-mono font-bold text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#138FCB] text-slate-800" placeholder="e.g. 250" value="${finalStock}">
+              <input type="number" step="any" min="0" class="line-final-input w-full text-center font-mono font-bold text-xs bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#138FCB] text-slate-800" placeholder="e.g. 250" value="${line.variantId ? finalStock : ''}">
             </div>
           </td>
 
@@ -811,7 +863,7 @@ export function openAdjustmentModal(onSaved) {
 
           <!-- Remove Action -->
           <td class="py-3 px-3 text-center">
-            <button type="button" class="btn-remove-line text-slate-300 hover:text-rose-600 transition-colors p-1 rounded-md cursor-pointer ${linesState.length === 1 ? 'opacity-30 cursor-not-allowed' : ''}" ${linesState.length === 1 ? 'disabled' : ''}>
+            <button type="button" class="btn-remove-line text-slate-300 hover:text-rose-600 transition-colors p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
               </svg>
@@ -820,7 +872,6 @@ export function openAdjustmentModal(onSaved) {
         `;
 
         // Wire event handlers for this row
-        const variantSelect = tr.querySelector('.line-variant-select');
         const currentStockBadge = tr.querySelector('.line-current-stock-badge');
         const deltaInput = tr.querySelector('.line-delta-input');
         const finalInput = tr.querySelector('.line-final-input');
@@ -846,6 +897,37 @@ export function openAdjustmentModal(onSaved) {
 
           recalculateSummary();
         };
+
+        // Wire Searchable Dropdown for this line
+        const ddContainer = tr.querySelector(`[data-dropdown-id="${lineDdId}"]`);
+        if (ddContainer) {
+          bindSearchableDropdown(ddContainer, {
+            onChange: (newVarId) => {
+              line.variantId = newVarId;
+              const newInfo = getVariantInfo(newVarId);
+              line.unit = newInfo.unit;
+              line.currentStock = inventoryService.getBalance(selectedWarehouseId, newVarId);
+
+              if (categoryDiv) {
+                categoryDiv.textContent = `${newInfo.category} • Base: ${newInfo.unit}`;
+              }
+
+              if (currentStockBadge) {
+                currentStockBadge.textContent = `${line.currentStock.toLocaleString()} ${line.unit}`;
+              }
+
+              if (line.mode === 'final') {
+                line.deltaQty = line.newFinalStock - line.currentStock;
+                deltaInput.value = (line.deltaQty > 0 ? '+' : '') + line.deltaQty;
+              } else {
+                line.newFinalStock = line.currentStock + line.deltaQty;
+                finalInput.value = line.newFinalStock;
+              }
+
+              updateLineVisuals(line.deltaQty, line.newFinalStock);
+            }
+          });
+        }
 
         // 1. When Delta Input changes (+/- pcs)
         deltaInput.oninput = () => {
@@ -878,37 +960,8 @@ export function openAdjustmentModal(onSaved) {
           updateLineVisuals(computedDelta, targetStock);
         };
 
-        // 3. When Variant changes
-        variantSelect.onchange = () => {
-          const newVarId = variantSelect.value;
-          line.variantId = newVarId;
-
-          const newInfo = getVariantInfo(newVarId);
-          line.unit = newInfo.unit;
-          line.currentStock = inventoryService.getBalance(selectedWarehouseId, newVarId);
-
-          if (categoryDiv) {
-            categoryDiv.textContent = `${newInfo.category} • Base: ${newInfo.unit}`;
-          }
-
-          if (currentStockBadge) {
-            currentStockBadge.textContent = `${line.currentStock.toLocaleString()} ${line.unit}`;
-          }
-
-          if (line.mode === 'final') {
-            line.deltaQty = line.newFinalStock - line.currentStock;
-            deltaInput.value = (line.deltaQty > 0 ? '+' : '') + line.deltaQty;
-          } else {
-            line.newFinalStock = line.currentStock + line.deltaQty;
-            finalInput.value = line.newFinalStock;
-          }
-
-          updateLineVisuals(line.deltaQty, line.newFinalStock);
-        };
-
         // 4. Remove Line
         removeBtn.onclick = () => {
-          if (linesState.length <= 1) return;
           const idx = linesState.findIndex(l => l.id === line.id);
           if (idx !== -1) {
             linesState.splice(idx, 1);
@@ -922,9 +975,28 @@ export function openAdjustmentModal(onSaved) {
       // Render all lines into table
       const renderAllLines = () => {
         tbody.innerHTML = '';
-        linesState.forEach((line, idx) => {
-          tbody.appendChild(renderLineRow(line, idx));
-        });
+        if (linesState.length === 0) {
+          const emptyTr = document.createElement('tr');
+          emptyTr.id = 'adj-empty-state-row';
+          emptyTr.innerHTML = `
+            <td colspan="6" class="py-8 text-center text-slate-400">
+              <div class="flex flex-col items-center justify-center space-y-2">
+                <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                  </svg>
+                </div>
+                <div class="text-xs font-semibold text-slate-500">No inventory items added yet</div>
+                <div class="text-[11px] text-slate-400 max-w-sm">Click "+ Add Another Inventory Item" below to select products and reconcile count variances.</div>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(emptyTr);
+        } else {
+          linesState.forEach((line, idx) => {
+            tbody.appendChild(renderLineRow(line, idx));
+          });
+        }
         recalculateSummary();
       };
 
@@ -933,11 +1005,11 @@ export function openAdjustmentModal(onSaved) {
 
       // Add Line Button
       addLineBtn.onclick = () => {
-        // Find variant not already in lines, or default to first
-        const usedIds = new Set(linesState.map(l => l.variantId));
-        const unusedVariant = variants.find(v => !usedIds.has(v.id)) || variants[0];
-        const vId = unusedVariant ? unusedVariant.id : (variants[0]?.id || '');
-        const curStock = inventoryService.getBalance(selectedWarehouseId, vId);
+        // Find variant not already in lines, or default to empty for user choice
+        const usedIds = new Set(linesState.map(l => l.variantId).filter(Boolean));
+        const unusedVariant = variants.find(v => !usedIds.has(v.id));
+        const vId = unusedVariant ? unusedVariant.id : '';
+        const curStock = vId ? inventoryService.getBalance(selectedWarehouseId, vId) : 0;
 
         linesState.push({
           id: `line-${Date.now()}-${linesState.length + 1}`,
@@ -952,20 +1024,6 @@ export function openAdjustmentModal(onSaved) {
         renderAllLines();
       };
 
-      // Warehouse change updates on-hand stock across all lines
-      warehouseSelect.onchange = () => {
-        selectedWarehouseId = warehouseSelect.value;
-        linesState.forEach(line => {
-          line.currentStock = inventoryService.getBalance(selectedWarehouseId, line.variantId);
-          if (line.mode === 'final') {
-            line.deltaQty = line.newFinalStock - line.currentStock;
-          } else {
-            line.newFinalStock = line.currentStock + line.deltaQty;
-          }
-        });
-        renderAllLines();
-      };
-
       // Cancel button
       cancelBtn.onclick = () => closeModal();
 
@@ -973,16 +1031,18 @@ export function openAdjustmentModal(onSaved) {
       form.onsubmit = (e) => {
         e.preventDefault();
 
-        const warehouseId = warehouseSelect.value;
+        const warehouseInput = modalEl.querySelector('#modal-adj-warehouse');
+        const warehouseId = warehouseInput ? warehouseInput.value : selectedWarehouseId;
         const date = modalEl.querySelector('#modal-adj-date').value;
-        const category = modalEl.querySelector('#modal-adj-category').value;
+        const categoryInput = modalEl.querySelector('#modal-adj-category');
+        const category = categoryInput ? categoryInput.value : 'Physical Cycle Count Variance';
         const memo = modalEl.querySelector('#modal-adj-notes').value.trim();
         const staff = modalEl.querySelector('#modal-adj-staff').value.trim();
 
         // Validation: Must have at least one line with non-zero delta
-        const validLines = linesState.filter(l => Number(l.deltaQty) !== 0);
+        const validLines = linesState.filter(l => l.variantId && Number(l.deltaQty) !== 0);
         if (validLines.length === 0) {
-          toast.show('Please specify at least one item with a non-zero quantity change.', 'warning');
+          toast.show('Please add at least one item with a non-zero quantity change.', 'warning');
           return;
         }
 
