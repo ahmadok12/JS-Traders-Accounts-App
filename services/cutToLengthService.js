@@ -751,6 +751,39 @@ class CutToLengthService {
   }
 
   /**
+   * Receiving a continuous loose piece of cut-to-length stock
+   */
+  receiveLooseContinuous({ productId, variantId, warehouseId = 'wh-1', quantity, unit = 'ft' }) {
+    if (!variantId) return null;
+    const stock = this.getVariantStock(warehouseId, variantId);
+    const pieceLength = Math.max(0, Number(quantity) || 0);
+    if (pieceLength <= 0) return null;
+
+    const newLoose = [...(stock.loosePieces || []), pieceLength];
+
+    this.saveVariantStock(warehouseId, variantId, {
+      fullRolls: stock.fullRolls,
+      rollLength: stock.rollLength,
+      loosePieces: newLoose,
+      unit: unit || stock.unit
+    });
+
+    storageService.insert(this.COLLECTION_TXS, {
+      transactionType: 'INWARD_LOOSE_RECEIPT',
+      variantId,
+      warehouseId,
+      fullRollsBefore: stock.fullRolls,
+      fullRollsAfter: stock.fullRolls,
+      loosePiecesBefore: stock.loosePieces,
+      loosePiecesAfter: newLoose,
+      quantityAdded: pieceLength,
+      createdAt: new Date().toISOString()
+    });
+
+    return { status: 'AVAILABLE', classification: 'LOOSE', quantity: pieceLength };
+  }
+
+  /**
    * Syncs the total footage of physical units back to stockBalances
    */
   syncProductStockBalance(productId, warehouseId, variantId, totalFootage, unit) {

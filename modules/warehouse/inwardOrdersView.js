@@ -430,11 +430,21 @@ export function openInwardOrderDetailModal(order, refreshCallback) {
                   <tr class="hover:bg-slate-50/70">
                     <td class="py-3 px-3 font-semibold text-slate-800">
                       <div>${varMap.get(l.variantId) || 'Item'}</div>
-                      ${l.packagingName ? `<div class="text-[10px] text-slate-400">${l.packagingName}</div>` : ''}
+                      ${l.isRoll ? `
+                        <div class="text-[10px] text-blue-700 font-bold bg-blue-50/80 px-1.5 py-0.5 rounded border border-blue-200/60 inline-block mt-0.5">
+                          Roll (${Number(l.rollSize || 5000).toLocaleString()} ${l.totalFeet ? 'ft' : ''})
+                        </div>
+                      ` : (l.mode === 'loose_continuous' ? `
+                        <div class="text-[10px] text-amber-700 font-bold bg-amber-50/80 px-1.5 py-0.5 rounded border border-amber-200/60 inline-block mt-0.5">
+                          loose - continuous
+                        </div>
+                      ` : (l.packagingName ? `<div class="text-[10px] text-slate-400">${l.packagingName}</div>` : ''))}
                     </td>
                     <td class="py-3 px-3 text-center text-blue-700 font-bold">${l.warehouseQty || 0}</td>
                     <td class="py-3 px-3 text-center text-amber-700 font-bold">${l.officeQty || 0}</td>
-                    <td class="py-3 px-3 text-center font-extrabold text-slate-900">${exp} ${l.unit || 'PCS'}</td>
+                    <td class="py-3 px-3 text-center font-extrabold text-slate-900">
+                      ${l.isRoll ? `${exp} Roll${exp !== 1 ? 's' : ''}${l.totalFeet ? `<div class="text-[10px] text-slate-500 font-normal">(${l.totalFeet.toLocaleString()} ft)</div>` : ''}` : `${exp.toLocaleString()} ${l.unit || 'PCS'}`}
+                    </td>
                     <td class="py-3 px-3 text-center text-emerald-600 font-bold">${rec}</td>
                     <td class="py-3 px-3 text-center ${rem > 0 ? 'text-blue-600 font-extrabold' : 'text-slate-400'}">${rem}</td>
                   </tr>
@@ -638,15 +648,26 @@ export function openCreateGRNModal(order, onSaved) {
           <tbody id="grn-lines-tbody" class="divide-y divide-slate-100">
             ${remainingLines.map(line => {
               const v = varMap.get(line.variantId) || {};
+              const origLine = (order.lines || []).find(l => l.variantId === line.variantId) || {};
+              const isRoll = Boolean(line.isRoll || origLine.isRoll || origLine.mode === 'roll');
+              const isLoose = origLine.mode === 'loose_continuous';
               return `
                 <tr class="hover:bg-slate-50/70" data-variant-id="${line.variantId}" data-remaining="${line.remainingQty}">
                   <td class="py-2.5 px-3 font-semibold text-slate-800">
                     <div>${v.name || 'Item'}</div>
-                    <div class="text-[10px] text-slate-400 font-mono">${v.sku || ''}</div>
+                    ${isRoll ? `
+                      <div class="text-[10px] text-blue-700 font-bold bg-blue-50/80 px-1.5 py-0.5 rounded border border-blue-200/60 inline-block mt-0.5">
+                        Roll (${Number(origLine.rollSize || line.rollSize || 5000).toLocaleString()} ft)
+                      </div>
+                    ` : (isLoose ? `
+                      <div class="text-[10px] text-amber-700 font-bold bg-amber-50/80 px-1.5 py-0.5 rounded border border-amber-200/60 inline-block mt-0.5">
+                        loose - continuous
+                      </div>
+                    ` : (v.sku ? `<div class="text-[10px] text-slate-400 font-mono">${v.sku}</div>` : ''))}
                   </td>
-                  <td class="py-2.5 px-3 text-center text-slate-600">${line.expectedQty}</td>
+                  <td class="py-2.5 px-3 text-center text-slate-600">${line.expectedQty} ${line.unit || 'PCS'}</td>
                   <td class="py-2.5 px-3 text-center text-emerald-600 font-bold">${line.receivedQty}</td>
-                  <td class="py-2.5 px-3 text-center font-bold text-blue-600">${line.remainingQty} ${line.unit}</td>
+                  <td class="py-2.5 px-3 text-center font-bold text-blue-600">${line.remainingQty} ${line.unit || 'PCS'}</td>
                   <td class="py-2.5 px-3 text-center">
                     <input type="number" min="0" max="${line.remainingQty}" value="${line.remainingQty}" class="grn-line-qty w-24 text-center border border-emerald-300 rounded-xl px-2 py-1.5 text-xs font-bold focus:border-emerald-600 shadow-2xs bg-emerald-50/30">
                   </td>
@@ -709,12 +730,20 @@ export function openCreateGRNModal(order, onSaved) {
               hasError = true;
               return;
             }
+            const origLine = (order.lines || []).find(l => l.variantId === variantId) || {};
+            const isRoll = Boolean(origLine.isRoll || origLine.mode === 'roll');
+            const rollSize = isRoll ? (Number(origLine.rollSize) || 5000) : null;
             lines.push({
               variantId,
               warehouseQty: selectedWh === 'wh-1' ? qty : 0,
               officeQty: selectedWh === 'wh-2' ? qty : 0,
               quantity: qty,
-              unit: 'PCS'
+              unit: origLine.unit || 'PCS',
+              isRoll,
+              mode: origLine.mode || null,
+              packagingName: origLine.packagingName || null,
+              rollSize,
+              totalFeet: isRoll ? qty * rollSize : qty
             });
           }
         });
@@ -835,11 +864,21 @@ export function printInwardOrderVoucher(order) {
                 <td>${i + 1}</td>
                 <td>
                   <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
-                  ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
+                  ${l.isRoll ? `
+                    <div style="font-size: 10px; color: #1e40af; font-weight: bold;">
+                      Roll (${Number(l.rollSize || 5000).toLocaleString()} ${l.totalFeet ? 'ft' : ''})
+                    </div>
+                  ` : (l.mode === 'loose_continuous' ? `
+                    <div style="font-size: 10px; color: #b45309; font-weight: bold;">
+                      loose - continuous
+                    </div>
+                  ` : (l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''))}
                 </td>
                 <td class="text-center font-mono">${l.warehouseQty || 0}</td>
                 <td class="text-center font-mono">${l.officeQty || 0}</td>
-                <td class="text-center font-mono" style="font-weight: 800;">${exp} ${l.unit || 'PCS'}</td>
+                <td class="text-center font-mono" style="font-weight: 800;">
+                  ${l.isRoll ? `${exp} Roll${exp !== 1 ? 's' : ''}${l.totalFeet ? ` (${l.totalFeet.toLocaleString()} ft)` : ''}` : `${exp.toLocaleString()} ${l.unit || 'PCS'}`}
+                </td>
                 <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${rec}</td>
                 <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${rem}</td>
               </tr>
@@ -911,10 +950,10 @@ function openCreateInwardOrderModal(onSaved) {
     }
 
     const vId = selectedVariant ? selectedVariant.id : '';
-    const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
-    const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS');
-    const packagingUnits = isCtl ? (selectedProduct.packagingUnits || []) : [];
-    const curPackaging = initialPackaging || (packagingUnits.length > 0 ? packagingUnits[0].name : baseUnit);
+    const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
+    const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS'));
+    const rollLen = Number(selectedVariant?.rollLength || selectedVariant?.rollSize || selectedProduct?.packagingUnits?.[0]?.factor || 5000);
+    const isLoose = initialPackaging === 'loose_continuous' || initialPackaging === 'loose - continuous';
 
     const whStock = vId ? inventoryService.getBalance('wh-1', vId) : 0;
     const officeStock = vId ? inventoryService.getBalance('wh-2', vId) : 0;
@@ -936,15 +975,13 @@ function openCreateInwardOrderModal(onSaved) {
     const ctlHtml = `
       <div class="sio-ctl-container ${isCtl ? '' : 'hidden'} mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 p-2 rounded-xl border border-slate-200/60">
         <div class="flex items-center gap-1.5">
-          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Inward Mode:</span>
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Inward Type:</span>
           <select class="sio-item-packaging text-xs font-bold border border-slate-200 rounded-lg px-2.5 py-1 bg-white text-slate-800 focus:outline-none focus:border-emerald-600 shadow-2xs cursor-pointer">
-            ${packagingUnits.map(p => `
-              <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1" ${curPackaging === p.name ? 'selected' : ''}>
-                Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
-              </option>
-            `).join('')}
-            <option value="${baseUnit}" data-factor="1" data-is-roll="0" ${curPackaging === baseUnit ? 'selected' : ''}>
-              ✂️ ${baseUnit} (Loose Cut)
+            <option value="roll" data-mode="roll" data-is-roll="1" data-factor="${rollLen}" ${!isLoose ? 'selected' : ''}>
+              1. Roll (${rollLen.toLocaleString()} ${baseUnit})
+            </option>
+            <option value="loose_continuous" data-mode="loose_continuous" data-is-roll="0" data-factor="1" ${isLoose ? 'selected' : ''}>
+              2. loose - continuous (${baseUnit})
             </option>
           </select>
         </div>
@@ -1239,38 +1276,37 @@ function openCreateInwardOrderModal(onSaved) {
         const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
         const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
 
+        const rollLen = Number(selectedVariant?.rollLength || selectedVariant?.rollSize || selectedProduct?.packagingUnits?.[0]?.factor || 5000);
+
         if (isCtl && ctlContainer && packagingSelect) {
           ctlContainer.classList.remove('hidden');
 
-          const packagingUnits = selectedProduct.packagingUnits || [];
           const currentVal = packagingSelect.value;
-          const existingOptions = Array.from(packagingSelect.options).map(o => o.value);
-          const expectedValues = [...packagingUnits.map(p => p.name), baseUnit];
-          const isSame = existingOptions.length === expectedValues.length && existingOptions.every((v, idx) => v === expectedValues[idx]);
+          const currentMode = packagingSelect.options[packagingSelect.selectedIndex]?.getAttribute('data-mode') || (currentVal === 'loose_continuous' ? 'loose_continuous' : 'roll');
 
-          if (!isSame) {
-            packagingSelect.innerHTML = `
-              ${packagingUnits.map(p => `
-                <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1">
-                  Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
-                </option>
-              `).join('')}
-              <option value="${baseUnit}" data-factor="1" data-is-roll="0">
-                ✂️ ${baseUnit} (Loose Cut)
-              </option>
-            `;
-            if (currentVal && expectedValues.includes(currentVal)) {
-              packagingSelect.value = currentVal;
-            }
+          // Always ensure both "roll" and "loose - continuous" options exist
+          const expectedOptionsHtml = `
+            <option value="roll" data-mode="roll" data-is-roll="1" data-factor="${rollLen}" ${currentMode !== 'loose_continuous' ? 'selected' : ''}>
+              1. Roll (${rollLen.toLocaleString()} ${baseUnit})
+            </option>
+            <option value="loose_continuous" data-mode="loose_continuous" data-is-roll="0" data-factor="1" ${currentMode === 'loose_continuous' ? 'selected' : ''}>
+              2. loose - continuous (${baseUnit})
+            </option>
+          `.trim();
+
+          const currentNormalized = packagingSelect.innerHTML.replace(/\s+/g, ' ').trim();
+          const expectedNormalized = expectedOptionsHtml.replace(/\s+/g, ' ').trim();
+
+          if (currentNormalized !== expectedNormalized) {
+            packagingSelect.innerHTML = expectedOptionsHtml;
           }
 
           const selectedOption = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
-          const isRoll = selectedOption?.getAttribute('data-is-roll') === '1';
-          const rollFactor = Number(selectedOption?.getAttribute('data-factor')) || 1;
-          const packName = selectedOption?.value || baseUnit;
+          const isRoll = selectedOption?.getAttribute('data-is-roll') === '1' || selectedOption?.value === 'roll';
+          const rollFactor = isRoll ? rollLen : 1;
 
-          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1', vId);
-          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2', vId);
+          const whSummary = cutToLengthService.getSummary(selectedProduct?.id, 'wh-1', vId);
+          const offSummary = cutToLengthService.getSummary(selectedProduct?.id, 'wh-2', vId);
 
           if (ctlStockPill && whSummary) {
             ctlStockPill.innerHTML = `
@@ -1279,13 +1315,11 @@ function openCreateInwardOrderModal(onSaved) {
           }
 
           if (isRoll) {
-            const whRollMatch = (whSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
-            const offRollMatch = (offSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
-            const whRollCount = whRollMatch ? whRollMatch.count : 0;
-            const offRollCount = offRollMatch ? offRollMatch.count : 0;
+            const whRollCount = whSummary ? whSummary.fullRollsCount : 0;
+            const offRollCount = offSummary ? offSummary.fullRollsCount : 0;
 
-            if (whIndicator) whIndicator.textContent = `WH: ${whRollCount} Full Rolls (${packName})`;
-            if (offIndicator) offIndicator.textContent = `Office: ${offRollCount} Full Rolls (${packName})`;
+            if (whIndicator) whIndicator.textContent = `WH: ${whRollCount} Full Rolls (${rollLen.toLocaleString()} ${baseUnit}/roll)`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offRollCount} Full Rolls (${rollLen.toLocaleString()} ${baseUnit}/roll)`;
             if (whQtyInput) whQtyInput.placeholder = '0 Rolls';
             if (offQtyInput) offQtyInput.placeholder = '0 Rolls';
           } else {
@@ -1313,7 +1347,7 @@ function openCreateInwardOrderModal(onSaved) {
               const totalFeet = lineTotal * rollFactor;
               if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal} Roll${lineTotal > 1 ? 's' : ''}</span> <span class="text-[10px] text-slate-500 font-semibold block">(${totalFeet.toLocaleString()} ${baseUnit})</span>`;
             } else {
-              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(Loose Cut)</span>`;
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(loose - continuous)</span>`;
             }
           }
         } else {
@@ -1506,15 +1540,18 @@ function openCreateInwardOrderModal(onSaved) {
           if (variantId && totalQty > 0) {
             const packagingSelect = row.querySelector('.sio-item-packaging');
             let packagingName = null;
+            let mode = null;
             let isRoll = false;
             let rollSize = null;
             let totalFeet = null;
 
             if (isCtl && packagingSelect) {
               const selectedOpt = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
-              isRoll = selectedOpt?.getAttribute('data-is-roll') === '1';
-              rollSize = Number(selectedOpt?.getAttribute('data-factor')) || 1;
-              packagingName = selectedOpt?.value || baseUnit;
+              isRoll = selectedOpt?.getAttribute('data-is-roll') === '1' || selectedOpt?.value === 'roll';
+              const rollLen = Number(selectedVariant?.rollLength || selectedVariant?.rollSize || selectedProduct?.packagingUnits?.[0]?.factor || 5000);
+              rollSize = isRoll ? (Number(selectedOpt?.getAttribute('data-factor')) || rollLen) : null;
+              mode = isRoll ? 'roll' : 'loose_continuous';
+              packagingName = isRoll ? `Roll (${rollSize.toLocaleString()} ${baseUnit})` : 'loose - continuous';
               totalFeet = isRoll ? totalQty * rollSize : totalQty;
             }
 
@@ -1525,8 +1562,9 @@ function openCreateInwardOrderModal(onSaved) {
               expectedQty: totalQty,
               receivedQty: 0,
               remainingQty: totalQty,
-              unit: isCtl ? (isRoll ? packagingName : baseUnit) : (selectedVariant?.unit || 'PCS'),
+              unit: isCtl ? (isRoll ? 'Roll' : baseUnit) : (selectedVariant?.unit || 'PCS'),
               packagingName: isCtl ? packagingName : null,
+              mode: isCtl ? mode : null,
               isRoll,
               rollSize,
               totalFeet

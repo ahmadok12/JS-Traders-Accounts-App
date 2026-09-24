@@ -195,14 +195,23 @@ class GatepassService {
       grnLines = lines;
     } else {
       const remainingLines = inwardOrderService.getRemainingExpectedLines(inwardOrderId);
-      grnLines = remainingLines.map(rl => ({
-        variantId: rl.variantId,
-        warehouseQty: rl.remainingQty,
-        officeQty: 0,
-        quantity: rl.remainingQty,
-        unit: rl.unit || 'PCS',
-        notes: rl.notes || ''
-      }));
+      grnLines = remainingLines.map(rl => {
+        const isRoll = rl.isRoll !== undefined ? Boolean(rl.isRoll) : (rl.mode === 'roll' || (rl.unit && String(rl.unit).toLowerCase().includes('roll')));
+        const rollSize = isRoll ? (Number(rl.rollSize) || 5000) : null;
+        return {
+          variantId: rl.variantId,
+          warehouseQty: rl.remainingQty,
+          officeQty: 0,
+          quantity: rl.remainingQty,
+          unit: rl.unit || 'PCS',
+          isRoll,
+          mode: rl.mode || (isRoll ? 'roll' : 'loose_continuous'),
+          packagingName: rl.packagingName || null,
+          rollSize,
+          totalFeet: isRoll ? rl.remainingQty * rollSize : rl.remainingQty,
+          notes: rl.notes || ''
+        };
+      });
     }
 
     if (grnLines.length === 0) {
@@ -288,7 +297,8 @@ class GatepassService {
         quantity: total,
         unit: l.unit || 'PCS',
         packagingName: l.packagingName || null,
-        isRoll: Boolean(l.isRoll),
+        isRoll: l.isRoll !== undefined ? Boolean(l.isRoll) : (l.mode === 'roll'),
+        mode: l.mode || (l.isRoll ? 'roll' : null),
         rollSize: l.rollSize ? Number(l.rollSize) : null,
         totalFeet: l.totalFeet ? Number(l.totalFeet) : null,
         negotiatedRate: Number(l.negotiatedRate) || null,
@@ -513,13 +523,49 @@ class GatepassService {
         const qty = Number(line.quantity !== undefined ? line.quantity : (Number(line.warehouseQty || 0) + Number(line.officeQty || 0))) || 0;
         if (qty > 0) {
           const v = varMap.get(line.variantId) || {};
-          inwardLines.push({
-            variantId: line.variantId,
-            quantity: Math.abs(qty),
-            unitRate: Number(line.negotiatedRate || v.costPrice || 0),
-            unit: line.unit || v.unit || 'PCS',
-            notes: `Stock Receipt for GRN ${gp.gatepassNumber}`
-          });
+          const product = v ? productService.getProductById(v.productId) : null;
+          const isCtl = Boolean(v.isCutToLength || v.rollLength || (product && (product.cut_to_length || product.enableRollTracking)));
+
+          if (isCtl) {
+            const isRoll = line.mode === 'loose_continuous' ? false : Boolean(line.isRoll || line.mode === 'roll' || (line.unit && String(line.unit).toLowerCase().includes('roll')));
+            const rollSize = Number(line.rollSize || v.rollLength || 5000);
+            const footage = isRoll ? (qty * rollSize) : qty;
+
+            inwardLines.push({
+              variantId: line.variantId,
+              quantity: Math.abs(footage),
+              unitRate: Number(line.negotiatedRate || v.costPrice || 0),
+              unit: v.rollUnit || product?.base_unit || line.unit || 'ft',
+              notes: `Stock Receipt for GRN ${gp.gatepassNumber} (${isRoll ? `${qty} Roll(s)` : `${qty} ft loose - continuous`})`
+            });
+
+            if (isRoll) {
+              cutToLengthService.receiveFullRolls({
+                productId: product?.id,
+                variantId: line.variantId,
+                warehouseId: targetWarehouse,
+                count: qty,
+                rollSize,
+                unit: v.rollUnit || product?.base_unit || 'ft'
+              });
+            } else {
+              cutToLengthService.receiveLooseContinuous({
+                productId: product?.id,
+                variantId: line.variantId,
+                warehouseId: targetWarehouse,
+                quantity: qty,
+                unit: v.rollUnit || product?.base_unit || 'ft'
+              });
+            }
+          } else {
+            inwardLines.push({
+              variantId: line.variantId,
+              quantity: Math.abs(qty),
+              unitRate: Number(line.negotiatedRate || v.costPrice || 0),
+              unit: line.unit || v.unit || 'PCS',
+              notes: `Stock Receipt for GRN ${gp.gatepassNumber}`
+            });
+          }
         }
       }
 
