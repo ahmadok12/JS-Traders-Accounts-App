@@ -503,7 +503,7 @@ export function renderSearchableDropdown({
   required = false,
   containerClass = '',
   buttonClass = '',
-  menuWidth = 'w-full'
+  menuWidth = 'w-full min-w-[280px]'
 }) {
   const selectedOpt = options.find(o => String(o.value) === String(value));
   const displayText = selectedOpt ? selectedOpt.label : placeholder;
@@ -574,26 +574,117 @@ export function bindSearchableDropdown(container, { onChange } = {}) {
 
   if (!trigger || !menu) return;
 
+  const parentRow = container.closest('tr');
+  const parentSection = container.closest('section');
+
+  const closeMenu = () => {
+    menu.classList.add('hidden');
+    if (arrow) arrow.classList.remove('rotate-180');
+    container.style.zIndex = '';
+    if (parentRow) {
+      parentRow.style.zIndex = '';
+      parentRow.style.position = '';
+    }
+    if (parentSection) {
+      parentSection.style.zIndex = '';
+      parentSection.style.position = '';
+    }
+  };
+
   trigger.onclick = (e) => {
     e.stopPropagation();
     const isHidden = menu.classList.contains('hidden');
     // Close other open menus
     document.querySelectorAll('.scd-menu, .pv-product-menu, .pv-variant-menu, .custom-filter-dropdown-card').forEach(m => {
-      if (m !== menu) m.classList.add('hidden');
+      if (m !== menu) {
+        m.classList.add('hidden');
+        const c = m.closest('.searchable-card-dropdown');
+        if (c) c.style.zIndex = '';
+        const r = m.closest('tr');
+        if (r) {
+          r.style.zIndex = '';
+          r.style.position = '';
+        }
+        const s = m.closest('section');
+        if (s) {
+          s.style.zIndex = '';
+          s.style.position = '';
+        }
+      }
     });
     document.querySelectorAll('.scd-arrow').forEach(a => {
       if (a !== arrow) a.classList.remove('rotate-180');
     });
 
-    menu.classList.toggle('hidden', !isHidden);
-    if (arrow) arrow.classList.toggle('rotate-180', isHidden);
+    if (isHidden) {
+      menu.classList.remove('hidden');
+      if (arrow) arrow.classList.add('rotate-180');
+      container.style.zIndex = '500';
+      if (parentRow) {
+        parentRow.style.zIndex = '500';
+        parentRow.style.position = 'relative';
+      }
+      if (parentSection) {
+        parentSection.style.zIndex = '40';
+        parentSection.style.position = 'relative';
+      }
 
-    if (isHidden && searchInput) {
-      searchInput.value = '';
-      container.querySelectorAll('.scd-option').forEach(opt => { opt.style.display = 'flex'; });
-      setTimeout(() => searchInput.focus(), 50);
+      // Smart Positioning: If near bottom of viewport or modal, open upwards (dropup)
+      const rect = trigger.getBoundingClientRect();
+      let spaceBelow = (window.innerHeight || document.documentElement.clientHeight) - rect.bottom;
+      let spaceAbove = rect.top;
+
+      const scrollParent = container.closest('#modal-body-container, .overflow-y-auto');
+      if (scrollParent) {
+        const parentRect = scrollParent.getBoundingClientRect();
+        const spaceBelowInParent = parentRect.bottom - rect.bottom;
+        const spaceAboveInParent = rect.top - parentRect.top;
+        if (spaceBelowInParent < spaceBelow) spaceBelow = spaceBelowInParent;
+        if (spaceAboveInParent < spaceAbove) spaceAbove = spaceAboveInParent;
+      }
+
+      if (spaceBelow < 260 && spaceAbove > 220) {
+        menu.classList.remove('top-full', 'mt-1.5');
+        menu.classList.add('bottom-full', 'mb-1.5');
+      } else {
+        menu.classList.remove('bottom-full', 'mb-1.5');
+        menu.classList.add('top-full', 'mt-1.5');
+      }
+
+      if (searchInput) {
+        searchInput.value = '';
+        container.querySelectorAll('.scd-option').forEach(opt => { opt.style.display = 'flex'; });
+        setTimeout(() => searchInput.focus(), 50);
+      }
+    } else {
+      closeMenu();
     }
   };
+
+  // Close when clicking outside
+  if (!window._scdGlobalDocBound) {
+    window._scdGlobalDocBound = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.searchable-card-dropdown')) {
+        document.querySelectorAll('.scd-menu').forEach(m => {
+          m.classList.add('hidden');
+          const c = m.closest('.searchable-card-dropdown');
+          if (c) c.style.zIndex = '';
+          const r = m.closest('tr');
+          if (r) {
+            r.style.zIndex = '';
+            r.style.position = '';
+          }
+          const s = m.closest('section');
+          if (s) {
+            s.style.zIndex = '';
+            s.style.position = '';
+          }
+        });
+        document.querySelectorAll('.scd-arrow').forEach(a => a.classList.remove('rotate-180'));
+      }
+    });
+  }
 
   if (searchInput) {
     searchInput.onclick = (e) => e.stopPropagation();
@@ -639,8 +730,7 @@ export function bindSearchableDropdown(container, { onChange } = {}) {
         if (check) check.classList.toggle('hidden', !isMatch);
       });
 
-      menu.classList.add('hidden');
-      if (arrow) arrow.classList.remove('rotate-180');
+      closeMenu();
 
       if (onChange) onChange(val, opt);
     };

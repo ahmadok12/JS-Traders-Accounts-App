@@ -1273,8 +1273,8 @@ function openNewAssemblyModal(onSaved) {
           </button>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200 rounded-xl overflow-visible">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th class="py-3 px-3 w-6/12 font-semibold">Component Item</th>
@@ -1791,8 +1791,8 @@ function openNewDisassemblyModal(onSaved) {
           </button>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200 rounded-xl overflow-visible">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th class="py-3 px-2 w-8 text-center font-semibold">Recover?</th>
@@ -2453,8 +2453,8 @@ function openNewRecipeModal(onSaved) {
           </button>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200 rounded-xl overflow-visible">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th class="py-3 px-3 w-8/12 font-semibold">Component Variant</th>
@@ -2468,6 +2468,7 @@ function openNewRecipeModal(onSaved) {
           </table>
         </div>
       </section>
+      <div class="h-44"></div>
     </form>
   `;
 
@@ -2683,8 +2684,8 @@ function openNewDisassemblyTemplateModal(onSaved) {
           </button>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200 rounded-xl overflow-visible">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th class="py-3 px-3 w-6/12 font-semibold">Component Variant</th>
@@ -2699,6 +2700,7 @@ function openNewDisassemblyTemplateModal(onSaved) {
           </table>
         </div>
       </section>
+      <div class="h-44"></div>
     </form>
   `;
 
@@ -2898,8 +2900,8 @@ function openNewBundleModal(onSaved) {
           </button>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200 rounded-xl overflow-visible">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th class="py-3 px-3 w-8/12 font-semibold">Product Variant</th>
@@ -2913,6 +2915,7 @@ function openNewBundleModal(onSaved) {
           </table>
         </div>
       </section>
+      <div class="h-44"></div>
     </form>
   `;
 
@@ -3116,8 +3119,8 @@ function openSimulateBundleModal(bundleId) {
           <span class="text-[11px] text-slate-400">Formula math evaluated in real-time</span>
         </div>
 
-        <div class="overflow-x-auto border border-slate-200 rounded-xl">
-          <table class="w-full text-left text-xs">
+        <div class="border border-slate-200 rounded-xl overflow-visible">
+          <table class="w-full text-left text-xs overflow-visible">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
                 <th class="py-3 px-3 w-5/12 font-semibold">Physical Component Item</th>
