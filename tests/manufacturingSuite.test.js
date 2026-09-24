@@ -372,48 +372,58 @@ assertEquals(inventoryService.getBalance('wh-1', 'var-6'), motorBeforeRevDis - 1
 
 
 // ----------------------------------------------------------------------------
-// TEST 13: Bundle Engine - Fixed Set vs Variable System
+// TEST 13: Simplified Bundle Engine - Proportional Scaling
 // ----------------------------------------------------------------------------
-console.log('\nTEST 13: Bundle Engine - Fixed Set vs Variable System');
-// Fixed Set: Pulley Set x 10
-const pulleyCalc = bundleService.calculateBundleComponents('bnd-pulley-set', 10);
-assertEquals(pulleyCalc.bundleType, 'FIXED_SET', 'Pulley Set is FIXED_SET');
-assertEquals(pulleyCalc.components.find(c => c.componentVariantId === 'var-pulley').finalQty, 10, '10 Pulley Sets require 10 Pulleys');
-assertEquals(pulleyCalc.components.find(c => c.componentVariantId === 'var-7').finalQty, 10, '10 Pulley Sets require 10 Fan Blades');
+console.log('\nTEST 13: Simplified Bundle Engine - Proportional Scaling');
+// Proportional Set: 1 Fan Pulley Set = 1 Pulley + 3 Fan Blades
+// 3 Sets = 3 Pulleys + 9 Fan Blades
+const pulley3Calc = bundleService.calculateBundleComponents('bnd-pulley-set', 3);
+assertEquals(pulley3Calc.bundleQty, 3, 'Bundle quantity is 3');
+assertEquals(pulley3Calc.components.find(c => c.componentVariantId === 'var-pulley').finalQty, 3, '3 Pulley Sets require 3 Pulleys');
+assertEquals(pulley3Calc.components.find(c => c.componentVariantId === 'var-7').finalQty, 9, '3 Pulley Sets require 9 Fan Blades (3 x 3)');
 
-// Variable System: Feeding Line x 4
-// Rule: Hanger (40/line = 160), Feed Pan (40/line = 160), Pipe (400 ft/line = 1,600 ft), Handle (1 per 5 lines CEIL = 1)
+// 10 Sets = 10 Pulleys + 30 Fan Blades
+const pulley10Calc = bundleService.calculateBundleComponents('bnd-pulley-set', 10);
+assertEquals(pulley10Calc.components.find(c => c.componentVariantId === 'var-pulley').finalQty, 10, '10 Pulley Sets require 10 Pulleys');
+assertEquals(pulley10Calc.components.find(c => c.componentVariantId === 'var-7').finalQty, 30, '10 Pulley Sets require 30 Fan Blades');
+
+// Multi-component system: Feeding Line x 4
+// 1 Line = 40 Hangers, 40 Pans, 400 FT Pipe, 1 Handle
 const feed4Calc = bundleService.calculateBundleComponents('bnd-feed-line', 4);
 assertEquals(feed4Calc.components.find(c => c.componentVariantId === 'var-hanger').finalQty, 160, '4 lines require 160 Hangers (40 x 4)');
 assertEquals(feed4Calc.components.find(c => c.componentVariantId === 'var-1').finalQty, 160, '4 lines require 160 Feed Pans (40 x 4)');
 assertEquals(feed4Calc.components.find(c => c.componentVariantId === 'var-pipe-galv').finalQty, 1600, '4 lines require 1,600 ft Pipe (400 x 4)');
-assertEquals(feed4Calc.components.find(c => c.componentVariantId === 'var-handle').finalQty, 1, '4 lines require 1 Handle (CEILING 4/5)');
-
-// Variable System: Feeding Line x 6
-// Rule: Handle (1 per 5 lines CEIL 6/5 = 2 handles)
-const feed6Calc = bundleService.calculateBundleComponents('bnd-feed-line', 6);
-assertEquals(feed6Calc.components.find(c => c.componentVariantId === 'var-hanger').finalQty, 240, '6 lines require 240 Hangers (40 x 6)');
-assertEquals(feed6Calc.components.find(c => c.componentVariantId === 'var-handle').finalQty, 2, '6 lines require 2 Handles (CEILING 6/5)');
+assertEquals(feed4Calc.components.find(c => c.componentVariantId === 'var-handle').finalQty, 4, '4 lines require 4 Handles (1 x 4)');
 
 
 // ----------------------------------------------------------------------------
-// TEST 14: Extra Qty & Override Qty without corrupting commercial bundle count
+// TEST 14: Extra Qty & Manual Override Qty in Bundles
 // ----------------------------------------------------------------------------
-console.log('\nTEST 14: Extra Qty & Override Qty in Bundle Systems');
+console.log('\nTEST 14: Extra Qty & Manual Override Qty in Bundles');
+// Pulley Set x 3: Pulley=3, Blades scaled to 9, then manually changed from 9 to 8
+const pulleyOverrideCalc = bundleService.calculateBundleComponents('bnd-pulley-set', 3, {
+  overrideQuantities: {
+    'var-7': 8 // manually change blades from 9 to 8
+  }
+});
+assertEquals(pulleyOverrideCalc.components.find(c => c.componentVariantId === 'var-7').finalQty, 8, 'Blades manually changed from 9 to 8');
+assertEquals(pulleyOverrideCalc.components.find(c => c.componentVariantId === 'var-pulley').finalQty, 3, 'Pulleys remain 3');
+
+// Feeding Line x 4 with adjustments (extra 5 hangers -> 165, override handles to 2)
 const feedAdjustedCalc = bundleService.calculateBundleComponents('bnd-feed-line', 4, [
   { componentVariantId: 'var-hanger', extraQty: 5 }, // 160 + 5 = 165
-  { componentVariantId: 'var-handle', extraQty: 1 }  // 1 + 1 = 2
+  { componentVariantId: 'var-handle', overrideQty: 2 } // 4 overridden to 2
 ]);
 
-assertEquals(feedAdjustedCalc.numberOfLines, 4, 'Commercial quantity remains exactly 4 lines (NOT 4.125)');
+assertEquals(feedAdjustedCalc.numberOfLines, 4, 'Commercial quantity remains exactly 4 lines');
 const hangerComp = feedAdjustedCalc.components.find(c => c.componentVariantId === 'var-hanger');
 assertEquals(hangerComp.calculatedQty, 160, 'Calculated qty is 160');
 assertEquals(hangerComp.extraQty, 5, 'Extra qty is 5');
 assertEquals(hangerComp.finalQty, 165, 'Final qty is 165');
 
 const handleComp = feedAdjustedCalc.components.find(c => c.componentVariantId === 'var-handle');
-assertEquals(handleComp.calculatedQty, 1, 'Calculated handle qty is 1');
-assertEquals(handleComp.extraQty, 1, 'Extra handle qty is 1');
+assertEquals(handleComp.calculatedQty, 4, 'Calculated handle qty is 4');
+assertEquals(handleComp.overrideQty, 2, 'Override handle qty is 2');
 assertEquals(handleComp.finalQty, 2, 'Final handle qty is 2');
 
 

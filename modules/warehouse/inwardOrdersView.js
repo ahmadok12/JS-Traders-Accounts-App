@@ -1202,7 +1202,8 @@ function openCreateInwardOrderModal(onSaved) {
       let rowCounter = 1;
 
       const updateRowCalculations = (row) => {
-        const varInput = row.querySelector('.pv-var-input');
+        const prodInput = row.querySelector('.pv-selected-product-id');
+        const varInput = row.querySelector('.pv-selected-variant-id') || row.querySelector('.pv-var-input');
         const whIndicator = row.querySelector('.wh-stock-indicator');
         const offIndicator = row.querySelector('.office-stock-indicator');
         const whQtyInput = row.querySelector('.sio-wh-qty');
@@ -1212,8 +1213,22 @@ function openCreateInwardOrderModal(onSaved) {
         const packagingSelect = row.querySelector('.sio-item-packaging');
         const ctlStockPill = row.querySelector('.sio-ctl-stock-pill');
 
-        const vId = varInput ? varInput.value : '';
-        if (!vId) {
+        let vId = varInput ? varInput.value : '';
+        const pId = prodInput ? prodInput.value : '';
+        let selectedVariant = variants.find(v => v.id === vId);
+        const selectedProduct = selectedVariant
+          ? products.find(p => p.id === selectedVariant.productId)
+          : (pId ? products.find(p => p.id === pId) : null);
+
+        if (!selectedVariant && selectedProduct) {
+          const prodVariants = variants.filter(v => v.productId === selectedProduct.id);
+          if (prodVariants.length === 1) {
+            selectedVariant = prodVariants[0];
+            vId = selectedVariant.id;
+          }
+        }
+
+        if (!vId && !selectedProduct) {
           if (whIndicator) whIndicator.textContent = 'WH Stock: —';
           if (offIndicator) offIndicator.textContent = 'Office Stock: —';
           if (totalDisplay) totalDisplay.textContent = '—';
@@ -1221,10 +1236,8 @@ function openCreateInwardOrderModal(onSaved) {
           return;
         }
 
-        const selectedVariant = variants.find(v => v.id === vId);
-        const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
-        const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
-        const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+        const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
+        const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
 
         if (isCtl && ctlContainer && packagingSelect) {
           ctlContainer.classList.remove('hidden');
@@ -1428,7 +1441,7 @@ function openCreateInwardOrderModal(onSaved) {
 
       if (addRowBtn) {
         addRowBtn.onclick = () => {
-          const existingIds = new Set(Array.from(tbody.querySelectorAll('.pv-var-input')).map(s => s.value));
+          const existingIds = new Set(Array.from(tbody.querySelectorAll('.pv-selected-variant-id, .pv-var-input')).map(s => s.value));
           const nextUnused = variants.find(v => !existingIds.has(v.id)) || variants[0];
           appendNewRow(nextUnused ? nextUnused.id : null, '', '');
         };
@@ -1450,12 +1463,41 @@ function openCreateInwardOrderModal(onSaved) {
         const lines = [];
 
         rows.forEach(row => {
-          const varInput = row.querySelector('.pv-var-input');
-          const variantId = varInput ? varInput.value : '';
-          const selectedVariant = variants.find(v => v.id === variantId);
-          const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
-          const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
-          const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+          const prodInput = row.querySelector('.pv-selected-product-id');
+          const varInput = row.querySelector('.pv-selected-variant-id') || row.querySelector('.pv-var-input');
+          const pId = prodInput ? prodInput.value : '';
+          let variantId = varInput ? varInput.value : '';
+
+          let selectedProduct = products.find(p => p.id === pId);
+          let selectedVariant = variants.find(v => v.id === variantId);
+
+          if (!selectedProduct && selectedVariant) {
+            selectedProduct = products.find(p => p.id === selectedVariant.productId);
+          }
+
+          if (!selectedVariant && selectedProduct) {
+            const prodVariants = variants.filter(v => v.productId === selectedProduct.id);
+            if (prodVariants.length === 0) {
+              // Auto-create standard variant for product with no variants
+              selectedVariant = productService.createVariant({
+                productId: selectedProduct.id,
+                name: selectedProduct.businessName || selectedProduct.customerName || 'Standard',
+                sku: selectedProduct.code,
+                costPrice: 0,
+                sellingPrice: 0,
+                unit: selectedProduct.base_unit || selectedProduct.baseUnitId || 'PCS',
+                isActive: true
+              });
+              variantId = selectedVariant.id;
+              variants.push(selectedVariant);
+            } else if (prodVariants.length === 1) {
+              selectedVariant = prodVariants[0];
+              variantId = selectedVariant.id;
+            }
+          }
+
+          const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
+          const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
 
           const warehouseQty = Number(row.querySelector('.sio-wh-qty')?.value) || 0;
           const officeQty = Number(row.querySelector('.sio-office-qty')?.value) || 0;

@@ -1,20 +1,21 @@
 /**
- * JS Traders ERP - Bundle, Set & Variable System Engine
+ * JS Traders ERP - Simplified Bundle & Set Engine
  * 
  * CORE PRINCIPLE:
- * Product Master defines what a product is.
- * The Bundle definition determines how that product is used and calculated within that bundle/system.
+ * Bundle has:
+ * - Bundle Name
+ * - Quantity of Finished Bundle (usually 1)
+ * - Selling Price (PKR)
+ * - Components: [ { componentVariantId, productId, name, quantity, unit, unitPrice } ]
  * 
- * Supports:
- * 1. Fixed Set (e.g. Pulley Set, Inverter Set) - Directly proportional, components hidden by default.
- * 2. Variable System (e.g. Feeding Line, Drinking Line) - Rules per component:
- *    - PER_LINE: lines * quantityPerLine
- *    - FIXED_QTY: fixedQuantity
- *    - PER_GROUP_CEIL: Math.ceil(lines / linesPerGroup) * quantityPerGroup
- *    - PER_GROUP_FLOOR: Math.floor(lines / linesPerGroup) * quantityPerGroup
- *    - MANUAL: manual entry
- * 3. Extra Qty: Final Qty = Calculated Qty + Extra Qty
- * 4. Override Qty: Final Qty = Override Qty
+ * In Sales Order / Invoice:
+ * - Selecting a bundle displays a collapse/expand toggle button.
+ * - Multiplying bundle quantity automatically multiplies each component quantity proportionally:
+ *   component.calculatedQty = component.baseQuantity * (bundleQty / baseBundleQty).
+ * - Component quantities can be manually overridden.
+ * - Changing quantity or price of component products recalculates bundle price dynamically.
+ * - On Gatepass or Invoice print, only the single bundle line is shown:
+ *   [Bundle Name] [Qty] x [Price]
  */
 
 import { storageService } from './storageService.js';
@@ -33,70 +34,44 @@ class BundleService {
     return storageService.getById('bundleDefinitions', id);
   }
 
-  // Calculate required component quantities based on bundle rules and line count
-  calculateBundleComponents(bundleId, numberOfLines = 1, adjustments = []) {
+  calculateBundleComponents(bundleId, bundleQty = 1, adjustments = {}) {
     const bundle = this.getBundleById(bundleId);
     if (!bundle) throw new Error(`Bundle definition "${bundleId}" not found.`);
 
-    const linesCount = Math.max(1, Number(numberOfLines) || 1);
+    const targetBundleQty = Math.max(1, Number(bundleQty) || 1);
+    const baseBundleQty = Math.max(1, Number(bundle.bundleQty) || 1);
+    const multiplier = targetBundleQty / baseBundleQty;
+
     const variants = productService.getVariants();
     const varMap = new Map(variants.map(v => [v.id, v]));
 
     const adjMap = new Map();
-    (adjustments || []).forEach(adj => {
-      if (adj.componentVariantId) {
-        adjMap.set(adj.componentVariantId, adj);
-      }
-    });
+    if (Array.isArray(adjustments)) {
+      adjustments.forEach(adj => {
+        if (adj.componentVariantId) adjMap.set(adj.componentVariantId, adj);
+      });
+    } else if (adjustments && typeof adjustments === 'object') {
+      const extras = adjustments.extraQuantities || {};
+      const overrides = adjustments.overrideQuantities || {};
+      const prices = adjustments.prices || {};
+      const allKeys = new Set([...Object.keys(extras), ...Object.keys(overrides), ...Object.keys(prices)]);
+      allKeys.forEach(k => {
+        adjMap.set(k, {
+          componentVariantId: k,
+          extraQty: extras[k],
+          overrideQty: overrides[k],
+          unitPrice: prices[k]
+        });
+      });
+    }
+
+    let calculatedTotalBundlePrice = 0;
 
     const components = (bundle.components || []).map(compDef => {
       const variant = varMap.get(compDef.componentVariantId) || {};
-      const rule = compDef.quantityRule || 'PER_LINE';
-      const params = compDef.parameters || {};
+      const baseQty = Number(compDef.quantity) || Number(compDef.parameters?.quantityPerLine) || Number(compDef.parameters?.fixedQuantity) || 1;
+      const calculatedQty = baseQty * multiplier;
 
-      let calculatedQty = 0;
-      let calculationText = '';
-
-      switch (rule) {
-        case 'PER_LINE': {
-          const perLine = Number(params.quantityPerLine) || 1;
-          calculatedQty = linesCount * perLine;
-          calculationText = `${perLine} × ${linesCount} lines = ${calculatedQty}`;
-          break;
-        }
-        case 'FIXED_QTY': {
-          calculatedQty = Number(params.fixedQuantity) || 1;
-          calculationText = `Fixed: ${calculatedQty}`;
-          break;
-        }
-        case 'PER_GROUP_CEIL': {
-          const lpg = Number(params.linesPerGroup) || 1;
-          const qpg = Number(params.quantityPerGroup) || 1;
-          const groups = Math.ceil(linesCount / lpg);
-          calculatedQty = groups * qpg;
-          calculationText = `CEIL(${linesCount} ÷ ${lpg}) × ${qpg} = ${calculatedQty} (${qpg} per ${lpg} lines)`;
-          break;
-        }
-        case 'PER_GROUP_FLOOR': {
-          const lpg = Number(params.linesPerGroup) || 1;
-          const qpg = Number(params.quantityPerGroup) || 1;
-          const groups = Math.floor(linesCount / lpg);
-          calculatedQty = groups * qpg;
-          calculationText = `FLOOR(${linesCount} ÷ ${lpg}) × ${qpg} = ${calculatedQty}`;
-          break;
-        }
-        case 'MANUAL': {
-          calculatedQty = Number(params.defaultQuantity) || 0;
-          calculationText = `Manual Entry`;
-          break;
-        }
-        default: {
-          calculatedQty = linesCount;
-          calculationText = `${linesCount} × 1 = ${linesCount}`;
-        }
-      }
-
-      // Check for user adjustments (Extra Qty or Override Qty)
       const userAdj = adjMap.get(compDef.componentVariantId);
       const extraQty = userAdj ? (Number(userAdj.extraQty) || 0) : 0;
       const overrideQty = (userAdj && userAdj.overrideQty !== undefined && userAdj.overrideQty !== null && userAdj.overrideQty !== '')
@@ -110,32 +85,46 @@ class BundleService {
         finalQty = Math.max(0, calculatedQty + extraQty);
       }
 
+      const defaultPrice = compDef.unitPrice !== undefined && compDef.unitPrice !== null
+        ? Number(compDef.unitPrice)
+        : (Number(variant.sellingPrice) || 0);
+      const sellingPrice = (userAdj && userAdj.unitPrice !== undefined) ? Number(userAdj.unitPrice) : defaultPrice;
+      const lineTotal = finalQty * sellingPrice;
+      calculatedTotalBundlePrice += lineTotal;
+
       return {
         componentVariantId: compDef.componentVariantId,
-        variantName: variant.name || 'Component',
+        productId: compDef.productId || variant.productId,
+        name: compDef.name || variant.name || 'Component',
+        variantName: compDef.name || variant.name || 'Component',
         sku: variant.sku || '',
         costPrice: Number(variant.costPrice) || 0,
-        sellingPrice: Number(variant.sellingPrice) || 0,
-        quantityRule: rule,
-        parameters: params,
-        ruleDescription: compDef.ruleDescription || calculationText,
-        calculationText,
+        sellingPrice,
+        unitPrice: sellingPrice,
+        baseQty,
         calculatedQty,
         extraQty,
         overrideQty,
         finalQty,
+        lineTotal,
         unit: compDef.unit || variant.unit || 'PCS'
       };
     });
+
+    const bundleUnitPrice = targetBundleQty > 0 ? (calculatedTotalBundlePrice / targetBundleQty) : (bundle.sellingPrice || 0);
 
     return {
       bundleId: bundle.id,
       bundleCode: bundle.code,
       bundleName: bundle.name,
-      bundleType: bundle.bundleType,
-      allowComponentAdjustment: Boolean(bundle.allowComponentAdjustment),
-      sellingPrice: Number(bundle.sellingPrice) || 0,
-      numberOfLines: linesCount,
+      bundleType: bundle.bundleType || 'BUNDLE',
+      bundleQty: targetBundleQty,
+      baseBundleQty,
+      sellingPrice: (bundle.sellingPrice !== undefined && bundle.sellingPrice !== null && Number(bundle.sellingPrice) > 0)
+        ? Number(bundle.sellingPrice)
+        : bundleUnitPrice,
+      calculatedTotalBundlePrice,
+      numberOfLines: targetBundleQty,
       components
     };
   }
@@ -146,12 +135,35 @@ class BundleService {
     return storageService.insert('bundleDefinitions', {
       ...bundleData,
       code,
-      components: bundleData.components || []
+      bundleQty: Number(bundleData.bundleQty) || 1,
+      sellingPrice: Number(bundleData.sellingPrice) || 0,
+      components: (bundleData.components || []).map((c, idx) => ({
+        id: c.id || `bc-${Date.now()}-${idx}`,
+        componentVariantId: c.componentVariantId,
+        productId: c.productId || null,
+        name: c.name || '',
+        quantity: Number(c.quantity) || 1,
+        unit: c.unit || 'PCS',
+        unitPrice: Number(c.unitPrice) || 0
+      }))
     });
   }
 
   updateBundle(id, bundleData) {
-    return storageService.update('bundleDefinitions', id, bundleData);
+    return storageService.update('bundleDefinitions', id, {
+      ...bundleData,
+      bundleQty: Number(bundleData.bundleQty) || 1,
+      sellingPrice: Number(bundleData.sellingPrice) || 0,
+      components: (bundleData.components || []).map((c, idx) => ({
+        id: c.id || `bc-${Date.now()}-${idx}`,
+        componentVariantId: c.componentVariantId,
+        productId: c.productId || null,
+        name: c.name || '',
+        quantity: Number(c.quantity) || 1,
+        unit: c.unit || 'PCS',
+        unitPrice: Number(c.unitPrice) || 0
+      }))
+    });
   }
 }
 

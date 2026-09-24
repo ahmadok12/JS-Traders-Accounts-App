@@ -1451,41 +1451,32 @@ const SEED_DATABASE = {
       id: 'bnd-feed-line',
       code: 'BND-FEED',
       name: 'Automatic Feeding Line',
-      bundleType: 'VARIABLE_SYSTEM',
-      allowComponentAdjustment: true,
-      sellingPrice: 185000, // Per line
-      notes: 'Complete automated broiler feeding line. Components calculated by individual quantity rules.',
+      bundleQty: 1,
+      sellingPrice: 185000,
+      notes: 'Complete automated broiler feeding line.',
       components: [
         {
           id: 'bc-1',
           componentVariantId: 'var-hanger',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 40 },
-          ruleDescription: '40 hangers per line',
+          quantity: 40,
           unit: 'PCS'
         },
         {
           id: 'bc-2',
           componentVariantId: 'var-1', // Feed Pan
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 40 },
-          ruleDescription: '40 pans per line',
+          quantity: 40,
           unit: 'PCS'
         },
         {
           id: 'bc-3',
           componentVariantId: 'var-pipe-galv', // Galvanized Pipe
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 400 },
-          ruleDescription: '400 ft per line',
+          quantity: 400,
           unit: 'FT'
         },
         {
           id: 'bc-4',
           componentVariantId: 'var-handle', // Winch Handle
-          quantityRule: 'PER_GROUP_CEIL',
-          parameters: { linesPerGroup: 5, quantityPerGroup: 1 },
-          ruleDescription: '1 handle per 5 lines (Round Up)',
+          quantity: 1,
           unit: 'PCS'
         }
       ]
@@ -1494,41 +1485,32 @@ const SEED_DATABASE = {
       id: 'bnd-drink-line',
       code: 'BND-DRINK',
       name: 'Automatic Drinking Line',
-      bundleType: 'VARIABLE_SYSTEM',
-      allowComponentAdjustment: true,
+      bundleQty: 1,
       sellingPrice: 95000,
-      notes: 'Poultry nipple drinking line system. Handle required per 6 lines.',
+      notes: 'Poultry nipple drinking line system.',
       components: [
         {
           id: 'bc-5',
           componentVariantId: 'var-3', // Nipple 360
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 50 },
-          ruleDescription: '50 nipples per line',
+          quantity: 50,
           unit: 'PCS'
         },
         {
           id: 'bc-6',
           componentVariantId: 'var-pipe-galv',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 400 },
-          ruleDescription: '400 ft per line',
+          quantity: 400,
           unit: 'FT'
         },
         {
           id: 'bc-7',
           componentVariantId: 'var-regulator',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 1 },
-          ruleDescription: '1 pressure regulator per line',
+          quantity: 1,
           unit: 'PCS'
         },
         {
           id: 'bc-8',
           componentVariantId: 'var-handle',
-          quantityRule: 'PER_GROUP_CEIL',
-          parameters: { linesPerGroup: 6, quantityPerGroup: 1 },
-          ruleDescription: '1 handle per 6 lines (Round Up)',
+          quantity: 1,
           unit: 'PCS'
         }
       ]
@@ -1537,25 +1519,20 @@ const SEED_DATABASE = {
       id: 'bnd-pulley-set',
       code: 'BND-PULLEY-SET',
       name: 'Pulley Set',
-      bundleType: 'FIXED_SET',
-      allowComponentAdjustment: false,
+      bundleQty: 1,
       sellingPrice: 10800,
-      notes: 'Directly proportional set: Pulley x 1 + 3-Blade Fan x 1 per set',
+      notes: '1 fan pulley set = 1 fan pulley + 3 fan blades',
       components: [
         {
           id: 'bc-9',
           componentVariantId: 'var-pulley',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 1 },
-          ruleDescription: '1 pulley per set',
+          quantity: 1,
           unit: 'PCS'
         },
         {
           id: 'bc-10',
           componentVariantId: 'var-7', // Fan Blade
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 1 },
-          ruleDescription: '1 fan blade per set',
+          quantity: 3,
           unit: 'PCS'
         }
       ]
@@ -1564,41 +1541,32 @@ const SEED_DATABASE = {
       id: 'bnd-inverter-set',
       code: 'BND-INVERTER-SET',
       name: 'Complete Inverter Set',
-      bundleType: 'FIXED_SET',
-      allowComponentAdjustment: false,
+      bundleQty: 1,
       sellingPrice: 46000,
       notes: 'Complete Inverter Set: Inverter x 1, Remote x 1, Display x 1, Wire x 50 ft',
       components: [
         {
           id: 'bc-11',
           componentVariantId: 'var-inverter',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 1 },
-          ruleDescription: '1 inverter panel per set',
+          quantity: 1,
           unit: 'PCS'
         },
         {
           id: 'bc-12',
           componentVariantId: 'var-remote',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 1 },
-          ruleDescription: '1 remote per set',
+          quantity: 1,
           unit: 'PCS'
         },
         {
           id: 'bc-13',
           componentVariantId: 'var-display',
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 1 },
-          ruleDescription: '1 LCD display per set',
+          quantity: 1,
           unit: 'PCS'
         },
         {
           id: 'bc-14',
           componentVariantId: 'var-5', // Wire
-          quantityRule: 'PER_LINE',
-          parameters: { quantityPerLine: 50 },
-          ruleDescription: '50 ft wire per set',
+          quantity: 50,
           unit: 'FT'
         }
       ]

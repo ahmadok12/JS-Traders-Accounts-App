@@ -1714,30 +1714,91 @@ export function printGatepassVoucher(gatepass) {
           </tr>
         </thead>
         <tbody>
-          ${(gatepass.lines || []).map((l, i) => {
-            const whQ = Number(l.warehouseQty) || 0;
-            const offQ = Number(l.officeQty) || 0;
-            const totQ = Number(l.quantity) || (whQ + offQ);
-            return `
-              <tr>
-                <td>${i + 1}</td>
-                <td>
-                  <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
-                  ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
-                  ${l.notes ? `<div style="font-size: 10px; color: #64748b;">${l.notes}</div>` : ''}
-                </td>
-                <td class="text-center font-mono">${whQ}</td>
-                <td class="text-center font-mono">${offQ}</td>
-                <td class="text-right font-mono" style="font-weight: 800; font-size: 13px;">${totQ} ${l.unit || 'PCS'}</td>
-              </tr>
-            `;
-          }).join('')}
+          ${(() => {
+            const raw = gatepass.lines || [];
+            const displayLines = [];
+            const seenBundles = new Set();
+
+            raw.forEach(l => {
+              if (l.isBundleComponent && (l.bundleUid || l.bundleId)) {
+                const bKey = l.bundleUid || l.bundleId;
+                if (!seenBundles.has(bKey)) {
+                  seenBundles.add(bKey);
+                  displayLines.push({
+                    isBundle: true,
+                    name: l.bundleName || 'Bundle / Set',
+                    bundleQty: l.bundleQty || 1,
+                    bundleUnitPrice: l.bundleUnitPrice || 0,
+                    unit: 'Sets',
+                    warehouseQty: l.bundleWhQty || l.bundleQty || 1,
+                    officeQty: l.bundleOfficeQty || 0,
+                    quantity: l.bundleQty || 1
+                  });
+                }
+              } else {
+                displayLines.push(l);
+              }
+            });
+
+            return displayLines.map((l, i) => {
+              if (l.isBundle) {
+                const priceFormatted = l.bundleUnitPrice > 0 ? ` <div style="font-size: 10px; color: #64748b;">${l.bundleQty} × Rs. ${Number(l.bundleUnitPrice).toLocaleString()}</div>` : '';
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>
+                      <strong>${l.name}</strong>
+                      <div style="font-size: 10px; color: #7c3aed; font-weight: 600;">Predefined Bundle / Set</div>
+                    </td>
+                    <td class="text-center font-mono">—</td>
+                    <td class="text-center font-mono">—</td>
+                    <td class="text-right font-mono" style="font-weight: 800; font-size: 13px;">
+                      ${l.bundleQty} Set${l.bundleQty !== 1 ? 's' : ''}${priceFormatted}
+                    </td>
+                  </tr>
+                `;
+              }
+
+              const whQ = Number(l.warehouseQty) || 0;
+              const offQ = Number(l.officeQty) || 0;
+              const totQ = Number(l.quantity) || (whQ + offQ);
+              return `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>
+                    <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
+                    ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
+                    ${l.notes ? `<div style="font-size: 10px; color: #64748b;">${l.notes}</div>` : ''}
+                  </td>
+                  <td class="text-center font-mono">${whQ}</td>
+                  <td class="text-center font-mono">${offQ}</td>
+                  <td class="text-right font-mono" style="font-weight: 800; font-size: 13px;">${totQ} ${l.unit || 'PCS'}</td>
+                </tr>
+              `;
+            }).join('');
+          })()}
         </tbody>
         <tfoot>
           <tr>
             <td colspan="4" class="text-right" style="font-weight: 800; font-size: 12px; padding: 10px;">TOTAL VERIFIED CARGO UNITS:</td>
             <td class="text-right font-mono" style="font-size: 14px; font-weight: 900; color: #0f172a; padding: 10px;">
-              ${(gatepass.lines || []).reduce((s, l) => s + (Number(l.quantity) || (Number(l.warehouseQty || 0) + Number(l.officeQty || 0))), 0)} Units
+              ${(() => {
+                const raw = gatepass.lines || [];
+                const seenBundles = new Set();
+                let sum = 0;
+                raw.forEach(l => {
+                  if (l.isBundleComponent && (l.bundleUid || l.bundleId)) {
+                    const bKey = l.bundleUid || l.bundleId;
+                    if (!seenBundles.has(bKey)) {
+                      seenBundles.add(bKey);
+                      sum += (Number(l.bundleQty) || 1);
+                    }
+                  } else {
+                    sum += (Number(l.quantity) || (Number(l.warehouseQty || 0) + Number(l.officeQty || 0)));
+                  }
+                });
+                return sum;
+              })()} Units
             </td>
           </tr>
         </tfoot>

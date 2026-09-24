@@ -485,3 +485,227 @@ export function bindProductVariantPicker(container, { products, variants, onVari
     if (varMenu) varMenu.classList.add('hidden');
   });
 }
+
+/**
+ * ============================================================================
+ * GENERIC SEARCHABLE CARD DROPDOWN COMPONENT
+ * Rounded card design theme matching ERP specifications.
+ * Supports integrated real-time search, item badges, and keyboard/click selection.
+ * ============================================================================
+ */
+
+export function renderSearchableDropdown({
+  id = '',
+  name = '',
+  placeholder = 'Select option...',
+  value = '',
+  options = [], // [{ value, label, subtext, badge }]
+  required = false,
+  containerClass = '',
+  buttonClass = '',
+  menuWidth = 'w-full'
+}) {
+  const selectedOpt = options.find(o => String(o.value) === String(value));
+  const displayText = selectedOpt ? selectedOpt.label : placeholder;
+  const isSelected = Boolean(selectedOpt && selectedOpt.value !== '');
+
+  return `
+    <div class="searchable-card-dropdown relative ${containerClass}" data-dropdown-id="${id}" data-placeholder="${placeholder.replace(/"/g, '&quot;')}">
+      <input type="hidden" id="${id}" name="${name || id}" value="${value || ''}" class="scd-hidden-input" ${required ? 'required' : ''}>
+      
+      <button
+        type="button"
+        class="scd-trigger w-full flex items-center justify-between gap-2 p-2.5 rounded-xl border border-slate-200 hover:border-[#138FCB] bg-white text-xs shadow-2xs cursor-pointer transition-all focus:outline-none focus:border-[#138FCB] ${buttonClass}">
+        <span class="scd-label truncate ${isSelected ? 'text-slate-800 font-bold' : 'text-slate-400 font-normal'}">
+          ${displayText}
+        </span>
+        <svg class="scd-arrow w-3.5 h-3.5 text-slate-400 shrink-0 ml-1 transition-transform duration-150" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M19 9l-7 7-7-7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+
+      <div class="scd-menu hidden absolute top-full left-0 z-50 ${menuWidth} mt-1.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+        <div class="p-2 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-10">
+          <div class="relative">
+            <input
+              type="text"
+              class="scd-search w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-[#138FCB] placeholder-slate-400 font-medium"
+              placeholder="Search options...">
+            <span class="absolute left-2 top-2 text-slate-400 text-xs">🔍</span>
+          </div>
+        </div>
+        <div class="scd-options-list max-h-56 overflow-y-auto custom-scroll p-1.5 space-y-1">
+          ${options.map(opt => {
+            const optVal = String(opt.value ?? '');
+            const optLabel = String(opt.label ?? optVal);
+            const optSub = String(opt.subtext ?? '');
+            const optBadge = String(opt.badge ?? '');
+            const isMatch = String(value) === optVal && optVal !== '';
+            return `
+              <div
+                class="scd-option p-2 rounded-xl hover:bg-blue-50/70 border border-transparent hover:border-blue-200 cursor-pointer transition-all flex items-center justify-between gap-2 ${isMatch ? 'bg-blue-50/70 border-blue-200' : ''}"
+                data-value="${optVal}"
+                data-label="${optLabel.replace(/"/g, '&quot;')}"
+                data-search="${(optLabel + ' ' + optSub + ' ' + optVal).toLowerCase()}">
+                <div class="truncate">
+                  <div class="font-bold text-slate-800 text-xs truncate">${optLabel}</div>
+                  ${optSub ? `<div class="text-[10px] text-slate-400 font-mono font-medium">${optSub}</div>` : ''}
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  ${optBadge ? `<span class="text-[9px] font-bold text-[#138FCB] bg-blue-50 px-1.5 py-0.5 rounded">${optBadge}</span>` : ''}
+                  <span class="scd-check text-xs font-bold text-[#138FCB] ${isMatch ? '' : 'hidden'}">✓</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+export function bindSearchableDropdown(container, { onChange } = {}) {
+  const trigger = container.querySelector('.scd-trigger');
+  const menu = container.querySelector('.scd-menu');
+  const searchInput = container.querySelector('.scd-search');
+  const arrow = container.querySelector('.scd-arrow');
+  const hiddenInput = container.querySelector('.scd-hidden-input');
+  const labelEl = container.querySelector('.scd-label');
+
+  if (!trigger || !menu) return;
+
+  trigger.onclick = (e) => {
+    e.stopPropagation();
+    const isHidden = menu.classList.contains('hidden');
+    // Close other open menus
+    document.querySelectorAll('.scd-menu, .pv-product-menu, .pv-variant-menu, .custom-filter-dropdown-card').forEach(m => {
+      if (m !== menu) m.classList.add('hidden');
+    });
+    document.querySelectorAll('.scd-arrow').forEach(a => {
+      if (a !== arrow) a.classList.remove('rotate-180');
+    });
+
+    menu.classList.toggle('hidden', !isHidden);
+    if (arrow) arrow.classList.toggle('rotate-180', isHidden);
+
+    if (isHidden && searchInput) {
+      searchInput.value = '';
+      container.querySelectorAll('.scd-option').forEach(opt => { opt.style.display = 'flex'; });
+      setTimeout(() => searchInput.focus(), 50);
+    }
+  };
+
+  if (searchInput) {
+    searchInput.onclick = (e) => e.stopPropagation();
+    searchInput.oninput = (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      container.querySelectorAll('.scd-option').forEach(opt => {
+        const searchTerms = opt.getAttribute('data-search') || '';
+        opt.style.display = searchTerms.includes(q) ? 'flex' : 'none';
+      });
+    };
+  }
+
+  // Bind option selection
+  container.querySelectorAll('.scd-option').forEach(opt => {
+    opt.onclick = (e) => {
+      e.stopPropagation();
+      const val = opt.getAttribute('data-value');
+      const text = opt.getAttribute('data-label') || opt.querySelector('.font-bold')?.textContent?.trim() || val;
+
+      if (hiddenInput) {
+        hiddenInput.value = val;
+        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      if (labelEl) {
+        if (val !== '') {
+          labelEl.textContent = text;
+          labelEl.classList.remove('text-slate-400', 'font-normal');
+          labelEl.classList.add('text-slate-800', 'font-bold');
+        } else {
+          const placeholder = container.getAttribute('data-placeholder') || 'Select option...';
+          labelEl.textContent = placeholder;
+          labelEl.classList.add('text-slate-400', 'font-normal');
+          labelEl.classList.remove('text-slate-800', 'font-bold');
+        }
+      }
+
+      container.querySelectorAll('.scd-option').forEach(o => {
+        const isMatch = o.getAttribute('data-value') === val;
+        o.classList.toggle('bg-blue-50/70', isMatch);
+        o.classList.toggle('border-blue-200', isMatch);
+        const check = o.querySelector('.scd-check');
+        if (check) check.classList.toggle('hidden', !isMatch);
+      });
+
+      menu.classList.add('hidden');
+      if (arrow) arrow.classList.remove('rotate-180');
+
+      if (onChange) onChange(val, opt);
+    };
+  });
+}
+
+export function initAllSearchableDropdowns(container, { onChange } = {}) {
+  if (!container) return;
+  container.querySelectorAll('.searchable-card-dropdown').forEach(dd => {
+    if (!dd._scdBound) {
+      dd._scdBound = true;
+      bindSearchableDropdown(dd, { onChange });
+    }
+  });
+}
+
+export function setSearchableDropdownValue(container, dropdownIdOrEl, value, displayLabel = '') {
+  const dd = typeof dropdownIdOrEl === 'string'
+    ? container.querySelector(`[data-dropdown-id="${dropdownIdOrEl}"]`)
+    : dropdownIdOrEl;
+  if (!dd) return;
+
+  const hiddenInput = dd.querySelector('.scd-hidden-input');
+  const labelEl = dd.querySelector('.scd-label');
+
+  if (hiddenInput) {
+    hiddenInput.value = value;
+  }
+
+  let text = displayLabel;
+  if (!text && value !== '') {
+    const matchingOpt = dd.querySelector(`.scd-option[data-value="${value}"]`);
+    if (matchingOpt) {
+      text = matchingOpt.getAttribute('data-label') || matchingOpt.querySelector('.font-bold')?.textContent?.trim() || value;
+    }
+  }
+
+  if (labelEl) {
+    if (value !== '') {
+      labelEl.textContent = text || value;
+      labelEl.classList.remove('text-slate-400', 'font-normal');
+      labelEl.classList.add('text-slate-800', 'font-bold');
+    } else {
+      const placeholder = dd.getAttribute('data-placeholder') || 'Select option...';
+      labelEl.textContent = placeholder;
+      labelEl.classList.add('text-slate-400', 'font-normal');
+      labelEl.classList.remove('text-slate-800', 'font-bold');
+    }
+  }
+
+  dd.querySelectorAll('.scd-option').forEach(o => {
+    const isMatch = o.getAttribute('data-value') === String(value);
+    o.classList.toggle('bg-blue-50/70', isMatch);
+    o.classList.toggle('border-blue-200', isMatch);
+    const check = o.querySelector('.scd-check');
+    if (check) check.classList.toggle('hidden', !isMatch);
+  });
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.searchable-card-dropdown')) {
+      document.querySelectorAll('.scd-menu').forEach(m => m.classList.add('hidden'));
+      document.querySelectorAll('.scd-arrow').forEach(a => a.classList.remove('rotate-180'));
+    }
+  });
+}
+

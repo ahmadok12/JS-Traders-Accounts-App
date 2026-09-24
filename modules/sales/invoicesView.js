@@ -117,6 +117,18 @@ function openInvoicePrintModal(invoice, refreshCallback) {
   const isVoided = invoice.status === 'Voided' || invoice.status === 'Cancelled';
 
   const lines = (invoice.lines || []).map(l => {
+    if (l.bundleId || l.bundleComponents || l.isBundle) {
+      return {
+        name: l.bundleName || l.name || 'Bundle / Set',
+        sku: l.bundleCode || l.sku || 'BUNDLE',
+        quantity: l.bundleQty || l.quantity || 1,
+        unit: l.unit || 'Sets',
+        unitPrice: l.unitPrice,
+        lineTotal: l.lineTotal || ((l.bundleQty || l.quantity || 1) * (l.unitPrice || 0)),
+        isCutToLength: false
+      };
+    }
+
     const v = varMap.get(l.variantId) || {};
     const prod = v.productId ? productService.getProductById(v.productId) : null;
     const isCtl = Boolean(v.isCutToLength || v.rollLength || (prod && (prod.cut_to_length || prod.enableRollTracking)) || l.isCutToLength || l.totalFeet);
@@ -339,18 +351,31 @@ function openCreateInvoiceModal(onSaved) {
         </div>
 
         <!-- Bundle Components & Adjustments Sub-Panel -->
-        <div id="bundle-components-panel" class="hidden p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
-          <div class="flex items-center justify-between">
+        <div id="bundle-components-panel" class="hidden p-4 bg-purple-50/70 border border-purple-200 rounded-xl space-y-3">
+          <div class="flex items-center justify-between border-b border-purple-100 pb-2">
             <div>
-              <span class="text-xs font-bold text-blue-900" id="bundle-panel-name">Poultry Feeding System</span>
-              <p class="text-[11px] text-slate-600" id="bundle-panel-desc">Commercial line shows commercial count. Gate Pass will automatically deduct physical components.</p>
+              <span class="text-xs font-bold text-purple-900" id="bundle-panel-name">Fan Pulley Set</span>
+              <p class="text-[11px] text-slate-600">Changing product quantities or prices below automatically updates the bundle unit price and invoice total.</p>
             </div>
-            <button type="button" id="btn-open-bundle-adjust" class="px-3 py-1.5 bg-[#138FCB] hover:bg-[#0E78AC] text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5">
-              <span>⚙️ Adjust Components &amp; Extra Qty</span>
-            </button>
+            <span class="text-[10px] font-bold text-purple-700 bg-white px-2.5 py-1 rounded-lg border border-purple-200 shadow-2xs">
+              Live Bundle Price Sync
+            </span>
           </div>
-          <div id="bundle-components-pills" class="text-xs font-semibold text-slate-700 flex flex-wrap gap-1.5">
-            <!-- Dynamic component summary pills -->
+          <div class="overflow-x-auto border border-purple-200/80 rounded-xl bg-white">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-purple-50/60 text-purple-900 uppercase text-[10px] font-bold border-b border-purple-100">
+                <tr>
+                  <th class="py-2.5 px-3">Product Item</th>
+                  <th class="py-2.5 px-2 text-center">Ratio / Set</th>
+                  <th class="py-2.5 px-2 text-center w-28">Total Qty</th>
+                  <th class="py-2.5 px-2 text-right w-32">Unit Price (PKR)</th>
+                  <th class="py-2.5 px-3 text-right">Line Total</th>
+                </tr>
+              </thead>
+              <tbody id="bundle-components-tbody" class="divide-y divide-purple-100/60 text-slate-800">
+                <!-- Dynamic component rows -->
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -417,9 +442,6 @@ function openCreateInvoiceModal(onSaved) {
       const bundlePicker = modalEl.querySelector('#bundle-item-picker-container');
       const bundlePanel = modalEl.querySelector('#bundle-components-panel');
       const bundlePanelName = modalEl.querySelector('#bundle-panel-name');
-      const bundlePanelDesc = modalEl.querySelector('#bundle-panel-desc');
-      const bundlePills = modalEl.querySelector('#bundle-components-pills');
-      const adjustBtn = modalEl.querySelector('#btn-open-bundle-adjust');
       const thItemQty = modalEl.querySelector('#th-item-qty');
 
       const varSelect = modalEl.querySelector('#inv-item-var');
@@ -432,30 +454,80 @@ function openCreateInvoiceModal(onSaved) {
       const grandTotalEl = modalEl.querySelector('#inv-grand-total');
       const ctlStockPill = modalEl.querySelector('#inv-ctl-stock-pill');
 
-
       const updateBundleDisplay = () => {
         const bId = bundleSelect.value;
         const bundle = bundles.find(b => b.id === bId);
         if (!bundle) return;
 
-        const qty = Number(qtyInput.value) || 1;
+        const qty = Math.max(1, Number(qtyInput.value) || 1);
+        bundlePanelName.textContent = bundle.name;
+
+        const tbodyComps = modalEl.querySelector('#bundle-components-tbody');
+        if (!tbodyComps) return;
+
         const calc = bundleService.calculateBundleComponents(bundle.id, qty, bundleAdjustments);
 
-        bundlePanelName.textContent = bundle.name;
-        if (bundle.bundleType === 'VARIABLE_SYSTEM') {
-          bundlePanelDesc.textContent = `Variable Poultry System (${qty} Lines). Commercial line shows ${qty} Lines. Gate Pass will automatically deduct the ${calc.components.length} physical components below:`;
-          adjustBtn.classList.remove('hidden');
-        } else {
-          bundlePanelDesc.textContent = `Fixed Set (${qty} Sets). Components are directly proportional and kept internal on invoice.`;
-          adjustBtn.classList.add('hidden');
-        }
+        tbodyComps.innerHTML = calc.components.map(c => {
+          const defaultPrice = c.unitPrice !== undefined ? c.unitPrice : 0;
+          const userPrice = (bundleAdjustments.prices && bundleAdjustments.prices[c.componentVariantId] !== undefined)
+            ? bundleAdjustments.prices[c.componentVariantId]
+            : defaultPrice;
+          const userQty = (bundleAdjustments.overrideQuantities && bundleAdjustments.overrideQuantities[c.componentVariantId] !== undefined)
+            ? bundleAdjustments.overrideQuantities[c.componentVariantId]
+            : c.finalQty;
+          const lineTotal = userQty * userPrice;
 
-        bundlePills.innerHTML = calc.components.map(c => `
-          <span class="px-2.5 py-1 bg-white border border-blue-200 rounded-lg text-slate-800 shadow-2xs">
-            ${c.name}: <strong class="text-blue-600">${c.finalQty} ${c.unit || 'PCS'}</strong>
-            ${c.extraQty ? `<span class="text-emerald-600 text-[10px] ml-1 font-bold">(+${c.extraQty} extra)</span>` : ''}
-          </span>
-        `).join('');
+          return `
+            <tr class="hover:bg-purple-50/20 transition-colors" data-comp-id="${c.componentVariantId}">
+              <td class="py-2.5 px-3">
+                <div class="font-bold text-slate-800">${c.name}</div>
+                <div class="text-[10px] text-slate-400 font-mono">${c.sku || ''}</div>
+              </td>
+              <td class="py-2.5 px-2 text-center text-slate-600 font-semibold">
+                ${c.baseQty} / set
+              </td>
+              <td class="py-2.5 px-2 text-center">
+                <input type="number" min="0" step="any" value="${userQty}" class="bnd-comp-qty-input w-24 text-center font-black border border-purple-200 rounded-lg px-2 py-1 focus:border-purple-600 shadow-2xs">
+              </td>
+              <td class="py-2.5 px-2 text-right">
+                <input type="number" min="0" step="any" value="${userPrice}" class="bnd-comp-price-input w-28 text-right font-black border border-purple-200 rounded-lg px-2 py-1 focus:border-purple-600 shadow-2xs">
+              </td>
+              <td class="py-2.5 px-3 text-right font-black text-purple-900 bnd-comp-line-total">
+                Rs. ${lineTotal.toLocaleString()}
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        const recomputeBundleTotals = () => {
+          let totalCompCost = 0;
+          tbodyComps.querySelectorAll('tr').forEach(tr => {
+            const compId = tr.getAttribute('data-comp-id');
+            const q = Number(tr.querySelector('.bnd-comp-qty-input').value) || 0;
+            const p = Number(tr.querySelector('.bnd-comp-price-input').value) || 0;
+            const lt = q * p;
+            tr.querySelector('.bnd-comp-line-total').textContent = `Rs. ${lt.toLocaleString()}`;
+            totalCompCost += lt;
+
+            if (!bundleAdjustments.overrideQuantities) bundleAdjustments.overrideQuantities = {};
+            if (!bundleAdjustments.prices) bundleAdjustments.prices = {};
+            bundleAdjustments.overrideQuantities[compId] = q;
+            bundleAdjustments.prices[compId] = p;
+          });
+
+          const currentBundleQty = Math.max(1, Number(qtyInput.value) || 1);
+          const computedBundleUnitPrice = currentBundleQty > 0 ? (totalCompCost / currentBundleQty) : 0;
+          priceInput.value = computedBundleUnitPrice.toFixed(2);
+          lineAmountEl.textContent = `Rs. ${totalCompCost.toLocaleString()}`;
+          subtotalEl.textContent = `Rs. ${totalCompCost.toLocaleString()}`;
+          grandTotalEl.textContent = `Rs. ${totalCompCost.toLocaleString()}`;
+        };
+
+        tbodyComps.querySelectorAll('.bnd-comp-qty-input, .bnd-comp-price-input').forEach(inp => {
+          inp.oninput = recomputeBundleTotals;
+        });
+
+        recomputeBundleTotals();
       };
 
       const syncUnitAndProduct = () => {
@@ -464,18 +536,10 @@ function openCreateInvoiceModal(onSaved) {
           const b = bundles.find(x => x.id === bId);
           if (!b) return;
 
-          if (b.bundleType === 'VARIABLE_SYSTEM') {
-            unitSelect.innerHTML = `<option value="Lines">Lines</option>`;
-            thItemQty.textContent = 'Lines';
-            priceInput.value = 55000;
-          } else {
-            unitSelect.innerHTML = `<option value="Sets">Sets</option>`;
-            thItemQty.textContent = 'Sets';
-            priceInput.value = 4500;
-          }
+          unitSelect.innerHTML = `<option value="Sets">Sets</option>`;
+          thItemQty.textContent = 'Sets';
           ctlStockPill.classList.add('hidden');
           updateBundleDisplay();
-          recalculate();
           return;
         }
 
@@ -537,20 +601,8 @@ function openCreateInvoiceModal(onSaved) {
         syncUnitAndProduct();
       };
 
-      adjustBtn.onclick = () => {
-        const bId = bundleSelect.value;
-        const bundle = bundles.find(b => b.id === bId);
-        const qty = Number(qtyInput.value) || 1;
-        if (!bundle) return;
-
-        openBundleAdjustmentModal(bundle, qty, bundleAdjustments, (newAdj) => {
-          bundleAdjustments = newAdj;
-          updateBundleDisplay();
-        });
-      };
-
       bundleSelect.onchange = () => {
-        bundleAdjustments = { extraQuantities: {}, overrideQuantities: {} };
+        bundleAdjustments = { extraQuantities: {}, overrideQuantities: {}, prices: {} };
         syncUnitAndProduct();
       };
 
@@ -560,12 +612,6 @@ function openCreateInvoiceModal(onSaved) {
 
       const recalculate = () => {
         if (currentMode === 'bundle') {
-          const qty = Number(qtyInput.value) || 0;
-          const price = Number(priceInput.value) || 0;
-          const total = qty * price;
-          lineAmountEl.textContent = `Rs. ${total.toLocaleString()}`;
-          subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
-          grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
           updateBundleDisplay();
           return;
         }
@@ -621,7 +667,6 @@ function openCreateInvoiceModal(onSaved) {
         const dueDateDays = Number(modalEl.querySelector('#inv-due-date').value) || 30;
         const dueDate = new Date(Date.now() + dueDateDays * 86400000).toISOString().split('T')[0];
         const quantity = Number(qtyInput.value) || 1;
-        const unitPrice = Number(priceInput.value) || 0;
         const chosenUnit = unitSelect.value;
 
         if (currentMode === 'bundle') {
@@ -630,6 +675,7 @@ function openCreateInvoiceModal(onSaved) {
           if (!bundleDef) return;
 
           const calculated = bundleService.calculateBundleComponents(bundleDef.id, quantity, bundleAdjustments);
+          const computedUnitPrice = Number(priceInput.value) || 0;
 
           const invoice = salesService.createSalesInvoice({
             customerPartyId,
@@ -639,17 +685,19 @@ function openCreateInvoiceModal(onSaved) {
                 variantId: bundleDef.commercialVariantId || variants[0]?.id,
                 productId: bundleDef.productId || products[0]?.id,
                 bundleId: bundleDef.id,
-                bundleType: bundleDef.bundleType,
-                bundleLinesCount: bundleDef.bundleType === 'VARIABLE_SYSTEM' ? quantity : null,
+                bundleName: bundleDef.name,
+                bundleCode: bundleDef.code,
+                bundleQty: quantity,
                 quantity,
-                unitPrice,
-                unit: chosenUnit,
+                unitPrice: computedUnitPrice,
+                unit: chosenUnit || 'Sets',
+                lineTotal: quantity * computedUnitPrice,
                 bundleComponents: calculated.components
               }
             ]
           });
 
-          toast.show(`Sales invoice ${invoice.invoiceNumber} created for bundle (${quantity} ${chosenUnit}).`, 'success');
+          toast.show(`Sales invoice ${invoice.invoiceNumber} created for bundle (${quantity} ${chosenUnit || 'Sets'}).`, 'success');
           closeModal();
           if (onSaved) onSaved();
           return;

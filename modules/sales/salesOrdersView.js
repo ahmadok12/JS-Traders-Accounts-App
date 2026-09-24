@@ -18,6 +18,7 @@ import { inventoryService } from '../../services/inventoryService.js';
 import { cutToLengthService } from '../../services/cutToLengthService.js';
 import { staffAuthService } from '../../services/staffAuthService.js';
 import { storageService } from '../../services/storageService.js';
+import { bundleService } from '../../services/bundleService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
 import { openModal, closeModal } from '../../components/modal.js';
@@ -79,17 +80,41 @@ export function renderSalesOrdersView() {
       key: 'productsAndAllocation',
       label: 'Products & Allocation (WH / Office)',
       render: row => {
-        const lines = row.lines || [];
-        if (lines.length === 0) {
+        const rawLines = row.lines || [];
+        if (rawLines.length === 0) {
           return `<span class="text-slate-400 text-xs italic">No items</span>`;
         }
-        const shownLines = lines.slice(0, 4);
-        const remainingCount = lines.length - shownLines.length;
+
+        const consolidatedLines = [];
+        const seenBundles = new Set();
+
+        rawLines.forEach(l => {
+          if (l.isBundleComponent && (l.bundleUid || l.bundleId)) {
+            const bKey = l.bundleUid || l.bundleId;
+            if (!seenBundles.has(bKey)) {
+              seenBundles.add(bKey);
+              consolidatedLines.push({
+                isBundle: true,
+                variantName: `🧩 ${l.bundleName || 'Bundle Set'}`,
+                orderedQty: l.bundleQty || 1,
+                deliveredQty: 0,
+                warehouseQty: l.bundleQty || 1,
+                officeQty: 0,
+                unit: 'Sets'
+              });
+            }
+          } else {
+            consolidatedLines.push(l);
+          }
+        });
+
+        const shownLines = consolidatedLines.slice(0, 4);
+        const remainingCount = consolidatedLines.length - shownLines.length;
 
         return `
           <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
             ${shownLines.map(l => {
-              const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
+              const pName = l.variantName || varMap.get(l.variantId) || 'Product Item';
               const wh = Number(l.warehouseQty) || 0;
               const off = Number(l.officeQty) || 0;
               const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (wh + off)) || 0;
@@ -123,7 +148,7 @@ export function renderSalesOrdersView() {
             }).join('')}
             ${remainingCount > 0 ? `
               <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
-                +${remainingCount} more product(s) in this order
+                +${remainingCount} more item(s) in this order
               </div>
             ` : ''}
           </div>
@@ -837,54 +862,103 @@ export function printSalesOrderVoucher(order) {
           </tr>
         </thead>
         <tbody>
-          ${(order.lines || []).map((l, i) => {
-            const ord = Number(l.orderedQty) || 0;
-            const del = Number(l.deliveredQty) || 0;
-            const rem = Math.max(0, ord - del);
-            const variantObj = variants.find(v => v.id === l.variantId);
-            const isCtl = Boolean(l.isRoll || l.mode || l.totalFeet || variantObj?.isCutToLength || variantObj?.rollLength);
-            const baseUnit = l.baseUnit || variantObj?.rollUnit || 'ft';
-            const rollLen = l.rollSize || variantObj?.rollLength || 5000;
+          ${(() => {
+            const raw = order.lines || [];
+            const displayLines = [];
+            const seenBundles = new Set();
 
-            let qtyDisplay = `${ord} ${l.unit || 'PCS'}`;
-            let whDisplay = `${l.warehouseQty || 0}`;
-            let offDisplay = `${l.officeQty || 0}`;
-            let delDisplay = `${del}`;
-            let remDisplay = `${rem}`;
-
-            if (isCtl) {
-              if (l.isRoll || l.mode === 'rolls') {
-                const totalFt = l.totalFeet || (ord * rollLen);
-                qtyDisplay = `<div><strong>${ord} Roll${ord !== 1 ? 's' : ''}</strong></div><div style="font-size: 10px; color: #138FCB; font-weight: bold;">(${totalFt.toLocaleString()} ${baseUnit})</div>`;
-                if (l.warehouseQty) whDisplay = `${l.warehouseQty} Roll${l.warehouseQty !== 1 ? 's' : ''} <div style="font-size: 9px; color: #64748b;">(${(l.warehouseQty * rollLen).toLocaleString()} ${baseUnit})</div>`;
-                if (l.officeQty) offDisplay = `${l.officeQty} Roll${l.officeQty !== 1 ? 's' : ''} <div style="font-size: 9px; color: #64748b;">(${(l.officeQty * rollLen).toLocaleString()} ${baseUnit})</div>`;
-                delDisplay = del > 0 ? `${del} Roll${del !== 1 ? 's' : ''} (${(del * rollLen).toLocaleString()} ${baseUnit})` : '0';
-                remDisplay = rem > 0 ? `${rem} Roll${rem !== 1 ? 's' : ''} (${(rem * rollLen).toLocaleString()} ${baseUnit})` : '0';
+            raw.forEach(l => {
+              if (l.isBundleComponent && (l.bundleUid || l.bundleId)) {
+                const bKey = l.bundleUid || l.bundleId;
+                if (!seenBundles.has(bKey)) {
+                  seenBundles.add(bKey);
+                  displayLines.push({
+                    isBundle: true,
+                    name: l.bundleName || 'Bundle / Set',
+                    bundleQty: l.bundleQty || 1,
+                    bundleUnitPrice: l.bundleUnitPrice || 0,
+                    unit: 'Sets',
+                    warehouseQty: l.bundleWhQty || l.bundleQty || 1,
+                    officeQty: l.bundleOfficeQty || 0,
+                    orderedQty: l.bundleQty || 1,
+                    deliveredQty: 0
+                  });
+                }
               } else {
-                const modeLabel = l.mode === 'loose_pcs' ? 'Loose - Pcs' : 'Loose - Continuous';
-                qtyDisplay = `<div><strong>${ord.toLocaleString()} ${baseUnit}</strong></div><div style="font-size: 10px; color: #d97706; font-weight: 600;">(${modeLabel})</div>`;
-                if (l.warehouseQty) whDisplay = `${Number(l.warehouseQty).toLocaleString()} ${baseUnit}`;
-                if (l.officeQty) offDisplay = `${Number(l.officeQty).toLocaleString()} ${baseUnit}`;
-                delDisplay = del > 0 ? `${del.toLocaleString()} ${baseUnit}` : '0';
-                remDisplay = rem > 0 ? `${rem.toLocaleString()} ${baseUnit}` : '0';
+                displayLines.push(l);
               }
-            }
+            });
 
-            return `
-              <tr>
-                <td>${i + 1}</td>
-                <td>
-                  <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
-                  ${variantObj?.sku ? `<div style="font-size: 10px; color: #64748b; font-family: monospace;">SKU: ${variantObj.sku}</div>` : ''}
-                </td>
-                <td class="text-center font-mono">${whDisplay}</td>
-                <td class="text-center font-mono">${offDisplay}</td>
-                <td class="text-center font-mono" style="font-weight: 800;">${qtyDisplay}</td>
-                <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${delDisplay}</td>
-                <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${remDisplay}</td>
-              </tr>
-            `;
-          }).join('')}
+            return displayLines.map((l, i) => {
+              if (l.isBundle) {
+                const priceFormatted = l.bundleUnitPrice > 0 ? ` (Rs. ${Number(l.bundleUnitPrice).toLocaleString()} each)` : '';
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>
+                      <strong>${l.name}</strong>
+                      <div style="font-size: 10px; color: #7c3aed; font-weight: 600;">Predefined Bundle / Set</div>
+                    </td>
+                    <td class="text-center font-mono">—</td>
+                    <td class="text-center font-mono">—</td>
+                    <td class="text-center font-mono" style="font-weight: 800;">
+                      ${l.bundleQty} Set${l.bundleQty !== 1 ? 's' : ''}
+                      ${l.bundleUnitPrice > 0 ? `<div style="font-size: 10px; color: #64748b;">${l.bundleQty} × Rs. ${Number(l.bundleUnitPrice).toLocaleString()}</div>` : ''}
+                    </td>
+                    <td class="text-center font-mono" style="color: #059669; font-weight: 700;">—</td>
+                    <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${l.bundleQty}</td>
+                  </tr>
+                `;
+              }
+
+              const ord = Number(l.orderedQty) || 0;
+              const del = Number(l.deliveredQty) || 0;
+              const rem = Math.max(0, ord - del);
+              const variantObj = variants.find(v => v.id === l.variantId);
+              const isCtl = Boolean(l.isRoll || l.mode || l.totalFeet || variantObj?.isCutToLength || variantObj?.rollLength);
+              const baseUnit = l.baseUnit || variantObj?.rollUnit || 'ft';
+              const rollLen = l.rollSize || variantObj?.rollLength || 5000;
+
+              let qtyDisplay = `${ord} ${l.unit || 'PCS'}`;
+              let whDisplay = `${l.warehouseQty || 0}`;
+              let offDisplay = `${l.officeQty || 0}`;
+              let delDisplay = `${del}`;
+              let remDisplay = `${rem}`;
+
+              if (isCtl) {
+                if (l.isRoll || l.mode === 'rolls') {
+                  const totalFt = l.totalFeet || (ord * rollLen);
+                  qtyDisplay = `<div><strong>${ord} Roll${ord !== 1 ? 's' : ''}</strong></div><div style="font-size: 10px; color: #138FCB; font-weight: bold;">(${totalFt.toLocaleString()} ${baseUnit})</div>`;
+                  if (l.warehouseQty) whDisplay = `${l.warehouseQty} Roll${l.warehouseQty !== 1 ? 's' : ''} <div style="font-size: 9px; color: #64748b;">(${(l.warehouseQty * rollLen).toLocaleString()} ${baseUnit})</div>`;
+                  if (l.officeQty) offDisplay = `${l.officeQty} Roll${l.officeQty !== 1 ? 's' : ''} <div style="font-size: 9px; color: #64748b;">(${(l.officeQty * rollLen).toLocaleString()} ${baseUnit})</div>`;
+                  delDisplay = del > 0 ? `${del} Roll${del !== 1 ? 's' : ''} (${(del * rollLen).toLocaleString()} ${baseUnit})` : '0';
+                  remDisplay = rem > 0 ? `${rem} Roll${rem !== 1 ? 's' : ''} (${(rem * rollLen).toLocaleString()} ${baseUnit})` : '0';
+                } else {
+                  const modeLabel = l.mode === 'loose_pcs' ? 'Loose - Pcs' : 'Loose - Continuous';
+                  qtyDisplay = `<div><strong>${ord.toLocaleString()} ${baseUnit}</strong></div><div style="font-size: 10px; color: #d97706; font-weight: 600;">(${modeLabel})</div>`;
+                  if (l.warehouseQty) whDisplay = `${Number(l.warehouseQty).toLocaleString()} ${baseUnit}`;
+                  if (l.officeQty) offDisplay = `${Number(l.officeQty).toLocaleString()} ${baseUnit}`;
+                  delDisplay = del > 0 ? `${del.toLocaleString()} ${baseUnit}` : '0';
+                  remDisplay = rem > 0 ? `${rem.toLocaleString()} ${baseUnit}` : '0';
+                }
+              }
+
+              return `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td>
+                    <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
+                    ${variantObj?.sku ? `<div style="font-size: 10px; color: #64748b; font-family: monospace;">SKU: ${variantObj.sku}</div>` : ''}
+                  </td>
+                  <td class="text-center font-mono">${whDisplay}</td>
+                  <td class="text-center font-mono">${offDisplay}</td>
+                  <td class="text-center font-mono" style="font-weight: 800;">${qtyDisplay}</td>
+                  <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${delDisplay}</td>
+                  <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${remDisplay}</td>
+                </tr>
+              `;
+            }).join('');
+          })()}
         </tbody>
       </table>
 
@@ -1098,10 +1172,14 @@ function openCreateOrderModal(onSaved) {
         </div>
 
         <!-- Action Row under Table -->
-        <div class="pt-1">
+        <div class="pt-1 flex items-center gap-2">
           <button type="button" id="add-so-row-btn" class="inline-flex items-center space-x-2 px-4 py-2.5 bg-blue-50/80 hover:bg-blue-100 text-[#138FCB] rounded-xl text-xs font-bold border border-blue-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-98">
             <span class="text-base leading-none font-extrabold">+</span>
             <span>Add Line Item</span>
+          </button>
+          <button type="button" id="add-so-bundle-btn" class="inline-flex items-center space-x-2 px-4 py-2.5 bg-purple-50/80 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-bold border border-purple-200 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-98">
+            <span class="text-base leading-none font-extrabold">🧩</span>
+            <span>Add Bundle / Set</span>
           </button>
         </div>
       </section>
@@ -1469,11 +1547,21 @@ function openCreateOrderModal(onSaved) {
       };
 
       const updateSummaryTotals = () => {
-        const rows = tbody.querySelectorAll('.so-line-row');
+        const regularRows = tbody.querySelectorAll('.so-line-row');
+        const bundleChildRows = tbody.querySelectorAll('.so-bundle-child-row');
+        const bundleParentRows = tbody.querySelectorAll('.so-bundle-parent-row');
+
         let totalWh = 0;
         let totalOff = 0;
 
-        rows.forEach(row => {
+        regularRows.forEach(row => {
+          const whQty = Number(row.querySelector('.so-wh-qty')?.value) || 0;
+          const offQty = Number(row.querySelector('.so-office-qty')?.value) || 0;
+          totalWh += whQty;
+          totalOff += offQty;
+        });
+
+        bundleChildRows.forEach(row => {
           const whQty = Number(row.querySelector('.so-wh-qty')?.value) || 0;
           const offQty = Number(row.querySelector('.so-office-qty')?.value) || 0;
           totalWh += whQty;
@@ -1484,11 +1572,13 @@ function openCreateOrderModal(onSaved) {
         if (summaryWh) summaryWh.textContent = totalWh > 0 ? `${totalWh.toLocaleString()} Cargo Units` : '0 Units';
         if (summaryOff) summaryOff.textContent = totalOff > 0 ? `${totalOff.toLocaleString()} Cargo Units` : '0 Units';
         if (summaryTotal) summaryTotal.textContent = grandTotal > 0 ? `${grandTotal.toLocaleString()} Cargo Units` : '0 Units';
-        if (lineCountBadge) lineCountBadge.textContent = `${rows.length} Product${rows.length > 1 ? 's' : ''}`;
+        
+        const totalItemsCount = regularRows.length + bundleParentRows.length;
+        if (lineCountBadge) lineCountBadge.textContent = `${totalItemsCount} Item${totalItemsCount > 1 ? 's' : ''}`;
 
         const removeBtns = tbody.querySelectorAll('.so-remove-row-btn');
         removeBtns.forEach(btn => {
-          if (rows.length <= 1) {
+          if (regularRows.length <= 1 && bundleParentRows.length === 0) {
             btn.classList.add('opacity-30', 'cursor-not-allowed');
             btn.setAttribute('disabled', 'true');
           } else {
@@ -1540,7 +1630,7 @@ function openCreateOrderModal(onSaved) {
         if (removeBtn) {
           removeBtn.onclick = () => {
             const rows = tbody.querySelectorAll('.so-line-row');
-            if (rows.length > 1) {
+            if (rows.length > 1 || tbody.querySelectorAll('.so-bundle-parent-row').length > 0) {
               row.remove();
               updateSummaryTotals();
             }
@@ -1560,6 +1650,213 @@ function openCreateOrderModal(onSaved) {
         return newRow;
       };
 
+      const appendBundleGroup = (bundleId = null, initialBundleQty = 1) => {
+        const bundles = bundleService.getBundles();
+        if (bundles.length === 0) {
+          toast.show('No bundles defined yet. Go to Assembly &gt; Bundles to create a bundle first.', 'warning');
+          return;
+        }
+
+        const selectedBundle = (bundleId ? bundles.find(b => b.id === bundleId) : null) || bundles[0];
+        const bundleUid = 'bnd-' + Math.random().toString(36).substring(2, 9);
+        const calc = bundleService.calculateBundleComponents(selectedBundle.id, initialBundleQty);
+
+        // 1. Parent Bundle Row
+        const parentTr = document.createElement('tr');
+        parentTr.className = 'so-bundle-parent-row bg-purple-50/50 border-t-2 border-purple-300 hover:bg-purple-50/80 transition-colors';
+        parentTr.setAttribute('data-bundle-uid', bundleUid);
+        parentTr.setAttribute('data-bundle-id', selectedBundle.id);
+        parentTr.setAttribute('data-bundle-name', selectedBundle.name);
+        parentTr.setAttribute('data-bundle-price', selectedBundle.sellingPrice || 0);
+
+        parentTr.innerHTML = `
+          <td class="p-2.5 align-middle">
+            <div class="flex items-center gap-2">
+              <button type="button" class="so-bundle-toggle-btn w-6 h-6 rounded-lg bg-white border border-purple-300 text-purple-700 font-black text-xs hover:bg-purple-100 transition-colors cursor-pointer flex items-center justify-center shadow-2xs" title="Collapse / Expand Component Products">
+                ▼
+              </button>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 shrink-0">
+                🧩 BUNDLE
+              </span>
+              <select class="so-bundle-select text-xs font-bold border border-purple-200 rounded-xl px-2.5 py-1.5 bg-white text-slate-800 focus:outline-none focus:border-purple-600 shadow-2xs flex-1">
+                ${bundles.map(b => `<option value="${b.id}" ${b.id === selectedBundle.id ? 'selected' : ''}>${b.name} (${b.bundleQty || 1} set/bundle)</option>`).join('')}
+              </select>
+            </div>
+          </td>
+          <td class="p-2.5 text-center align-middle" colspan="2">
+            <div class="flex items-center justify-center gap-2">
+              <span class="text-xs font-bold text-purple-900">Bundle Qty:</span>
+              <input type="number" min="1" step="1" value="${initialBundleQty}" class="so-bundle-qty-input w-20 text-center text-xs font-black rounded-xl border border-purple-300 focus:border-purple-600 focus:ring-2 focus:ring-purple-100 py-1.5 px-2 bg-white text-purple-900 shadow-2xs">
+              <span class="text-[11px] font-semibold text-slate-500">Sets</span>
+            </div>
+          </td>
+          <td class="p-2.5 text-right align-middle">
+            <div class="so-bundle-total-price font-black text-purple-900 text-xs">
+              ${(initialBundleQty * (selectedBundle.sellingPrice || 0)) > 0 ? `Rs. ${(initialBundleQty * (selectedBundle.sellingPrice || 0)).toLocaleString()}` : `${initialBundleQty} Set(s)`}
+            </div>
+            <div class="text-[9px] text-slate-400 font-mono">Consolidated on Print</div>
+          </td>
+          <td class="p-2.5 text-center align-middle">
+            <button type="button" class="so-remove-bundle-btn w-8 h-8 inline-flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer" title="Remove entire bundle">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+          </td>
+        `;
+
+        tbody.appendChild(parentTr);
+
+        // 2. Child Rows
+        const createChildRows = (components) => {
+          components.forEach(c => {
+            const childTr = document.createElement('tr');
+            childTr.className = 'so-bundle-child-row hover:bg-purple-50/20 transition-colors bg-white/95 border-b border-purple-100/60';
+            childTr.setAttribute('data-bundle-uid', bundleUid);
+            childTr.setAttribute('data-variant-id', c.componentVariantId);
+            childTr.setAttribute('data-product-id', c.productId || '');
+            childTr.setAttribute('data-base-qty', c.baseQty || 1);
+            childTr.setAttribute('data-unit-price', c.unitPrice || 0);
+            childTr.setAttribute('data-unit', c.unit || 'PCS');
+
+            const wBal = inventoryService.getBalance('wh-1', c.componentVariantId);
+            const oBal = inventoryService.getBalance('wh-2', c.componentVariantId);
+
+            childTr.innerHTML = `
+              <td class="p-2.5 pl-9 align-top">
+                <div class="flex items-center gap-2">
+                  <span class="text-purple-400 font-bold">↳</span>
+                  <div>
+                    <div class="font-bold text-slate-800 text-xs">${c.name || 'Component'}</div>
+                    <div class="text-[10px] text-slate-400 font-mono">
+                      ${c.sku ? `SKU: ${c.sku} • ` : ''}Base: <span class="text-purple-700 font-bold">${c.baseQty} per bundle</span>
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td class="p-2.5 text-center align-top">
+                <span class="wh-stock-indicator block text-[10px] text-blue-700 bg-blue-50/80 px-1.5 py-0.5 rounded-lg border border-blue-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                  WH Stock: ${wBal.toLocaleString()} ${c.unit || 'PCS'}
+                </span>
+                <input type="number" min="0" value="${c.calculatedQty}" class="so-wh-qty so-bundle-comp-wh w-20 mx-auto text-center text-xs font-black rounded-xl border border-blue-200 focus:border-[#138FCB] py-1.5 px-2 bg-white text-blue-900 shadow-2xs">
+              </td>
+              <td class="p-2.5 text-center align-top">
+                <span class="office-stock-indicator block text-[10px] text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded-lg border border-amber-200/80 font-bold mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                  Office Stock: ${oBal.toLocaleString()} ${c.unit || 'PCS'}
+                </span>
+                <input type="number" min="0" value="0" class="so-office-qty so-bundle-comp-off w-20 mx-auto text-center text-xs font-black rounded-xl border border-amber-200 focus:border-amber-500 py-1.5 px-2 bg-white text-amber-900 shadow-2xs">
+              </td>
+              <td class="p-2.5 text-right align-top pt-3.5">
+                <span class="so-total-calc font-black text-slate-900 text-xs">${c.calculatedQty.toLocaleString()} ${c.unit || 'PCS'}</span>
+              </td>
+              <td class="p-2.5 text-center align-top pt-3">
+                <span class="text-[9px] text-purple-600 font-semibold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100">Bundle Part</span>
+              </td>
+            `;
+
+            tbody.appendChild(childTr);
+
+            // Bind manual override inputs
+            const whInput = childTr.querySelector('.so-bundle-comp-wh');
+            const offInput = childTr.querySelector('.so-bundle-comp-off');
+            const onChildInput = () => {
+              childTr.setAttribute('data-manual-override', 'true');
+              const w = Number(whInput.value) || 0;
+              const o = Number(offInput.value) || 0;
+              childTr.querySelector('.so-total-calc').textContent = `${(w + o).toLocaleString()} ${c.unit || 'PCS'}`;
+              updateSummaryTotals();
+            };
+            whInput.oninput = onChildInput;
+            offInput.oninput = onChildInput;
+          });
+        };
+
+        createChildRows(calc.components);
+
+        // Bind parent toggle
+        const toggleBtn = parentTr.querySelector('.so-bundle-toggle-btn');
+        let isExpanded = true;
+        toggleBtn.onclick = () => {
+          isExpanded = !isExpanded;
+          toggleBtn.textContent = isExpanded ? '▼' : '▶';
+          const childRows = tbody.querySelectorAll(`.so-bundle-child-row[data-bundle-uid="${bundleUid}"]`);
+          childRows.forEach(r => {
+            if (isExpanded) r.classList.remove('hidden');
+            else r.classList.add('hidden');
+          });
+        };
+
+        // Bind parent bundle quantity input (multiplier logic)
+        const qtyInput = parentTr.querySelector('.so-bundle-qty-input');
+        const priceDisplay = parentTr.querySelector('.so-bundle-total-price');
+
+        qtyInput.oninput = () => {
+          const newQty = Math.max(1, Number(qtyInput.value) || 1);
+          const childRows = tbody.querySelectorAll(`.so-bundle-child-row[data-bundle-uid="${bundleUid}"]`);
+
+          childRows.forEach(child => {
+            const baseQty = Number(child.getAttribute('data-base-qty')) || 1;
+            const unit = child.getAttribute('data-unit') || 'PCS';
+            const whInput = child.querySelector('.so-bundle-comp-wh');
+            const offInput = child.querySelector('.so-bundle-comp-off');
+
+            // Proportional multiplication
+            const compTotal = baseQty * newQty;
+            whInput.value = compTotal;
+            offInput.value = 0;
+            child.removeAttribute('data-manual-override');
+            child.querySelector('.so-total-calc').textContent = `${compTotal.toLocaleString()} ${unit}`;
+          });
+
+          const currentBundle = bundleService.getBundleById(parentTr.getAttribute('data-bundle-id'));
+          const unitPrice = currentBundle?.sellingPrice || 0;
+          if (unitPrice > 0) {
+            priceDisplay.textContent = `Rs. ${(newQty * unitPrice).toLocaleString()}`;
+          } else {
+            priceDisplay.textContent = `${newQty} Set(s)`;
+          }
+          updateSummaryTotals();
+        };
+
+        // Bind bundle switch dropdown
+        const bundleSelect = parentTr.querySelector('.so-bundle-select');
+        bundleSelect.onchange = () => {
+          const newBundleId = bundleSelect.value;
+          const newBundle = bundleService.getBundleById(newBundleId);
+          if (!newBundle) return;
+
+          parentTr.setAttribute('data-bundle-id', newBundle.id);
+          parentTr.setAttribute('data-bundle-name', newBundle.name);
+          parentTr.setAttribute('data-bundle-price', newBundle.sellingPrice || 0);
+
+          // Remove old child rows
+          tbody.querySelectorAll(`.so-bundle-child-row[data-bundle-uid="${bundleUid}"]`).forEach(r => r.remove());
+
+          // Re-create child rows
+          const bQty = Number(qtyInput.value) || 1;
+          const newCalc = bundleService.calculateBundleComponents(newBundle.id, bQty);
+          createChildRows(newCalc.components);
+
+          const unitPrice = newBundle.sellingPrice || 0;
+          if (unitPrice > 0) {
+            priceDisplay.textContent = `Rs. ${(bQty * unitPrice).toLocaleString()}`;
+          } else {
+            priceDisplay.textContent = `${bQty} Set(s)`;
+          }
+          updateSummaryTotals();
+        };
+
+        // Remove bundle
+        const removeBtn = parentTr.querySelector('.so-remove-bundle-btn');
+        removeBtn.onclick = () => {
+          tbody.querySelectorAll(`.so-bundle-child-row[data-bundle-uid="${bundleUid}"]`).forEach(r => r.remove());
+          parentTr.remove();
+          updateSummaryTotals();
+        };
+
+        updateSummaryTotals();
+      };
+
       // Initial row binding
       tbody.querySelectorAll('.so-line-row').forEach(row => {
         bindRowEvents(row);
@@ -1569,9 +1866,16 @@ function openCreateOrderModal(onSaved) {
 
       if (addRowBtn) {
         addRowBtn.onclick = () => {
-          const existingIds = new Set(Array.from(tbody.querySelectorAll('.pv-var-input')).map(s => s.value));
+          const existingIds = new Set(Array.from(tbody.querySelectorAll('.pv-selected-variant-id, .pv-var-input')).map(s => s.value));
           const nextUnused = variants.find(v => !existingIds.has(v.id)) || variants[0];
           appendNewRow(nextUnused ? nextUnused.id : null, '', '');
+        };
+      }
+
+      const addBundleBtn = modalEl.querySelector('#add-so-bundle-btn');
+      if (addBundleBtn) {
+        addBundleBtn.onclick = () => {
+          appendBundleGroup();
         };
       }
 
@@ -1591,11 +1895,41 @@ function openCreateOrderModal(onSaved) {
         const lines = [];
         const ctlPlansToCommit = [];
 
+        // 1. Process regular product lines
         for (const row of rows) {
-          const varInput = row.querySelector('.pv-var-input');
-          const variantId = varInput ? varInput.value : '';
-          const selectedVariant = variants.find(v => v.id === variantId);
-          const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
+          const prodInput = row.querySelector('.pv-selected-product-id');
+          const varInput = row.querySelector('.pv-selected-variant-id') || row.querySelector('.pv-var-input');
+          const pId = prodInput ? prodInput.value : '';
+          let variantId = varInput ? varInput.value : '';
+
+          let selectedProduct = products.find(p => p.id === pId);
+          let selectedVariant = variants.find(v => v.id === variantId);
+
+          if (!selectedProduct && selectedVariant) {
+            selectedProduct = products.find(p => p.id === selectedVariant.productId);
+          }
+
+          if (!selectedVariant && selectedProduct) {
+            const prodVariants = variants.filter(v => v.productId === selectedProduct.id);
+            if (prodVariants.length === 0) {
+              // Auto-create standard variant for product with no variants
+              selectedVariant = productService.createVariant({
+                productId: selectedProduct.id,
+                name: selectedProduct.businessName || selectedProduct.customerName || 'Standard',
+                sku: selectedProduct.code,
+                costPrice: 0,
+                sellingPrice: 0,
+                unit: selectedProduct.base_unit || selectedProduct.baseUnitId || 'PCS',
+                isActive: true
+              });
+              variantId = selectedVariant.id;
+              variants.push(selectedVariant);
+            } else if (prodVariants.length === 1) {
+              selectedVariant = prodVariants[0];
+              variantId = selectedVariant.id;
+            }
+          }
+
           const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
           const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
 
@@ -1665,6 +1999,50 @@ function openCreateOrderModal(onSaved) {
             });
           }
         }
+
+        // 2. Process bundle lines
+        const bundleParentRows = tbody.querySelectorAll('.so-bundle-parent-row');
+        bundleParentRows.forEach(parentRow => {
+          const bUid = parentRow.getAttribute('data-bundle-uid');
+          const bId = parentRow.getAttribute('data-bundle-id');
+          const bName = parentRow.getAttribute('data-bundle-name');
+          const bQty = Number(parentRow.querySelector('.so-bundle-qty-input')?.value) || 1;
+          const bPrice = Number(parentRow.getAttribute('data-bundle-price')) || 0;
+
+          const childRows = tbody.querySelectorAll(`.so-bundle-child-row[data-bundle-uid="${bUid}"]`);
+          childRows.forEach(child => {
+            const vId = child.getAttribute('data-variant-id');
+            const pId = child.getAttribute('data-product-id');
+            const baseQty = Number(child.getAttribute('data-base-qty')) || 1;
+            const unitPrice = Number(child.getAttribute('data-unit-price')) || 0;
+            const unit = child.getAttribute('data-unit') || 'PCS';
+            const whQty = Number(child.querySelector('.so-wh-qty')?.value) || 0;
+            const offQty = Number(child.querySelector('.so-office-qty')?.value) || 0;
+            const totQty = whQty + offQty;
+
+            if (totQty > 0) {
+              lines.push({
+                variantId: vId,
+                productId: pId,
+                orderedQty: totQty,
+                warehouseQty: whQty,
+                officeQty: offQty,
+                deliveredQty: 0,
+                remainingDeliveryQty: totQty,
+                unit,
+                unitPrice,
+                lineTotal: totQty * unitPrice,
+                isBundleComponent: true,
+                bundleUid: bUid,
+                bundleId: bId,
+                bundleName: bName,
+                bundleQty: bQty,
+                bundleUnitPrice: bPrice,
+                baseQtyPerBundle: baseQty
+              });
+            }
+          });
+        });
 
         if (lines.length === 0) {
           toast.show('Please allocate at least one product with quantity > 0.', 'error');

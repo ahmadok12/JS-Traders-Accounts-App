@@ -18,6 +18,7 @@ import { bundleService } from '../../services/bundleService.js';
 import { authService } from '../../services/authService.js';
 import { renderTable, bindTableActions } from '../../components/table.js';
 import { renderFilterBar } from '../../components/filters.js';
+import { renderSearchableDropdown, bindSearchableDropdown, initAllSearchableDropdowns, setSearchableDropdownValue } from '../../components/searchableSelect.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
 import { toast } from '../../components/toast.js';
@@ -36,38 +37,27 @@ export function renderAssemblyView(initialTab = null) {
   const varMap = new Map(variants.map(v => [v.id, v.name]));
   const canViewCost = authService.canViewCostProfit();
 
-  // Header & Subsystem Navigation Tabs
-  const navTabsHtml = `
+  // Header Module Title (Navigation tabs removed per user request)
+  const titles = {
+    assembly: { title: 'Assembly & Manufacturing Orders', desc: 'BOM Production, Finishing, Work Orders & Labor Tracking', icon: '🔨' },
+    disassembly: { title: 'Disassembly & Breakdown', desc: 'Deconstruct Products to Recover Reusable Inventory Components', icon: '🔄' },
+    boms: { title: 'BOMs & Templates', desc: 'Predefined Recipes, Teardown Formulas, and Standard Labor Rates', icon: '📋' },
+    bundles: { title: 'Bundles & Systems', desc: 'Configure Proportional and Group Math Formulas for Equipment Packages', icon: '🧩' },
+    payables: { title: 'Labor Payables & Settlements', desc: 'Track and Settle Outstanding Workshop Labor Balances', icon: '💰' },
+    reports: { title: 'Production & Disassembly Reports', desc: 'Comprehensive Registers, Costing Analyses, and Component Consumption', icon: '📊' }
+  };
+  const activeInfo = titles[activeTab] || titles.assembly;
+
+  const headerHtml = `
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-      <div class="flex items-center space-x-2">
-        <div class="w-9 h-9 rounded-xl bg-blue-50 text-[#138FCB] flex items-center justify-center font-bold text-lg shadow-xs">
-          🏭
+      <div class="flex items-center space-x-2.5">
+        <div class="w-10 h-10 rounded-2xl bg-blue-50 text-[#138FCB] flex items-center justify-center font-bold text-lg shadow-xs border border-blue-100/60">
+          ${activeInfo.icon}
         </div>
         <div>
-          <h2 class="text-base font-extrabold text-slate-800 tracking-tight">Manufacturing &amp; Equipment Assembly</h2>
-          <p class="text-[11px] text-slate-400">BOM Production, Finishing, Standalone Disassembly &amp; Labor Payables</p>
+          <h2 class="text-base font-extrabold text-slate-800 tracking-tight">${activeInfo.title}</h2>
+          <p class="text-[11px] text-slate-400 font-medium">${activeInfo.desc}</p>
         </div>
-      </div>
-
-      <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
-        <button id="tab-btn-assembly" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'assembly' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
-          🔨 Assembly Orders
-        </button>
-        <button id="tab-btn-disassembly" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'disassembly' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
-          🔄 Disassembly / Breakdown
-        </button>
-        <button id="tab-btn-boms" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'boms' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
-          📋 BOMs &amp; Templates
-        </button>
-        <button id="tab-btn-bundles" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'bundles' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
-          🧩 Bundles &amp; Systems
-        </button>
-        <button id="tab-btn-payables" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'payables' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
-          💰 Labor Payables
-        </button>
-        <button id="tab-btn-reports" class="tab-switch-btn px-3 py-1.5 rounded-lg transition-all cursor-pointer ${activeTab === 'reports' ? 'bg-white text-[#138FCB] shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'}">
-          📊 Reports
-        </button>
       </div>
     </div>
   `;
@@ -89,7 +79,7 @@ export function renderAssemblyView(initialTab = null) {
 
   return `
     <div id="assembly-module-container" class="space-y-5 animate-in fade-in duration-150">
-      ${navTabsHtml}
+      ${headerHtml}
       <div id="assembly-tab-content">
         ${contentHtml}
       </div>
@@ -523,20 +513,18 @@ function renderBundlesTab(whMap, varMap) {
                   <h4 class="text-sm font-extrabold text-slate-800">${b.name}</h4>
                   <p class="text-xs text-slate-500 mt-0.5">${b.description || 'Predefined commercial bundle system'}</p>
                 </div>
-                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 ${b.bundleType === 'VARIABLE_SYSTEM' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}">
-                  ${b.bundleType === 'VARIABLE_SYSTEM' ? 'VARIABLE SYSTEM' : 'FIXED SET'}
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 bg-purple-50 text-purple-700 border border-purple-200">
+                  BUNDLE / SET
                 </span>
               </div>
 
               <div class="border-t border-slate-100 pt-3 space-y-1.5">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Component Calculation Formulas:</span>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Included Component Products:</span>
                 ${(b.components || []).map(c => `
                   <div class="text-xs flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span class="font-medium text-slate-800">• ${varMap.get(c.componentVariantId) || c.variantName || c.componentVariantId}</span>
+                    <span class="font-medium text-slate-800">• ${varMap.get(c.componentVariantId) || c.name || c.variantName || c.componentVariantId}</span>
                     <span class="text-[11px] font-mono text-purple-700 bg-purple-50 border border-purple-200/50 px-2.5 py-0.5 rounded-lg font-bold">
-                      ${c.ruleType === 'PER_LINE' || c.quantityRule === 'PER_LINE' ? `${c.baseFactor || c.parameters?.quantityPerLine || 1} / line` :
-                        c.ruleType === 'PER_GROUP_CEIL' || c.quantityRule === 'PER_GROUP_CEIL' ? `1 per ${c.groupSize || c.parameters?.linesPerGroup || 5} lines (ceil)` :
-                        c.ruleType === 'FIXED_QTY' || c.quantityRule === 'FIXED_QTY' ? `Fixed ${c.baseFactor || c.parameters?.fixedQuantity || 1}` : (c.ruleType || c.quantityRule || 'Custom')}
+                      ${c.quantity || c.baseFactor || 1} ${c.unit || 'PCS'}
                     </span>
                   </div>
                 `).join('')}
@@ -544,7 +532,7 @@ function renderBundlesTab(whMap, varMap) {
 
               <div class="border-t border-slate-100 pt-3 flex items-center justify-between gap-2 text-xs">
                 <div class="text-slate-500 font-medium">
-                  <span>Unit: <strong class="text-slate-800">${b.baseUnit || 'Line'}</strong></span> • 
+                  <span>Finished Qty: <strong class="text-slate-800">${b.bundleQty || 1}</strong></span> • 
                   <span>Price: <strong class="text-slate-800">Rs. ${(b.sellingPrice || 0).toLocaleString()}</strong></span>
                 </div>
                 <div class="flex items-center gap-2">
@@ -1147,17 +1135,32 @@ function openNewAssemblyModal(onSaved) {
         <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div class="md:col-span-6 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-recipe-select">Predefined BOM Recipe (Optional)</label>
-            <select id="asm-recipe-select" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              <option value="">-- Custom Assembly / Finishing (No Recipe) --</option>
-              ${recipes.map(r => `<option value="${r.id}">${r.name} (${r.assemblyType})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'asm-recipe-select',
+              placeholder: '-- Custom Assembly / Finishing (No Recipe) --',
+              value: '',
+              options: [
+                { value: '', label: '-- Custom Assembly / Finishing (No Recipe) --' },
+                ...recipes.map(r => ({
+                  value: r.id,
+                  label: r.name,
+                  subtext: r.assemblyType
+                }))
+              ]
+            })}
           </div>
           <div class="md:col-span-3 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-type">Assembly Type <span class="text-red-500">*</span></label>
-            <select id="asm-type" required class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              <option value="MANUFACTURING">Multi-Component Assembly</option>
-              <option value="FINISHING">Single-Product Finishing</option>
-            </select>
+            ${renderSearchableDropdown({
+              id: 'asm-type',
+              placeholder: '-- Select Assembly Type --',
+              value: '',
+              required: true,
+              options: [
+                { value: 'MANUFACTURING', label: 'Multi-Component Assembly' },
+                { value: 'FINISHING', label: 'Single-Product Finishing' }
+              ]
+            })}
           </div>
           <div class="md:col-span-3 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-date">Assembly Date <span class="text-red-500">*</span></label>
@@ -1166,13 +1169,22 @@ function openNewAssemblyModal(onSaved) {
 
           <div class="md:col-span-8 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-target-variant">Target Finished Product Variant <span class="text-red-500">*</span></label>
-            <select id="asm-target-variant" required class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${variants.map(v => `<option value="${v.id}">${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'asm-target-variant',
+              placeholder: 'Select Target Finished Variant...',
+              value: '',
+              required: true,
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: v.unit || 'PCS'
+              }))
+            })}
           </div>
           <div class="md:col-span-4 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-output-qty">Output Quantity to Produce <span class="text-red-500">*</span></label>
-            <input type="number" id="asm-output-qty" required min="1" value="1" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <input type="number" id="asm-output-qty" required min="1" value="" placeholder="0" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] focus:ring focus:ring-blue-100 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
         </div>
       </section>
@@ -1191,26 +1203,52 @@ function openNewAssemblyModal(onSaved) {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-src-warehouse">Source Warehouse (Components Deducted From) <span class="text-red-500">*</span></label>
-            <select id="asm-src-warehouse" required class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'asm-src-warehouse',
+              placeholder: 'Select Source Warehouse...',
+              value: '',
+              required: true,
+              options: warehouses.map(w => ({
+                value: w.id,
+                label: w.name,
+                subtext: w.city
+              }))
+            })}
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-out-warehouse">Output Warehouse (Finished Product Added To) <span class="text-red-500">*</span></label>
-            <select id="asm-out-warehouse" required class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'asm-out-warehouse',
+              placeholder: 'Select Output Warehouse...',
+              value: '',
+              required: true,
+              options: warehouses.map(w => ({
+                value: w.id,
+                label: w.name,
+                subtext: w.city
+              }))
+            })}
           </div>
 
           <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="asm-labor-party">Assembly Labor Party / Workshop <span class="text-red-500">*</span></label>
-            <select id="asm-labor-party" required class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${laborParties.map(p => `<option value="${p.id}">${p.name} (Outstanding: Rs. ${(p.currentBalance || 0).toLocaleString()})</option>`).join('')}
-            </select>
+            <label class="text-xs font-semibold text-slate-700" for="asm-labor-party">Assembly Labor Party / Workshop</label>
+            ${renderSearchableDropdown({
+              id: 'asm-labor-party',
+              placeholder: 'Select Workshop (Optional)...',
+              value: '',
+              options: [
+                { value: '', label: '-- None (Internal Labor) --' },
+                ...laborParties.map(p => ({
+                  value: p.id,
+                  label: p.name,
+                  subtext: `Balance: Rs. ${(p.currentBalance || 0).toLocaleString()}`
+                }))
+              ]
+            })}
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="asm-labor-rate">Labor Rate (PKR / Finished Unit) <span class="text-red-500">*</span></label>
-            <input type="number" id="asm-labor-rate" required min="0" value="500" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <input type="number" id="asm-labor-rate" required min="0" value="" placeholder="0" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
         </div>
       </section>
@@ -1254,7 +1292,7 @@ function openNewAssemblyModal(onSaved) {
 
         <!-- Stock Availability Banner -->
         <div id="asm-stock-banner" class="p-3 rounded-xl border text-xs flex items-center justify-between transition-all">
-          <span id="asm-stock-msg" class="font-bold">Checking component availability...</span>
+          <span id="asm-stock-msg" class="font-bold">Select source warehouse and components to verify stock.</span>
           <span id="asm-stock-badge" class="px-2.5 py-1 rounded-full font-extrabold text-[10px]"></span>
         </div>
       </section>
@@ -1335,13 +1373,8 @@ function openNewAssemblyModal(onSaved) {
       const cancelBtn = modalEl.querySelector('#asm-modal-cancel');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
-      const recipeSelect = modalEl.querySelector('#asm-recipe-select');
-      const typeSelect = modalEl.querySelector('#asm-type');
-      const targetVarSelect = modalEl.querySelector('#asm-target-variant');
       const outputQtyInput = modalEl.querySelector('#asm-output-qty');
-      const srcWhSelect = modalEl.querySelector('#asm-src-warehouse');
       const laborRateInput = modalEl.querySelector('#asm-labor-rate');
-      const laborPartySelect = modalEl.querySelector('#asm-labor-party');
       const tableContainer = modalEl.querySelector('#bom-items-table');
       const addRowBtn = modalEl.querySelector('#btn-add-bom-row');
       const stockBanner = modalEl.querySelector('#asm-stock-banner');
@@ -1353,23 +1386,36 @@ function openNewAssemblyModal(onSaved) {
       const previewTotalCost = modalEl.querySelector('#asm-preview-total-cost');
       const countBadge = modalEl.querySelector('#bom-items-count-badge');
 
-      const addComponentRow = (varId = '', qtyPerUnit = 1, cost = 0) => {
+      let compCounter = 0;
+      const addComponentRow = (varId = '', qtyPerUnit = '', cost = 0) => {
+        compCounter++;
         const row = document.createElement('tr');
         row.className = 'bom-input-row hover:bg-slate-50/70 transition-colors group';
+        const dropdownId = `asm-comp-var-${Date.now()}-${compCounter}`;
         row.innerHTML = `
           <td class="p-3">
-            <select class="bom-var w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
-              ${variants.map(v => `<option value="${v.id}" ${v.id === varId ? 'selected' : ''}>${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: dropdownId,
+              name: 'componentVariant',
+              placeholder: 'Select Component Variant...',
+              value: varId || '',
+              required: true,
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: `Cost: Rs. ${v.costPrice || 0}`
+              }))
+            })}
           </td>
           <td class="p-3 text-center">
-            <input type="number" min="0.01" step="any" value="${qtyPerUnit}" class="bom-qty w-20 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
+            <input type="number" min="0.01" step="any" value="${qtyPerUnit !== '' ? qtyPerUnit : ''}" placeholder="1" class="bom-qty w-20 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-right">
-            <input type="number" min="0" value="${cost || 0}" class="bom-cost w-24 text-right text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
+            <input type="number" min="0" value="${cost !== '' ? cost : 0}" placeholder="0" class="bom-cost w-24 text-right text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-right font-bold text-slate-800 bom-row-amount">
-            Rs. ${(qtyPerUnit * (cost || 0)).toLocaleString()}
+            ${(Number(qtyPerUnit || 0) * (cost || 0)) > 0 ? `Rs. ${(Number(qtyPerUnit || 0) * (cost || 0)).toLocaleString()}` : '—'}
           </td>
           <td class="p-3 text-center">
             <button type="button" class="btn-remove-row text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors cursor-pointer">
@@ -1380,35 +1426,37 @@ function openNewAssemblyModal(onSaved) {
           </td>
         `;
 
+        tableContainer.appendChild(row);
+        bindSearchableDropdown(row, {
+          onChange: (val) => {
+            const v = variants.find(x => x.id === val);
+            if (v) {
+              row.querySelector('.bom-cost').value = v.costPrice || 0;
+            }
+            recalculate();
+          }
+        });
+
         row.querySelector('.btn-remove-row').onclick = () => {
           row.remove();
-          recalculate();
-        };
-
-        const compVar = row.querySelector('.bom-var');
-        compVar.onchange = () => {
-          const v = variants.find(x => x.id === compVar.value);
-          if (v && (!row.querySelector('.bom-cost').value || Number(row.querySelector('.bom-cost').value) === 0)) {
-            row.querySelector('.bom-cost').value = v.costPrice || 0;
-          }
           recalculate();
         };
 
         row.querySelector('.bom-qty').oninput = recalculate;
         row.querySelector('.bom-cost').oninput = recalculate;
 
-        tableContainer.appendChild(row);
         recalculate();
       };
 
       addRowBtn.onclick = () => {
-        addComponentRow(variants[0]?.id, 1, variants[0]?.costPrice || 0);
+        addComponentRow('', '', 0);
       };
 
       const recalculate = () => {
-        const outQty = Number(outputQtyInput.value) || 1;
+        const outQty = Number(outputQtyInput.value) || 0;
         const laborRate = Number(laborRateInput.value) || 0;
-        const srcWhId = srcWhSelect.value;
+        const srcWhSelect = modalEl.querySelector('#asm-src-warehouse');
+        const srcWhId = srcWhSelect ? srcWhSelect.value : '';
 
         let totalMatCost = 0;
         const componentsToCheck = [];
@@ -1416,24 +1464,27 @@ function openNewAssemblyModal(onSaved) {
         if (countBadge) countBadge.textContent = `${rows.length} Components`;
 
         rows.forEach(r => {
-          const compVarId = r.querySelector('.bom-var').value;
+          const compVarInput = r.querySelector('input[name="componentVariant"]') || r.querySelector('input[type="hidden"]');
+          const compVarId = compVarInput ? compVarInput.value : '';
           const qtyPerUnit = Number(r.querySelector('.bom-qty').value) || 0;
           const unitCost = Number(r.querySelector('.bom-cost').value) || 0;
-          const totalQtyNeeded = qtyPerUnit * outQty;
+          const totalQtyNeeded = qtyPerUnit * (outQty > 0 ? outQty : 1);
           const lineCost = totalQtyNeeded * unitCost;
           totalMatCost += lineCost;
 
           const amountCell = r.querySelector('.bom-row-amount');
           if (amountCell) amountCell.textContent = canViewCost ? `Rs. ${Math.round(lineCost).toLocaleString()}` : '🔒 Redacted';
 
-          componentsToCheck.push({
-            componentVariantId: compVarId,
-            quantityConsumed: totalQtyNeeded,
-            unitCost
-          });
+          if (compVarId) {
+            componentsToCheck.push({
+              componentVariantId: compVarId,
+              quantityConsumed: totalQtyNeeded,
+              unitCost
+            });
+          }
         });
 
-        const totalLabor = outQty * laborRate;
+        const totalLabor = (outQty > 0 ? outQty : 0) * laborRate;
         const grandTotal = totalMatCost + totalLabor;
         const unitFinished = outQty > 0 ? (grandTotal / outQty) : 0;
 
@@ -1445,6 +1496,13 @@ function openNewAssemblyModal(onSaved) {
         }
 
         // Stock check
+        if (componentsToCheck.length === 0 || !srcWhId) {
+          stockBanner.className = 'p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs flex items-center justify-between text-slate-600';
+          stockMsg.textContent = 'Select source warehouse and add components to check stock availability.';
+          stockBadge.className = 'hidden';
+          return;
+        }
+
         const check = assemblyService.checkStockAvailability(componentsToCheck, srcWhId);
         if (check.available) {
           stockBanner.className = 'p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-xs flex items-center justify-between text-emerald-900';
@@ -1460,63 +1518,71 @@ function openNewAssemblyModal(onSaved) {
         }
       };
 
-      // Load recipe components if chosen
-      recipeSelect.onchange = () => {
-        const recipeId = recipeSelect.value;
-        if (!recipeId) return;
-        const rec = recipes.find(r => r.id === recipeId);
-        if (!rec) return;
+      initAllSearchableDropdowns(modalEl, {
+        onChange: (val, dId) => {
+          if (dId === 'asm-recipe-select') {
+            const recipeId = val;
+            if (!recipeId) return;
+            const rec = recipes.find(r => r.id === recipeId);
+            if (!rec) return;
 
-        typeSelect.value = rec.assemblyType || 'MANUFACTURING';
-        targetVarSelect.value = rec.finishedVariantId;
-        laborRateInput.value = rec.defaultLaborRate || 0;
-        if (rec.defaultLaborPartyId) laborPartySelect.value = rec.defaultLaborPartyId;
-        if (rec.defaultSourceWarehouseId) srcWhSelect.value = rec.defaultSourceWarehouseId;
+            setSearchableDropdownValue(modalEl, 'asm-type', rec.assemblyType || 'MANUFACTURING', rec.assemblyType === 'FINISHING' ? 'Single-Product Finishing' : 'Multi-Component Assembly');
+            const targetV = variants.find(v => v.id === rec.finishedVariantId);
+            setSearchableDropdownValue(modalEl, 'asm-target-variant', rec.finishedVariantId, targetV ? targetV.name : '');
+            laborRateInput.value = rec.defaultLaborRate || 0;
+            if (rec.defaultLaborPartyId) {
+              const lp = laborParties.find(p => p.id === rec.defaultLaborPartyId);
+              setSearchableDropdownValue(modalEl, 'asm-labor-party', rec.defaultLaborPartyId, lp ? lp.name : '');
+            }
+            if (rec.defaultSourceWarehouseId) {
+              const wh = warehouses.find(w => w.id === rec.defaultSourceWarehouseId);
+              setSearchableDropdownValue(modalEl, 'asm-src-warehouse', rec.defaultSourceWarehouseId, wh ? wh.name : '');
+            }
 
-        tableContainer.innerHTML = '';
-        (rec.components || []).forEach(c => {
-          const v = variants.find(x => x.id === c.componentVariantId);
-          addComponentRow(c.componentVariantId, c.quantityPerUnit, v?.costPrice || 0);
-        });
-
-        recalculate();
-      };
-
-      // Initial defaults
-      if (recipes.length > 0) {
-        recipeSelect.value = recipes[0].id;
-        recipeSelect.dispatchEvent(new Event('change'));
-      } else {
-        addComponentRow(variants[0]?.id, 1, variants[0]?.costPrice || 0);
-      }
+            tableContainer.innerHTML = '';
+            (rec.components || []).forEach(c => {
+              const v = variants.find(x => x.id === c.componentVariantId);
+              addComponentRow(c.componentVariantId, c.quantityPerUnit, v?.costPrice || 0);
+            });
+            recalculate();
+          } else {
+            recalculate();
+          }
+        }
+      });
 
       outputQtyInput.oninput = recalculate;
       laborRateInput.oninput = recalculate;
-      srcWhSelect.onchange = recalculate;
+
+      // Table starts completely blank (0 prefilled rows) as requested
+      recalculate();
 
       const gatherFormData = () => {
-        const recipeId = recipeSelect.value || null;
-        const assemblyType = typeSelect.value;
-        const finishedVariantId = targetVarSelect.value;
-        const finishedQuantity = Number(outputQtyInput.value) || 1;
-        const sourceWarehouseId = srcWhSelect.value;
-        const outputWarehouseId = modalEl.querySelector('#asm-out-warehouse').value;
-        const laborPartyId = laborPartySelect.value;
+        const recipeId = modalEl.querySelector('#asm-recipe-select')?.value || null;
+        const assemblyType = modalEl.querySelector('#asm-type')?.value || 'MANUFACTURING';
+        const finishedVariantId = modalEl.querySelector('#asm-target-variant')?.value;
+        const finishedQuantity = Number(outputQtyInput.value) || 0;
+        const sourceWarehouseId = modalEl.querySelector('#asm-src-warehouse')?.value;
+        const outputWarehouseId = modalEl.querySelector('#asm-out-warehouse')?.value;
+        const laborPartyId = modalEl.querySelector('#asm-labor-party')?.value || null;
         const laborRate = Number(laborRateInput.value) || 0;
         const assemblyDate = modalEl.querySelector('#asm-date').value;
         const notes = modalEl.querySelector('#asm-notes').value.trim();
 
         const lines = [];
         tableContainer.querySelectorAll('.bom-input-row').forEach(r => {
-          const compVarId = r.querySelector('.bom-var').value;
+          const compVarInput = r.querySelector('input[name="componentVariant"]') || r.querySelector('input[type="hidden"]');
+          const compVarId = compVarInput ? compVarInput.value : '';
           const qtyPerUnit = Number(r.querySelector('.bom-qty').value) || 0;
           const unitCost = Number(r.querySelector('.bom-cost').value) || 0;
-          lines.push({
-            componentVariantId: compVarId,
-            quantityConsumed: qtyPerUnit * finishedQuantity,
-            unitCost,
-            unit: 'PCS'
-          });
+          if (compVarId && qtyPerUnit > 0) {
+            lines.push({
+              componentVariantId: compVarId,
+              quantityConsumed: qtyPerUnit * (finishedQuantity > 0 ? finishedQuantity : 1),
+              unitCost,
+              unit: 'PCS'
+            });
+          }
         });
 
         return {
@@ -1642,16 +1708,32 @@ function openNewDisassemblyModal(onSaved) {
         <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div class="md:col-span-6 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="dis-template-select">Load Disassembly Template (Optional)</label>
-            <select id="dis-template-select" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-rose-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              <option value="">-- Manual Teardown / Any Inventory Item --</option>
-              ${templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'dis-template-select',
+              placeholder: '-- Manual Teardown / Any Inventory Item --',
+              value: '',
+              options: [
+                { value: '', label: '-- Manual Teardown / Any Inventory Item --' },
+                ...templates.map(t => ({
+                  value: t.id,
+                  label: t.name
+                }))
+              ]
+            })}
           </div>
           <div class="md:col-span-3 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="dis-warehouse">Warehouse Location <span class="text-red-500">*</span></label>
-            <select id="dis-warehouse" required class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-rose-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${warehouses.map(w => `<option value="${w.id}">${w.name}</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'dis-warehouse',
+              placeholder: 'Select Warehouse...',
+              value: '',
+              required: true,
+              options: warehouses.map(w => ({
+                value: w.id,
+                label: w.name,
+                subtext: w.city
+              }))
+            })}
           </div>
           <div class="md:col-span-3 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="dis-date">Disassembly Date <span class="text-red-500">*</span></label>
@@ -1660,13 +1742,22 @@ function openNewDisassemblyModal(onSaved) {
 
           <div class="md:col-span-8 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="dis-source-var">Item to Disassemble (Any Item In Stock) <span class="text-red-500">*</span></label>
-            <select id="dis-source-var" required class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-rose-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${variants.map(v => `<option value="${v.id}" data-cost="${v.costPrice || 0}">${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'dis-source-var',
+              placeholder: 'Select Item to Disassemble...',
+              value: '',
+              required: true,
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: `Rs. ${v.costPrice || 0}`
+              }))
+            })}
           </div>
           <div class="md:col-span-4 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="dis-qty">Quantity to Dismantle <span class="text-red-500">*</span></label>
-            <input type="number" id="dis-qty" required min="1" value="1" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-rose-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <input type="number" id="dis-qty" required min="1" value="" placeholder="0" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-rose-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
         </div>
 
@@ -1788,9 +1879,6 @@ function openNewDisassemblyModal(onSaved) {
       const cancelBtn = modalEl.querySelector('#dis-modal-cancel');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
-      const templateSelect = modalEl.querySelector('#dis-template-select');
-      const whSelect = modalEl.querySelector('#dis-warehouse');
-      const sourceVarSelect = modalEl.querySelector('#dis-source-var');
       const qtyInput = modalEl.querySelector('#dis-qty');
       const stockCountEl = modalEl.querySelector('#dis-stock-count');
       const itemCostEl = modalEl.querySelector('#dis-item-cost');
@@ -1801,26 +1889,39 @@ function openNewDisassemblyModal(onSaved) {
       const previewVariance = modalEl.querySelector('#dis-preview-variance');
       const countBadge = modalEl.querySelector('#rec-items-count-badge');
 
-      const addRecoveredRow = (varId = '', qty = 1, cost = 0, isChecked = true) => {
+      let recCounter = 0;
+      const addRecoveredRow = (varId = '', qty = '', cost = 0, isChecked = true) => {
+        recCounter++;
         const row = document.createElement('tr');
         row.className = 'rec-input-row hover:bg-slate-50/70 transition-colors group';
+        const dropdownId = `dis-rec-var-${Date.now()}-${recCounter}`;
         row.innerHTML = `
           <td class="p-3 text-center">
             <input type="checkbox" ${isChecked ? 'checked' : ''} class="rec-check rounded text-rose-600 focus:ring-rose-500 cursor-pointer">
           </td>
           <td class="p-3">
-            <select class="rec-var w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-rose-500 py-1.5 px-2 bg-white">
-              ${variants.map(v => `<option value="${v.id}" ${v.id === varId ? 'selected' : ''}>${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: dropdownId,
+              name: 'recoveredVariant',
+              placeholder: 'Select Component Item...',
+              value: varId || '',
+              required: true,
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: `Cost: Rs. ${v.costPrice || 0}`
+              }))
+            })}
           </td>
           <td class="p-3 text-center">
-            <input type="number" min="1" value="${qty}" class="rec-qty w-20 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-rose-500 py-1.5 px-2 bg-white">
+            <input type="number" min="0.01" step="any" value="${qty !== '' ? qty : ''}" placeholder="1" class="rec-qty w-20 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-rose-500 py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-right">
-            <input type="number" min="0" value="${cost || 0}" class="rec-cost w-24 text-right text-xs font-medium rounded-xl border border-slate-200 focus:border-rose-500 py-1.5 px-2 bg-white">
+            <input type="number" min="0" value="${cost !== '' ? cost : 0}" placeholder="0" class="rec-cost w-24 text-right text-xs font-medium rounded-xl border border-slate-200 focus:border-rose-500 py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-right font-bold text-slate-800 rec-row-amount">
-            Rs. ${(qty * (cost || 0)).toLocaleString()}
+            ${(Number(qty || 0) * (cost || 0)) > 0 ? `Rs. ${(Number(qty || 0) * (cost || 0)).toLocaleString()}` : '—'}
           </td>
           <td class="p-3 text-center">
             <button type="button" class="btn-remove-rec-row text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors cursor-pointer">
@@ -1831,6 +1932,17 @@ function openNewDisassemblyModal(onSaved) {
           </td>
         `;
 
+        tableContainer.appendChild(row);
+        bindSearchableDropdown(row, {
+          onChange: (val) => {
+            const v = variants.find(x => x.id === val);
+            if (v) {
+              row.querySelector('.rec-cost').value = v.costPrice || 0;
+            }
+            recalculate();
+          }
+        });
+
         row.querySelector('.btn-remove-rec-row').onclick = () => {
           row.remove();
           recalculate();
@@ -1840,30 +1952,20 @@ function openNewDisassemblyModal(onSaved) {
         row.querySelector('.rec-qty').oninput = recalculate;
         row.querySelector('.rec-cost').oninput = recalculate;
 
-        const sel = row.querySelector('.rec-var');
-        sel.onchange = () => {
-          const v = variants.find(x => x.id === sel.value);
-          if (v && (!row.querySelector('.rec-cost').value || Number(row.querySelector('.rec-cost').value) === 0)) {
-            row.querySelector('.rec-cost').value = v.costPrice || 0;
-          }
-          recalculate();
-        };
-
-        tableContainer.appendChild(row);
         recalculate();
       };
 
       addRowBtn.onclick = () => {
-        addRecoveredRow(variants[0]?.id, 1, variants[0]?.costPrice || 0, true);
+        addRecoveredRow('', '', 0, true);
       };
 
       const recalculate = () => {
-        const whId = whSelect.value;
-        const srcVarId = sourceVarSelect.value;
-        const disQty = Number(qtyInput.value) || 1;
+        const whId = modalEl.querySelector('#dis-warehouse')?.value || '';
+        const srcVarId = modalEl.querySelector('#dis-source-var')?.value || '';
+        const disQty = Number(qtyInput.value) || 0;
 
         // Current stock of source item
-        const avail = inventoryService.getBalance(whId, srcVarId);
+        const avail = (whId && srcVarId) ? inventoryService.getBalance(whId, srcVarId) : 0;
         if (stockCountEl) stockCountEl.textContent = avail;
 
         const srcVar = variants.find(v => v.id === srcVarId);
@@ -1904,46 +2006,43 @@ function openNewDisassemblyModal(onSaved) {
         }
       };
 
-      // Template selection
-      templateSelect.onchange = () => {
-        const tId = templateSelect.value;
-        if (!tId) return;
-        const t = templates.find(x => x.id === tId);
-        if (!t) return;
+      initAllSearchableDropdowns(modalEl, {
+        onChange: (val, dId) => {
+          if (dId === 'dis-template-select') {
+            const tId = val;
+            if (!tId) return;
+            const t = templates.find(x => x.id === tId);
+            if (!t) return;
 
-        sourceVarSelect.value = t.sourceVariantId;
-        tableContainer.innerHTML = '';
-        const srcVar = variants.find(v => v.id === t.sourceVariantId);
-        const srcCost = srcVar?.costPrice || 0;
+            const srcVar = variants.find(v => v.id === t.sourceVariantId);
+            setSearchableDropdownValue(modalEl, 'dis-source-var', t.sourceVariantId, srcVar ? srcVar.name : '');
+            tableContainer.innerHTML = '';
+            const srcCost = srcVar?.costPrice || 0;
 
-        (t.expectedComponents || []).forEach(c => {
-          const compVar = variants.find(x => x.id === c.componentVariantId);
-          const compCost = compVar?.costPrice || (srcCost * ((c.costAllocationPercentage || 0) / 100));
-          addRecoveredRow(c.componentVariantId, c.defaultRecoveryRatio || 1, Math.round(compCost), true);
-        });
+            (t.expectedComponents || []).forEach(c => {
+              const compVar = variants.find(x => x.id === c.componentVariantId);
+              const compCost = compVar?.costPrice || (srcCost * ((c.costAllocationPercentage || 0) / 100));
+              addRecoveredRow(c.componentVariantId, c.defaultRecoveryRatio || 1, Math.round(compCost), true);
+            });
 
-        recalculate();
-      };
+            recalculate();
+          } else {
+            recalculate();
+          }
+        }
+      });
 
-      // Initial defaults
-      if (templates.length > 0) {
-        templateSelect.value = templates[0].id;
-        templateSelect.dispatchEvent(new Event('change'));
-      } else {
-        addRecoveredRow(variants[0]?.id, 1, variants[0]?.costPrice || 0, true);
-        recalculate();
-      }
-
-      whSelect.onchange = recalculate;
-      sourceVarSelect.onchange = recalculate;
       qtyInput.oninput = recalculate;
+
+      // Table starts blank with 0 prefilled rows
+      recalculate();
 
       // Submit
       modalEl.querySelector('#new-disassembly-form').onsubmit = (e) => {
         e.preventDefault();
-        const warehouseId = whSelect.value;
-        const sourceVariantId = sourceVarSelect.value;
-        const disassembledQuantity = Number(qtyInput.value) || 1;
+        const warehouseId = modalEl.querySelector('#dis-warehouse')?.value;
+        const sourceVariantId = modalEl.querySelector('#dis-source-var')?.value;
+        const disassembledQuantity = Number(qtyInput.value) || 0;
         const disassemblyDate = modalEl.querySelector('#dis-date').value;
         const notes = modalEl.querySelector('#dis-notes').value.trim();
 
@@ -1951,15 +2050,18 @@ function openNewDisassemblyModal(onSaved) {
         tableContainer.querySelectorAll('.rec-input-row').forEach(r => {
           const isChecked = r.querySelector('.rec-check').checked;
           if (isChecked) {
-            const compVarId = r.querySelector('.rec-var').value;
-            const quantityRecovered = Number(r.querySelector('.rec-qty').value) || 1;
+            const compVarInput = r.querySelector('input[name="recoveredVariant"]') || r.querySelector('input[type="hidden"]');
+            const compVarId = compVarInput ? compVarInput.value : '';
+            const quantityRecovered = Number(r.querySelector('.rec-qty').value) || 0;
             const unitCost = Number(r.querySelector('.rec-cost').value) || 0;
-            recoveredComponents.push({
-              componentVariantId: compVarId,
-              quantityRecovered,
-              unitCost,
-              unit: 'PCS'
-            });
+            if (compVarId && quantityRecovered > 0) {
+              recoveredComponents.push({
+                componentVariantId: compVarId,
+                quantityRecovered,
+                unitCost,
+                unit: 'PCS'
+              });
+            }
           }
         });
 
@@ -2035,19 +2137,33 @@ function openRecordLaborPaymentModal(selectedPartyId = null, onSaved) {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="pay-party-select">Assembly Labor Workshop / Party <span class="text-red-500">*</span></label>
-            <select id="pay-party-select" required class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-emerald-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${laborParties.map(p => {
+            ${renderSearchableDropdown({
+              id: 'pay-party-select',
+              placeholder: 'Select Workshop...',
+              value: selectedPartyId || '',
+              required: true,
+              options: laborParties.map(p => {
                 const bal = assemblyService.getLaborPartyBalance(p.id);
-                return `<option value="${p.id}" ${p.id === selectedPartyId ? 'selected' : ''}>${p.name} (Balance: Rs. ${bal.outstandingBalance.toLocaleString()})</option>`;
-              }).join('')}
-            </select>
+                return {
+                  value: p.id,
+                  label: p.name,
+                  subtext: `Balance: Rs. ${bal.outstandingBalance.toLocaleString()}`
+                };
+              })
+            })}
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="pay-mode-select">Settlement Mode <span class="text-red-500">*</span></label>
-            <select id="pay-mode-select" required class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-emerald-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              <option value="FIFO_BALANCE">Option B: FIFO Lump-Sum Balance Settlement</option>
-              <option value="SPECIFIC_ASSEMBLIES">Option A: Allocate to Specific Assemblies</option>
-            </select>
+            ${renderSearchableDropdown({
+              id: 'pay-mode-select',
+              placeholder: 'Select Settlement Mode...',
+              value: 'FIFO_BALANCE',
+              required: true,
+              options: [
+                { value: 'FIFO_BALANCE', label: 'FIFO Lump-Sum Balance Settlement' },
+                { value: 'SPECIFIC_ASSEMBLIES', label: 'Allocate to Specific Assemblies' }
+              ]
+            })}
           </div>
         </div>
       </section>
@@ -2070,13 +2186,21 @@ function openRecordLaborPaymentModal(selectedPartyId = null, onSaved) {
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="pay-account">Paying Bank / Cash Account <span class="text-red-500">*</span></label>
-            <select id="pay-account" required class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-emerald-500 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${paymentAccounts.map(a => `<option value="${a.id}">${a.name} (${a.code || a.id})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'pay-account',
+              placeholder: 'Select Account...',
+              value: paymentAccounts[0]?.id || '',
+              required: true,
+              options: paymentAccounts.map(a => ({
+                value: a.id,
+                label: a.name,
+                subtext: a.code || a.id
+              }))
+            })}
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="pay-amount">Total Payment Amount (PKR) <span class="text-red-500">*</span></label>
-            <input type="number" id="pay-amount" required min="1" value="0" class="w-full text-xs font-extrabold text-right rounded-xl border border-slate-200 focus:border-emerald-500 py-2.5 px-3 text-slate-900 bg-white shadow-2xs">
+            <input type="number" id="pay-amount" required min="1" value="" placeholder="0" class="w-full text-xs font-extrabold text-right rounded-xl border border-slate-200 focus:border-emerald-500 py-2.5 px-3 text-slate-900 bg-white shadow-2xs">
           </div>
         </div>
       </section>
@@ -2129,14 +2253,12 @@ function openRecordLaborPaymentModal(selectedPartyId = null, onSaved) {
       const cancelBtn = modalEl.querySelector('#pay-modal-cancel');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
-      const partySelect = modalEl.querySelector('#pay-party-select');
-      const modeSelect = modalEl.querySelector('#pay-mode-select');
       const amountInput = modalEl.querySelector('#pay-amount');
       const specificContainer = modalEl.querySelector('#specific-payables-container');
       const specificList = modalEl.querySelector('#specific-payables-list');
 
       const updatePartyPayables = () => {
-        const partyId = partySelect.value;
+        const partyId = modalEl.querySelector('#pay-party-select')?.value;
         const payables = assemblyService.getLaborPayables().filter(p => p.laborPartyId === partyId && p.status !== 'Paid' && p.status !== 'Reversed');
 
         specificList.innerHTML = '';
@@ -2170,29 +2292,33 @@ function openRecordLaborPaymentModal(selectedPartyId = null, onSaved) {
         });
       };
 
-      modeSelect.onchange = () => {
-        if (modeSelect.value === 'SPECIFIC_ASSEMBLIES') {
-          specificContainer.classList.remove('hidden');
-          updatePartyPayables();
-        } else {
-          specificContainer.classList.add('hidden');
+      initAllSearchableDropdowns(modalEl, {
+        onChange: (val, dId) => {
+          if (dId === 'pay-mode-select') {
+            if (val === 'SPECIFIC_ASSEMBLIES') {
+              specificContainer.classList.remove('hidden');
+              updatePartyPayables();
+            } else {
+              specificContainer.classList.add('hidden');
+            }
+          } else if (dId === 'pay-party-select') {
+            const modeVal = modalEl.querySelector('#pay-mode-select')?.value;
+            if (modeVal === 'SPECIFIC_ASSEMBLIES') {
+              updatePartyPayables();
+            }
+          }
         }
-      };
-
-      partySelect.onchange = () => {
-        if (modeSelect.value === 'SPECIFIC_ASSEMBLIES') {
-          updatePartyPayables();
-        }
-      };
+      });
 
       // Submit
       modalEl.querySelector('#labor-payment-form').onsubmit = (e) => {
         e.preventDefault();
-        const laborPartyId = partySelect.value;
-        const paymentMode = modeSelect.value;
+        const laborPartyId = modalEl.querySelector('#pay-party-select')?.value;
+        const paymentMode = modalEl.querySelector('#pay-mode-select')?.value;
         const totalAmount = Number(amountInput.value) || 0;
         const paymentDate = modalEl.querySelector('#pay-date').value;
-        const paymentAccountId = modalEl.querySelector('#pay-account').value;
+        const paymentAccountId = modalEl.querySelector('#pay-account')?.value;
+        const notes = modalEl.querySelector('#pay-notes').value.trim();
         const notes = modalEl.querySelector('#pay-notes').value.trim();
 
         if (totalAmount <= 0) {
@@ -2262,31 +2388,56 @@ function openNewRecipeModal(onSaved) {
         <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div class="md:col-span-8 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="rec-name">Recipe Name <span class="text-red-500">*</span></label>
-            <input type="text" id="rec-name" required placeholder="e.g. Air Cooler 18-Inch Standard Build" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <input type="text" id="rec-name" required placeholder="e.g. Air Cooler 18-Inch Standard Build" value="" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
           <div class="md:col-span-4 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="rec-type">Assembly Type <span class="text-red-500">*</span></label>
-            <select id="rec-type" class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              <option value="MANUFACTURING">Multi-Component Manufacturing</option>
-              <option value="FINISHING">Single-Product Finishing</option>
-            </select>
+            ${renderSearchableDropdown({
+              id: 'rec-type',
+              placeholder: '-- Select Assembly Type --',
+              value: '',
+              required: true,
+              options: [
+                { value: 'MANUFACTURING', label: 'Multi-Component Manufacturing' },
+                { value: 'FINISHING', label: 'Single-Product Finishing' }
+              ]
+            })}
           </div>
 
           <div class="md:col-span-6 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="rec-target-var">Target Finished Product Variant <span class="text-red-500">*</span></label>
-            <select id="rec-target-var" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${variants.map(v => `<option value="${v.id}">${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'rec-target-var',
+              placeholder: 'Select Target Finished Variant...',
+              value: '',
+              required: true,
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: v.unit || 'PCS'
+              }))
+            })}
           </div>
           <div class="md:col-span-3 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="rec-labor-rate">Default Labor Rate (PKR) <span class="text-red-500">*</span></label>
-            <input type="number" id="rec-labor-rate" required min="0" value="500" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <input type="number" id="rec-labor-rate" required min="0" value="" placeholder="0" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
           <div class="md:col-span-3 space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="rec-labor-party">Default Workshop</label>
-            <select id="rec-labor-party" class="w-full text-xs font-medium rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${laborParties.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'rec-labor-party',
+              placeholder: 'Select Default Workshop (Optional)...',
+              value: '',
+              options: [
+                { value: '', label: '-- None (Internal Labor) --' },
+                ...laborParties.map(p => ({
+                  value: p.id,
+                  label: p.name,
+                  subtext: 'Workshop'
+                }))
+              ]
+            })}
           </div>
         </div>
       </section>
@@ -2356,17 +2507,43 @@ function openNewRecipeModal(onSaved) {
       const container = modalEl.querySelector('#recipe-items-container');
       const addBtn = modalEl.querySelector('#btn-add-rec-item');
 
-      const addItem = (varId = '', qty = 1) => {
+      const renderEmptyState = () => {
+        if (container.querySelectorAll('.rec-item-row').length === 0) {
+          container.innerHTML = `
+            <tr class="rec-empty-row">
+              <td colspan="3" class="p-6 text-center text-slate-400">
+                No components added yet. Click "+ Add Component" above to specify raw materials.
+              </td>
+            </tr>
+          `;
+        }
+      };
+
+      const addItem = (varId = '', qty = '') => {
+        const emptyRow = container.querySelector('.rec-empty-row');
+        if (emptyRow) emptyRow.remove();
+
+        const rowId = 'rec-row-' + Math.random().toString(36).substring(2, 9);
         const item = document.createElement('tr');
-        item.className = 'hover:bg-slate-50/70 transition-colors group';
+        item.className = 'rec-item-row hover:bg-slate-50/70 transition-colors group';
         item.innerHTML = `
           <td class="p-3">
-            <select class="rec-comp-var w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
-              ${variants.map(v => `<option value="${v.id}" ${v.id === varId ? 'selected' : ''}>${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: rowId,
+              placeholder: 'Select Component Variant...',
+              value: varId || '',
+              required: true,
+              menuWidth: 'w-[320px] sm:w-[380px]',
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: v.unit || 'PCS'
+              }))
+            })}
           </td>
           <td class="p-3 text-center">
-            <input type="number" min="0.01" step="any" value="${qty}" class="rec-comp-qty w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-1.5 px-2 bg-white">
+            <input type="number" min="0.01" step="any" value="${qty !== '' ? qty : ''}" placeholder="0" class="rec-comp-qty w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2 px-2 bg-white">
           </td>
           <td class="p-3 text-center">
             <button type="button" class="btn-remove-rec-item text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors cursor-pointer">
@@ -2376,12 +2553,19 @@ function openNewRecipeModal(onSaved) {
             </button>
           </td>
         `;
-        item.querySelector('.btn-remove-rec-item').onclick = () => item.remove();
+        item.querySelector('.btn-remove-rec-item').onclick = () => {
+          item.remove();
+          renderEmptyState();
+        };
         container.appendChild(item);
+        initAllSearchableDropdowns(item);
       };
 
-      addBtn.onclick = () => addItem(variants[0]?.id, 1);
-      addItem(variants[0]?.id, 1);
+      addBtn.onclick = () => addItem('', '');
+
+      // Start completely blank with 0 rows
+      renderEmptyState();
+      initAllSearchableDropdowns(modalEl);
 
       // Submit
       modalEl.querySelector('#new-recipe-form').onsubmit = (e) => {
@@ -2392,15 +2576,30 @@ function openNewRecipeModal(onSaved) {
         const defaultLaborRate = Number(modalEl.querySelector('#rec-labor-rate').value) || 0;
         const defaultLaborPartyId = modalEl.querySelector('#rec-labor-party')?.value || null;
 
+        if (!name) {
+          toast.show('Please enter a Recipe Name.', 'error');
+          return;
+        }
+        if (!assemblyType) {
+          toast.show('Please select an Assembly Type.', 'error');
+          return;
+        }
+        if (!finishedVariantId) {
+          toast.show('Please select a Target Finished Product Variant.', 'error');
+          return;
+        }
+
         const components = [];
-        container.querySelectorAll('tr').forEach(r => {
-          const vId = r.querySelector('.rec-comp-var').value;
-          const q = Number(r.querySelector('.rec-comp-qty').value) || 1;
-          components.push({
-            componentVariantId: vId,
-            quantityPerUnit: q,
-            unit: 'PCS'
-          });
+        container.querySelectorAll('.rec-item-row').forEach(r => {
+          const vId = r.querySelector('.scd-hidden-input')?.value;
+          const q = Number(r.querySelector('.rec-comp-qty')?.value) || 0;
+          if (vId && q > 0) {
+            components.push({
+              componentVariantId: vId,
+              quantityPerUnit: q,
+              unit: 'PCS'
+            });
+          }
         });
 
         if (components.length === 0) {
@@ -2453,13 +2652,22 @@ function openNewDisassemblyTemplateModal(onSaved) {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="tpl-name">Template Name <span class="text-red-500">*</span></label>
-            <input type="text" id="tpl-name" required placeholder="e.g. Complete Fan Teardown Formula" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <input type="text" id="tpl-name" required placeholder="e.g. Complete Fan Teardown Formula" value="" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="tpl-source-var">Source Item to Dismantle <span class="text-red-500">*</span></label>
-            <select id="tpl-source-var" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${variants.map(v => `<option value="${v.id}">${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: 'tpl-source-var',
+              placeholder: 'Select Source Item to Dismantle...',
+              value: '',
+              required: true,
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: v.unit || 'PCS'
+              }))
+            })}
           </div>
         </div>
       </section>
@@ -2530,20 +2738,46 @@ function openNewDisassemblyTemplateModal(onSaved) {
       const container = modalEl.querySelector('#tpl-items-container');
       const addBtn = modalEl.querySelector('#btn-add-tpl-item');
 
-      const addItem = (varId = '', ratio = 1, alloc = 0) => {
+      const renderEmptyState = () => {
+        if (container.querySelectorAll('.tpl-item-row').length === 0) {
+          container.innerHTML = `
+            <tr class="tpl-empty-row">
+              <td colspan="4" class="p-6 text-center text-slate-400">
+                No recoverable components added yet. Click "+ Add Component" above.
+              </td>
+            </tr>
+          `;
+        }
+      };
+
+      const addItem = (varId = '', ratio = '', alloc = '') => {
+        const emptyRow = container.querySelector('.tpl-empty-row');
+        if (emptyRow) emptyRow.remove();
+
+        const rowId = 'tpl-row-' + Math.random().toString(36).substring(2, 9);
         const item = document.createElement('tr');
-        item.className = 'hover:bg-slate-50/70 transition-colors group';
+        item.className = 'tpl-item-row hover:bg-slate-50/70 transition-colors group';
         item.innerHTML = `
           <td class="p-3">
-            <select class="tpl-comp-var w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-slate-800 py-1.5 px-2 bg-white">
-              ${variants.map(v => `<option value="${v.id}" ${v.id === varId ? 'selected' : ''}>${v.name} (${v.sku})</option>`).join('')}
-            </select>
+            ${renderSearchableDropdown({
+              id: rowId,
+              placeholder: 'Select Component Variant...',
+              value: varId || '',
+              required: true,
+              menuWidth: 'w-[320px] sm:w-[380px]',
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: v.unit || 'PCS'
+              }))
+            })}
           </td>
           <td class="p-3 text-center">
-            <input type="number" min="0.01" step="any" value="${ratio}" class="tpl-comp-ratio w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-1.5 px-2 bg-white">
+            <input type="number" min="0.01" step="any" value="${ratio !== '' ? ratio : ''}" placeholder="1.0" class="tpl-comp-ratio w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-center">
-            <input type="number" min="0" max="100" value="${alloc}" class="tpl-comp-alloc w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-1.5 px-2 bg-white">
+            <input type="number" min="0" max="100" value="${alloc !== '' ? alloc : ''}" placeholder="0" class="tpl-comp-alloc w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-slate-800 py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-center">
             <button type="button" class="btn-remove-tpl-item text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors cursor-pointer">
@@ -2553,28 +2787,40 @@ function openNewDisassemblyTemplateModal(onSaved) {
             </button>
           </td>
         `;
-        item.querySelector('.btn-remove-tpl-item').onclick = () => item.remove();
+        item.querySelector('.btn-remove-tpl-item').onclick = () => {
+          item.remove();
+          renderEmptyState();
+        };
         container.appendChild(item);
+        initAllSearchableDropdowns(item);
       };
 
-      addBtn.onclick = () => addItem(variants[0]?.id, 1, 0);
-      addItem(variants[0]?.id, 1, 50);
+      initAllSearchableDropdowns(modalEl);
+      addBtn.onclick = () => addItem();
+      renderEmptyState();
 
       modalEl.querySelector('#new-template-form').onsubmit = (e) => {
         e.preventDefault();
         const name = modalEl.querySelector('#tpl-name').value.trim();
-        const sourceVariantId = modalEl.querySelector('#tpl-source-var').value;
+        const sourceVariantId = modalEl.querySelector('#tpl-source-var')?.value;
+
+        if (!sourceVariantId) {
+          toast.show('Please select a source item to dismantle.', 'error');
+          return;
+        }
 
         const expectedComponents = [];
-        container.querySelectorAll('tr').forEach(r => {
-          const vId = r.querySelector('.tpl-comp-var').value;
-          const ratio = Number(r.querySelector('.tpl-comp-ratio').value) || 1;
-          const alloc = Number(r.querySelector('.tpl-comp-alloc').value) || 0;
-          expectedComponents.push({
-            componentVariantId: vId,
-            defaultRecoveryRatio: ratio,
-            costAllocationPercentage: alloc
-          });
+        container.querySelectorAll('.tpl-item-row').forEach(r => {
+          const vId = r.querySelector('.searchable-select-hidden')?.value;
+          const ratio = Number(r.querySelector('.tpl-comp-ratio')?.value) || 1;
+          const alloc = Number(r.querySelector('.tpl-comp-alloc')?.value) || 0;
+          if (vId) {
+            expectedComponents.push({
+              componentVariantId: vId,
+              defaultRecoveryRatio: ratio,
+              costAllocationPercentage: alloc
+            });
+          }
         });
 
         if (expectedComponents.length === 0) {
@@ -2601,66 +2847,55 @@ function openNewDisassemblyTemplateModal(onSaved) {
 }
 
 // ============================================================================
-// MODAL 6: CREATE NEW BUNDLE / POULTRY SYSTEM
+// MODAL 6: CREATE NEW BUNDLE / SET
 // ============================================================================
 
 function openNewBundleModal(onSaved) {
   const variants = productService.getVariants();
+  const varMap = new Map(variants.map(v => [v.id, v]));
 
   const contentHtml = `
     <form id="new-bundle-form" class="space-y-6 text-xs">
-      <!-- SECTION 1: Identity & Type -->
+      <!-- SECTION 1: Bundle Information -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-2">
             <svg class="w-3.5 h-3.5 text-purple-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"></path>
             </svg>
-            <span>Bundle / System Configuration</span>
+            <span>Bundle / Set Information</span>
           </h3>
           <span class="text-[11px] text-slate-400">All fields marked with <span class="text-red-500">*</span> are required</span>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
           <div class="md:col-span-6 space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="bnd-name">Bundle / System Name <span class="text-red-500">*</span></label>
-            <input type="text" id="bnd-name" required placeholder="e.g. Automatic Broiler Feeding Line System" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <label class="text-xs font-semibold text-slate-700" for="bnd-name">Bundle Name <span class="text-red-500">*</span></label>
+            <input type="text" id="bnd-name" required placeholder="e.g. Fan Pulley Set" value="" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
           <div class="md:col-span-3 space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="bnd-type">Bundle Type <span class="text-red-500">*</span></label>
-            <select id="bnd-type" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              <option value="VARIABLE_SYSTEM">Variable Proportional System</option>
-              <option value="FIXED_SET">Fixed Direct Set</option>
-            </select>
+            <label class="text-xs font-semibold text-slate-700" for="bnd-qty">Finished Bundle Qty <span class="text-red-500">*</span></label>
+            <input type="number" id="bnd-qty" required min="1" step="any" value="1" placeholder="1" class="w-full text-xs font-bold text-center rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
           <div class="md:col-span-3 space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="bnd-code">System Code</label>
-            <input type="text" id="bnd-code" placeholder="e.g. SYS-FEED" class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-
-          <div class="md:col-span-6 space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="bnd-unit">Commercial Order Unit <span class="text-red-500">*</span></label>
-            <input type="text" id="bnd-unit" value="Line" placeholder="e.g. Line, Shed, Set, System" class="w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-          </div>
-          <div class="md:col-span-6 space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700" for="bnd-price">Standard Unit Price (PKR)</label>
-            <input type="number" id="bnd-price" min="0" value="75000" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <label class="text-xs font-semibold text-slate-700" for="bnd-price">Selling Price (PKR)</label>
+            <input type="number" id="bnd-price" min="0" step="any" placeholder="0" value="" class="w-full text-xs font-bold text-right rounded-xl border border-slate-200 focus:border-purple-600 py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
           </div>
         </div>
       </section>
 
-      <!-- SECTION 2: Formulas & Components -->
+      <!-- SECTION 2: Corresponding Products / Components -->
       <section class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-4">
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <div class="flex items-center space-x-2">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Component Formulas &amp; Expansion Rules</h3>
-            <span class="text-[11px] text-slate-400">Decoupled from Product Master</span>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500">Corresponding Products &amp; Quantities</h3>
+            <span class="text-[11px] text-slate-400">Products included in the bundle</span>
           </div>
           <button type="button" id="btn-add-bnd-item" class="inline-flex items-center space-x-1.5 px-3.5 py-1.5 border border-dashed border-purple-300 hover:border-purple-600 bg-purple-50 text-purple-700 rounded-xl text-xs font-bold transition-all cursor-pointer">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>
             </svg>
-            <span>+ Add Component Rule</span>
+            <span>+ Add Product</span>
           </button>
         </div>
 
@@ -2668,11 +2903,9 @@ function openNewBundleModal(onSaved) {
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider border-b border-slate-200">
               <tr>
-                <th class="py-3 px-3 w-5/12 font-semibold">Physical Component Item</th>
-                <th class="py-3 px-3 w-3/12 font-semibold">Rule Type</th>
-                <th class="py-3 px-2 w-2/12 font-semibold text-center">Multiplier / Factor</th>
-                <th class="py-3 px-2 w-2/12 font-semibold text-center">Group Size</th>
-                <th class="py-3 px-2 w-8 text-center font-semibold"></th>
+                <th class="py-3 px-3 w-8/12 font-semibold">Product Variant</th>
+                <th class="py-3 px-2 w-3/12 font-semibold text-center">Quantity</th>
+                <th class="py-3 px-2 w-1/12 text-center font-semibold"></th>
               </tr>
             </thead>
             <tbody id="bundle-items-container" class="divide-y divide-slate-100 text-slate-700">
@@ -2680,12 +2913,6 @@ function openNewBundleModal(onSaved) {
             </tbody>
           </table>
         </div>
-      </section>
-
-      <!-- SECTION 3: Memo -->
-      <section class="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs space-y-2">
-        <label class="text-xs font-semibold text-slate-700" for="bnd-desc">System Description / Application</label>
-        <textarea id="bnd-desc" class="w-full text-xs rounded-xl border border-slate-200 focus:border-purple-600 text-slate-700 p-2.5 resize-none" rows="2" placeholder="e.g. Complete commercial feeding system package for poultry sheds with automated suspension."></textarea>
       </section>
     </form>
   `;
@@ -2705,19 +2932,19 @@ function openNewBundleModal(onSaved) {
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
         </svg>
-        <span>Save Bundle / System</span>
+        <span>Save Bundle</span>
       </button>
     </div>
   `;
 
   openModal({
-    title: 'Create Predefined Bundle / Poultry System',
-    subtitle: 'Decoupled system architecture: Configure proportional and group math formulas without altering Product Master',
-    badge: 'System Builder',
+    title: 'Create New Bundle / Set',
+    subtitle: 'Define bundle name, finished quantity, and component product quantities',
+    badge: 'Bundle Master',
     icon: '🧩',
     contentHtml,
     footerHtml,
-    size: 'max-w-4xl',
+    size: 'max-w-3xl',
     onOpen: (modalEl) => {
       const cancelBtn = modalEl.querySelector('#bnd-modal-cancel');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
@@ -2725,27 +2952,43 @@ function openNewBundleModal(onSaved) {
       const container = modalEl.querySelector('#bundle-items-container');
       const addBtn = modalEl.querySelector('#btn-add-bnd-item');
 
-      const addItem = (varId = '', rule = 'PER_LINE', factor = 1, group = 5) => {
+      const renderEmptyState = () => {
+        if (container.querySelectorAll('.bnd-item-row').length === 0) {
+          container.innerHTML = `
+            <tr class="bnd-empty-row">
+              <td colspan="3" class="p-6 text-center text-slate-400">
+                No products added yet. Click "+ Add Product" above to include components in this bundle.
+              </td>
+            </tr>
+          `;
+        }
+      };
+
+      const addItem = (varId = '', qty = '') => {
+        const emptyRow = container.querySelector('.bnd-empty-row');
+        if (emptyRow) emptyRow.remove();
+
+        const rowId = 'bnd-row-' + Math.random().toString(36).substring(2, 9);
         const item = document.createElement('tr');
-        item.className = 'hover:bg-slate-50/70 transition-colors group';
+        item.className = 'bnd-item-row hover:bg-slate-50/70 transition-colors group';
         item.innerHTML = `
           <td class="p-3">
-            <select class="bnd-comp-var w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-purple-600 py-1.5 px-2 bg-white">
-              ${variants.map(v => `<option value="${v.id}" ${v.id === varId ? 'selected' : ''}>${v.name} (${v.sku})</option>`).join('')}
-            </select>
-          </td>
-          <td class="p-3">
-            <select class="bnd-comp-rule w-full text-xs font-semibold rounded-xl border border-slate-200 focus:border-purple-600 py-1.5 px-2 bg-white">
-              <option value="PER_LINE" ${rule === 'PER_LINE' ? 'selected' : ''}>PER_LINE (Proportional)</option>
-              <option value="PER_GROUP_CEIL" ${rule === 'PER_GROUP_CEIL' ? 'selected' : ''}>PER_GROUP_CEIL (Ceiling)</option>
-              <option value="FIXED_QTY" ${rule === 'FIXED_QTY' ? 'selected' : ''}>FIXED_QTY (Constant)</option>
-            </select>
+            ${renderSearchableDropdown({
+              id: rowId,
+              placeholder: 'Select Product / Variant...',
+              value: varId || '',
+              required: true,
+              menuWidth: 'w-[320px] sm:w-[380px]',
+              options: variants.map(v => ({
+                value: v.id,
+                label: v.name,
+                subtext: v.sku,
+                badge: v.unit || 'PCS'
+              }))
+            })}
           </td>
           <td class="p-3 text-center">
-            <input type="number" min="0.01" step="any" value="${factor}" class="bnd-comp-factor w-20 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-1.5 px-2 bg-white">
-          </td>
-          <td class="p-3 text-center">
-            <input type="number" min="1" value="${group}" class="bnd-comp-group w-20 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-1.5 px-2 bg-white">
+            <input type="number" min="0.01" step="any" value="${qty !== '' ? qty : ''}" placeholder="1" class="bnd-comp-qty w-24 text-center text-xs font-bold rounded-xl border border-slate-200 focus:border-purple-600 py-1.5 px-2 bg-white">
           </td>
           <td class="p-3 text-center">
             <button type="button" class="btn-remove-bnd-item text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors cursor-pointer">
@@ -2755,65 +2998,55 @@ function openNewBundleModal(onSaved) {
             </button>
           </td>
         `;
-        item.querySelector('.btn-remove-bnd-item').onclick = () => item.remove();
+        item.querySelector('.btn-remove-bnd-item').onclick = () => {
+          item.remove();
+          renderEmptyState();
+        };
         container.appendChild(item);
+        initAllSearchableDropdowns(item);
       };
 
-      addBtn.onclick = () => addItem(variants[0]?.id, 'PER_LINE', 1, 5);
-      addItem(variants[0]?.id, 'PER_LINE', 40, 5);
+      addBtn.onclick = () => addItem();
+      renderEmptyState();
 
       modalEl.querySelector('#new-bundle-form').onsubmit = (e) => {
         e.preventDefault();
         const name = modalEl.querySelector('#bnd-name').value.trim();
-        const code = modalEl.querySelector('#bnd-code').value.trim();
-        const bundleType = modalEl.querySelector('#bnd-type').value;
-        const baseUnit = modalEl.querySelector('#bnd-unit').value.trim() || 'Line';
+        const bundleQty = Number(modalEl.querySelector('#bnd-qty').value) || 1;
         const sellingPrice = Number(modalEl.querySelector('#bnd-price').value) || 0;
-        const description = modalEl.querySelector('#bnd-desc').value.trim();
 
         const components = [];
-        container.querySelectorAll('tr').forEach(r => {
-          const vId = r.querySelector('.bnd-comp-var').value;
-          const rule = r.querySelector('.bnd-comp-rule').value;
-          const factor = Number(r.querySelector('.bnd-comp-factor').value) || 1;
-          const group = Number(r.querySelector('.bnd-comp-group').value) || 5;
+        container.querySelectorAll('.bnd-item-row').forEach(r => {
+          const vId = r.querySelector('.searchable-select-hidden')?.value;
+          const qty = Number(r.querySelector('.bnd-comp-qty')?.value) || 1;
+          const v = varMap.get(vId);
 
-          const params = {};
-          if (rule === 'PER_LINE') params.quantityPerLine = factor;
-          else if (rule === 'FIXED_QTY') params.fixedQuantity = factor;
-          else if (rule === 'PER_GROUP_CEIL') {
-            params.quantityPerGroup = factor;
-            params.linesPerGroup = group;
+          if (vId) {
+            components.push({
+              componentVariantId: vId,
+              productId: v?.productId || null,
+              name: v?.name || '',
+              quantity: qty,
+              unit: v?.unit || 'PCS',
+              unitPrice: Number(v?.sellingPrice) || 0
+            });
           }
-
-          components.push({
-            componentVariantId: vId,
-            quantityRule: rule,
-            ruleType: rule,
-            baseFactor: factor,
-            groupSize: group,
-            parameters: params,
-            unit: 'PCS'
-          });
         });
 
         if (components.length === 0) {
-          toast.show('Add at least one component rule to the system.', 'error');
+          toast.show('Please add at least one product component to the bundle.', 'error');
           return;
         }
 
         try {
           bundleService.createBundle({
             name,
-            code,
-            bundleType,
-            baseUnit,
+            bundleQty,
             sellingPrice,
-            description,
             components
           });
 
-          toast.show(`Bundle / System "${name}" created.`, 'success');
+          toast.show(`Bundle "${name}" created successfully.`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {
@@ -2952,7 +3185,7 @@ function openSimulateBundleModal(bundleId) {
               </td>
               <td class="p-3">
                 <span class="text-[11px] font-mono text-purple-700 bg-purple-50 border border-purple-200/50 px-2 py-0.5 rounded font-bold">
-                  ${c.calculationText || c.quantityRule}
+                  ${c.baseQty} per bundle
                 </span>
               </td>
               <td class="p-3 text-center font-extrabold text-slate-900 text-sm">
