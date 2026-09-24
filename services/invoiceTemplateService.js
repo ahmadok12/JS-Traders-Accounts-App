@@ -96,8 +96,23 @@ class InvoiceTemplateService {
                   <div>${l.name || 'Feed Pan 16" - Made in China'}</div>
                   <div class="text-[10px] text-slate-400">${l.sku || 'FP-CN-16'}</div>
                 </td>
-                <td class="py-3 px-3 text-right font-semibold">${l.quantity || 1} ${l.unit || 'PCS'}</td>
-                <td class="py-3 px-3 text-right">${Number(l.unitPrice || 0).toLocaleString()}</td>
+                <td class="py-3 px-3 text-right font-semibold">
+                  ${l.isCutToLength ? (
+                    l.isRoll ? `
+                      <div>${l.rollCount || l.quantity} Roll${(l.rollCount || l.quantity) !== 1 ? 's' : ''}</div>
+                      <div class="text-[10px] text-[#138FCB] font-mono font-bold">(${(l.totalFeet || ((l.rollCount || l.quantity) * (l.rollLength || 5000))).toLocaleString()} ${l.baseUnit || 'ft'})</div>
+                    ` : `
+                      <div>${Number(l.totalFeet || l.quantity).toLocaleString()} ${l.baseUnit || 'ft'}</div>
+                      <div class="text-[10px] text-amber-600 font-semibold">(Loose Cut)</div>
+                    `
+                  ) : `
+                    ${l.quantity || 1} ${l.unit || 'PCS'}
+                  `}
+                </td>
+                <td class="py-3 px-3 text-right">
+                  ${Number(l.unitPrice || 0).toLocaleString()}
+                  ${l.isCutToLength ? `<span class="text-[10px] text-slate-500 block font-normal">per ${l.baseUnit || 'ft'}</span>` : ''}
+                </td>
                 <td class="py-3 px-3 text-right font-bold text-slate-900">${Number(l.lineTotal || 0).toLocaleString()}</td>
               </tr>
             `).join('')}

@@ -841,18 +841,47 @@ export function printSalesOrderVoucher(order) {
             const ord = Number(l.orderedQty) || 0;
             const del = Number(l.deliveredQty) || 0;
             const rem = Math.max(0, ord - del);
+            const variantObj = variants.find(v => v.id === l.variantId);
+            const isCtl = Boolean(l.isRoll || l.mode || l.totalFeet || variantObj?.isCutToLength || variantObj?.rollLength);
+            const baseUnit = l.baseUnit || variantObj?.rollUnit || 'ft';
+            const rollLen = l.rollSize || variantObj?.rollLength || 5000;
+
+            let qtyDisplay = `${ord} ${l.unit || 'PCS'}`;
+            let whDisplay = `${l.warehouseQty || 0}`;
+            let offDisplay = `${l.officeQty || 0}`;
+            let delDisplay = `${del}`;
+            let remDisplay = `${rem}`;
+
+            if (isCtl) {
+              if (l.isRoll || l.mode === 'rolls') {
+                const totalFt = l.totalFeet || (ord * rollLen);
+                qtyDisplay = `<div><strong>${ord} Roll${ord !== 1 ? 's' : ''}</strong></div><div style="font-size: 10px; color: #138FCB; font-weight: bold;">(${totalFt.toLocaleString()} ${baseUnit})</div>`;
+                if (l.warehouseQty) whDisplay = `${l.warehouseQty} Roll${l.warehouseQty !== 1 ? 's' : ''} <div style="font-size: 9px; color: #64748b;">(${(l.warehouseQty * rollLen).toLocaleString()} ${baseUnit})</div>`;
+                if (l.officeQty) offDisplay = `${l.officeQty} Roll${l.officeQty !== 1 ? 's' : ''} <div style="font-size: 9px; color: #64748b;">(${(l.officeQty * rollLen).toLocaleString()} ${baseUnit})</div>`;
+                delDisplay = del > 0 ? `${del} Roll${del !== 1 ? 's' : ''} (${(del * rollLen).toLocaleString()} ${baseUnit})` : '0';
+                remDisplay = rem > 0 ? `${rem} Roll${rem !== 1 ? 's' : ''} (${(rem * rollLen).toLocaleString()} ${baseUnit})` : '0';
+              } else {
+                const modeLabel = l.mode === 'loose_pcs' ? 'Loose - Pcs' : 'Loose - Continuous';
+                qtyDisplay = `<div><strong>${ord.toLocaleString()} ${baseUnit}</strong></div><div style="font-size: 10px; color: #d97706; font-weight: 600;">(${modeLabel})</div>`;
+                if (l.warehouseQty) whDisplay = `${Number(l.warehouseQty).toLocaleString()} ${baseUnit}`;
+                if (l.officeQty) offDisplay = `${Number(l.officeQty).toLocaleString()} ${baseUnit}`;
+                delDisplay = del > 0 ? `${del.toLocaleString()} ${baseUnit}` : '0';
+                remDisplay = rem > 0 ? `${rem.toLocaleString()} ${baseUnit}` : '0';
+              }
+            }
+
             return `
               <tr>
                 <td>${i + 1}</td>
                 <td>
                   <strong>${varMap.get(l.variantId) || 'Product Item'}</strong>
-                  ${l.packagingName ? `<div style="font-size: 10px; color: #64748b;">${l.packagingName}</div>` : ''}
+                  ${variantObj?.sku ? `<div style="font-size: 10px; color: #64748b; font-family: monospace;">SKU: ${variantObj.sku}</div>` : ''}
                 </td>
-                <td class="text-center font-mono">${l.warehouseQty || 0}</td>
-                <td class="text-center font-mono">${l.officeQty || 0}</td>
-                <td class="text-center font-mono" style="font-weight: 800;">${ord} ${l.unit || 'PCS'}</td>
-                <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${del}</td>
-                <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${rem}</td>
+                <td class="text-center font-mono">${whDisplay}</td>
+                <td class="text-center font-mono">${offDisplay}</td>
+                <td class="text-center font-mono" style="font-weight: 800;">${qtyDisplay}</td>
+                <td class="text-center font-mono" style="color: #059669; font-weight: 700;">${delDisplay}</td>
+                <td class="text-center font-mono" style="color: #2563eb; font-weight: 700;">${remDisplay}</td>
               </tr>
             `;
           }).join('')}

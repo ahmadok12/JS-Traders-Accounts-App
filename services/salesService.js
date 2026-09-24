@@ -148,6 +148,8 @@ class SalesService {
         rollSize: l.rollSize || null,
         packagingName: l.packagingName || null,
         totalFeet: l.totalFeet || null,
+        mode: l.mode || null,
+        baseUnit: l.baseUnit || null,
         unit: l.unit || v.unit || 'PCS',
         unitPrice: price,
         lineTotal,
@@ -356,16 +358,24 @@ class SalesService {
     const lines = (invoiceData.lines || []).map(l => {
       const qty = Number(l.quantity) || 0;
       const price = Number(l.unitPrice) || 0;
-      const lineTotal = qty * price;
+      const lineTotal = l.lineTotal !== undefined ? Number(l.lineTotal) : (l.totalFeet ? Number(l.totalFeet) * price : qty * price);
       subtotal += lineTotal;
       return {
         variantId: l.variantId || null,
+        productId: l.productId || null,
         bundleId: l.bundleId || null,
         bundleName: l.bundleName || null,
         isBundle: Boolean(l.isBundle || l.bundleId),
         bundleType: l.bundleType || null,
         bundleQuantity: l.isBundle || l.bundleId ? qty : null,
         bundleComponents: l.bundleComponents || null,
+        isCutToLength: Boolean(l.isCutToLength),
+        isRoll: Boolean(l.isRoll),
+        rollCount: l.rollCount || null,
+        rollLength: l.rollLength || null,
+        totalFeet: l.totalFeet || null,
+        mode: l.mode || null,
+        baseUnit: l.baseUnit || null,
         quantity: qty,
         unitPrice: price,
         lineTotal,

@@ -118,13 +118,23 @@ function openInvoicePrintModal(invoice, refreshCallback) {
 
   const lines = (invoice.lines || []).map(l => {
     const v = varMap.get(l.variantId) || {};
+    const prod = v.productId ? productService.getProductById(v.productId) : null;
+    const isCtl = Boolean(v.isCutToLength || v.rollLength || (prod && (prod.cut_to_length || prod.enableRollTracking)) || l.isCutToLength || l.totalFeet);
+    const baseUnit = l.baseUnit || v.rollUnit || prod?.base_unit || 'ft';
+
     return {
-      name: v.name || 'Feed Pan 16" - Made in China',
-      sku: v.sku || 'FP-CN-16',
+      name: v.name || 'Product Item',
+      sku: v.sku || 'SKU',
       quantity: l.quantity,
       unit: l.unit || 'PCS',
       unitPrice: l.unitPrice,
-      lineTotal: l.lineTotal
+      lineTotal: l.lineTotal,
+      isCutToLength: isCtl,
+      isRoll: Boolean(l.isRoll),
+      rollCount: l.rollCount,
+      rollLength: l.rollLength,
+      totalFeet: l.totalFeet,
+      baseUnit
     };
   });
 
@@ -422,19 +432,6 @@ function openCreateInvoiceModal(onSaved) {
       const grandTotalEl = modalEl.querySelector('#inv-grand-total');
       const ctlStockPill = modalEl.querySelector('#inv-ctl-stock-pill');
 
-      const recalculate = () => {
-        const qty = Number(qtyInput.value) || 0;
-        const price = Number(priceInput.value) || 0;
-        const total = qty * price;
-
-        lineAmountEl.textContent = `Rs. ${total.toLocaleString()}`;
-        subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
-        grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
-
-        if (currentMode === 'bundle') {
-          updateBundleDisplay();
-        }
-      };
 
       const updateBundleDisplay = () => {
         const bId = bundleSelect.value;
@@ -487,36 +484,36 @@ function openCreateInvoiceModal(onSaved) {
         if (!selectedOpt) return;
         const prodId = selectedOpt.getAttribute('data-product-id');
         const product = prodMap.get(prodId);
-        const isCtl = product && (product.cut_to_length || product.enableRollTracking);
+        const variant = variants.find(v => v.id === varSelect.value);
+        const isCtl = Boolean(variant?.isCutToLength || variant?.rollLength || (product && (product.cut_to_length || product.enableRollTracking)));
+        const baseUnit = variant?.rollUnit || product?.base_unit || 'ft';
+        const rollLength = Number(variant?.rollLength) || Number(product?.packagingUnits?.[0]?.factor) || 5000;
 
         if (isCtl) {
-          const baseUnit = product.base_unit || 'ft';
-          const pkgs = product.packagingUnits || [];
+          const curVal = unitSelect.value || 'loose_continuous';
           unitSelect.innerHTML = `
-            <option value="${baseUnit}" data-type="base" data-factor="1">${baseUnit} (Loose Cut)</option>
-            ${pkgs.map(pkg => `
-              <option value="${pkg.name}" data-type="pkg" data-factor="${pkg.factor}">
-                ${pkg.name}
-              </option>
-            `).join('')}
+            <option value="rolls" ${curVal === 'rolls' ? 'selected' : ''}>1. Rolls (${rollLength.toLocaleString()} ${baseUnit}/roll)</option>
+            <option value="loose_continuous" ${curVal === 'loose_continuous' ? 'selected' : ''}>2. Loose - Continuous (${baseUnit})</option>
+            <option value="loose_pcs" ${curVal === 'loose_pcs' ? 'selected' : ''}>3. Loose - Pcs (${baseUnit})</option>
           `;
 
           // Live stock preview
-          const summary = cutToLengthService.getSummary(product.id, 'wh-1', varSelect.value);
-          if (summary) {
-            const rollsText = summary.rollsBySize.map(r => `<strong>${r.count}</strong> ${r.packagingName}`).join(' + ') || `${summary.fullRollsCount} Full Rolls`;
-            ctlStockPill.innerHTML = `📦 <strong>Stock:</strong> ${rollsText} + <strong>${summary.loosePiecesFootage.toLocaleString()} ${summary.baseUnit}</strong> Loose (${summary.loosePiecesCount} pcs) • Total: <strong>${summary.totalFootage.toLocaleString()} ${summary.baseUnit}</strong>`;
+          const stockRec = cutToLengthService.getVariantStock('wh-1', variant.id);
+          if (stockRec) {
+            const rollsCount = stockRec.fullRolls;
+            const looseList = stockRec.loosePieces || [];
+            const totalFootage = (rollsCount * rollLength) + looseList.reduce((a, b) => a + b, 0);
+            const looseStr = looseList.length > 0 ? ` + [${looseList.map(n => n.toLocaleString()).join(', ')}] ${baseUnit} loose` : '';
+            ctlStockPill.innerHTML = `📦 <strong>WH-1 Stock:</strong> ${rollsCount} roll(s)${looseStr} • Total: <strong>${totalFootage.toLocaleString()} ${baseUnit}</strong>`;
             ctlStockPill.classList.remove('hidden');
           }
         } else {
-          const variant = variants.find(v => v.id === varSelect.value);
           unitSelect.innerHTML = `<option value="${variant?.unit || 'PCS'}">${variant?.unit || 'PCS'}</option>`;
           ctlStockPill.classList.add('hidden');
         }
 
-        // Set initial price
-        const variant = variants.find(v => v.id === varSelect.value);
-        if (variant) priceInput.value = variant.sellingPrice || 0;
+        // Set initial rate / price
+        if (variant) priceInput.value = variant.sellingPrice || 20;
         recalculate();
       };
 
@@ -558,23 +555,58 @@ function openCreateInvoiceModal(onSaved) {
       };
 
       unitSelect.onchange = () => {
-        if (currentMode === 'bundle') return;
-        const opt = unitSelect.selectedOptions[0];
+        recalculate();
+      };
+
+      const recalculate = () => {
+        if (currentMode === 'bundle') {
+          const qty = Number(qtyInput.value) || 0;
+          const price = Number(priceInput.value) || 0;
+          const total = qty * price;
+          lineAmountEl.textContent = `Rs. ${total.toLocaleString()}`;
+          subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
+          grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
+          updateBundleDisplay();
+          return;
+        }
+
         const selectedOpt = varSelect.selectedOptions[0];
         const prodId = selectedOpt ? selectedOpt.getAttribute('data-product-id') : null;
         const product = prodMap.get(prodId);
         const variant = variants.find(v => v.id === varSelect.value);
+        const isCtl = Boolean(variant?.isCutToLength || variant?.rollLength || (product && (product.cut_to_length || product.enableRollTracking)));
+        const baseUnit = variant?.rollUnit || product?.base_unit || 'ft';
+        const rollLength = Number(variant?.rollLength) || Number(product?.packagingUnits?.[0]?.factor) || 5000;
 
-        if (opt && variant && product && (product.cut_to_length || product.enableRollTracking)) {
-          const type = opt.getAttribute('data-type');
-          const factor = Number(opt.getAttribute('data-factor')) || 1;
-          if (type === 'pkg') {
-            priceInput.value = (variant.sellingPrice || 20) * factor;
+        const qty = Number(qtyInput.value) || 0;
+        const price = Number(priceInput.value) || 0;
+
+        if (isCtl) {
+          const mode = unitSelect.value || 'loose_continuous';
+          if (mode === 'rolls') {
+            thItemQty.textContent = 'Rolls';
+            qtyInput.placeholder = '0 Rolls';
+            const totalFeet = qty * rollLength;
+            const total = totalFeet * price;
+            lineAmountEl.innerHTML = `Rs. ${total.toLocaleString()} <span class="text-[10px] text-slate-500 font-semibold block">(${totalFeet.toLocaleString()} ${baseUnit} × Rs. ${price}/${baseUnit})</span>`;
+            subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
+            grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
           } else {
-            priceInput.value = variant.sellingPrice || 20;
+            thItemQty.textContent = baseUnit;
+            qtyInput.placeholder = `0 ${baseUnit}`;
+            const total = qty * price;
+            lineAmountEl.innerHTML = `Rs. ${total.toLocaleString()} <span class="text-[10px] text-slate-500 font-semibold block">(${qty.toLocaleString()} ${baseUnit} × Rs. ${price}/${baseUnit})</span>`;
+            subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
+            grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
           }
+        } else {
+          thItemQty.textContent = 'Qty';
+          qtyInput.placeholder = '0';
+          const total = qty * price;
+          lineAmountEl.textContent = `Rs. ${total.toLocaleString()}`;
+          subtotalEl.textContent = `Rs. ${total.toLocaleString()}`;
+          grandTotalEl.textContent = `Rs. ${total.toLocaleString()}`;
         }
-        recalculate();
       };
 
       varSelect.onchange = syncUnitAndProduct;
@@ -628,9 +660,61 @@ function openCreateInvoiceModal(onSaved) {
         const selectedOpt = varSelect.selectedOptions[0];
         const prodId = selectedOpt ? selectedOpt.getAttribute('data-product-id') : null;
         const product = prodMap.get(prodId);
-        const isCtl = product && (product.cut_to_length || product.enableRollTracking);
+        const variant = variants.find(v => v.id === variantId);
+        const isCtl = Boolean(variant?.isCutToLength || variant?.rollLength || (product && (product.cut_to_length || product.enableRollTracking)));
+        const baseUnit = variant?.rollUnit || product?.base_unit || 'ft';
+        const rollLength = Number(variant?.rollLength) || Number(product?.packagingUnits?.[0]?.factor) || 5000;
 
-        const executeCreateInvoice = (allocationPlan = null) => {
+        if (isCtl) {
+          const mode = chosenUnit || 'loose_continuous';
+          const plan = cutToLengthService.simulateAllocation({
+            warehouseId: 'wh-1',
+            variantId,
+            mode,
+            quantity
+          });
+
+          if (!plan.canFulfill) {
+            toast.show(plan.error || 'Cannot fulfill requested cut-to-length stock.', 'error');
+            return;
+          }
+
+          const totalFeet = (mode === 'rolls') ? (quantity * rollLength) : quantity;
+          const lineTotal = totalFeet * unitPrice;
+
+          const invoice = salesService.createSalesInvoice({
+            customerPartyId,
+            dueDate,
+            lines: [
+              {
+                variantId,
+                productId: prodId,
+                quantity,
+                rollCount: mode === 'rolls' ? quantity : null,
+                rollLength: mode === 'rolls' ? rollLength : null,
+                totalFeet,
+                isCutToLength: true,
+                isRoll: mode === 'rolls',
+                mode,
+                unit: mode === 'rolls' ? 'Rolls' : baseUnit,
+                baseUnit,
+                unitPrice,
+                lineTotal
+              }
+            ]
+          });
+
+          cutToLengthService.commitAllocation(plan, {
+            referenceDocType: 'salesInvoice',
+            referenceDocId: invoice.invoiceNumber,
+            userId: 'user-admin',
+            notes: `Allocated for invoice ${invoice.invoiceNumber}`
+          });
+
+          toast.show(`Sales invoice ${invoice.invoiceNumber} created & inventory allocated.`, 'success');
+          closeModal();
+          if (onSaved) onSaved();
+        } else {
           const invoice = salesService.createSalesInvoice({
             customerPartyId,
             dueDate,
@@ -641,66 +725,14 @@ function openCreateInvoiceModal(onSaved) {
                 quantity,
                 unitPrice,
                 unit: chosenUnit,
-                allocationPlanType: allocationPlan ? allocationPlan.type : null
+                lineTotal: quantity * unitPrice
               }
             ]
           });
 
-          if (allocationPlan) {
-            cutToLengthService.commitAllocation(allocationPlan, {
-              referenceDocType: 'salesInvoice',
-              referenceDocId: invoice.id,
-              userId: 'user-admin',
-              notes: `Allocated for sales invoice ${invoice.invoiceNumber}`
-            });
-          }
-
-          toast.show(`Sales invoice ${invoice.invoiceNumber} created & inventory allocated.`, 'success');
+          toast.show(`Sales invoice ${invoice.invoiceNumber} created successfully.`, 'success');
           closeModal();
           if (onSaved) onSaved();
-        };
-
-        if (isCtl) {
-          const plan = cutToLengthService.planAllocation({
-            productId: product.id,
-            variantId,
-            warehouseId: 'wh-1',
-            requestedQty: quantity,
-            unit: chosenUnit,
-            allowMultiPieces: false
-          });
-
-          if (plan.canFulfill) {
-            executeCreateInvoice(plan);
-          } else if (plan.requiresDecision) {
-            openDecisionModal(plan, (chosenAction) => {
-              if (chosenAction === 'open_roll') {
-                const openPlan = cutToLengthService.planAllocation({
-                  productId: product.id,
-                  variantId,
-                  warehouseId: 'wh-1',
-                  requestedQty: quantity,
-                  unit: chosenUnit,
-                  allowMultiPieces: false
-                });
-                executeCreateInvoice(openPlan);
-              } else if (chosenAction === 'multi_piece') {
-                const multiPlan = cutToLengthService.planAllocation({
-                  productId: product.id,
-                  variantId,
-                  warehouseId: 'wh-1',
-                  requestedQty: quantity,
-                  unit: chosenUnit,
-                  allowMultiPieces: true
-                });
-                executeCreateInvoice(multiPlan);
-              }
-            });
-          } else {
-            toast.show(plan.error || 'Insufficient inventory.', 'error');
-          }
-        } else {
-          executeCreateInvoice(null);
         }
       };
     }

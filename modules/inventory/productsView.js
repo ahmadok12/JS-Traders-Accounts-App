@@ -1936,10 +1936,8 @@ export function openProductModal(product = null, onSaved) {
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="space-y-1">
               <label class="text-[11px] font-semibold text-slate-700" for="prod-ctl-base-unit">Continuous Base Length Unit</label>
-              <select id="prod-ctl-base-unit" class="w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]">
-                <option value="ft" ${!product || product.base_unit === 'ft' ? 'selected' : ''}>Feet (ft)</option>
-                <option value="m" ${product && product.base_unit === 'm' ? 'selected' : ''}>Meters (m)</option>
-              </select>
+              <input type="text" id="prod-ctl-base-unit" value="${product?.base_unit || 'ft'}" placeholder="ft" class="w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]">
+              <span class="text-[10px] text-slate-400">Base measurement unit (defaults to ft, customizable)</span>
             </div>
             <div class="space-y-1">
               <label class="text-[11px] font-semibold text-slate-700" for="prod-ctl-full-unit-name">Full Unit Packaging Type</label>
@@ -1952,8 +1950,8 @@ export function openProductModal(product = null, onSaved) {
             <label class="text-[11px] font-bold text-slate-700 block">Defined Full Roll Sizes (Packaging Options)</label>
             <div id="roll-sizes-container" class="space-y-2">
               ${(product?.packagingUnits && product.packagingUnits.length > 0 ? product.packagingUnits : [
-                { id: 'pkg-default-1', name: 'Roll (5,000 ft)', factor: 5000, unit: 'ft' },
-                { id: 'pkg-default-2', name: 'Roll (3,280 ft)', factor: 3280, unit: 'ft' }
+                { id: 'pkg-default-1', name: 'Roll (5,000 ft)', factor: 5000, unit: product?.base_unit || 'ft' },
+                { id: 'pkg-default-2', name: 'Roll (3,280 ft)', factor: 3280, unit: product?.base_unit || 'ft' }
               ]).map((pkg) => `
                 <div class="roll-size-row flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 shadow-2xs">
                   <div class="flex-1">
@@ -1961,7 +1959,7 @@ export function openProductModal(product = null, onSaved) {
                   </div>
                   <div class="w-32 flex items-center gap-1">
                     <input type="number" min="1" value="${pkg.factor}" placeholder="5000" class="roll-size-qty w-full text-xs font-mono font-bold text-blue-900 border border-slate-200 rounded px-2 py-1 text-right focus:border-[#138FCB]">
-                    <span class="roll-size-unit-lbl text-[10px] text-slate-500 font-bold shrink-0">${pkg.unit || 'ft'}</span>
+                    <span class="roll-size-unit-lbl text-[10px] text-slate-500 font-bold shrink-0">${pkg.unit || product?.base_unit || 'ft'}</span>
                   </div>
                   <button type="button" class="remove-roll-size-btn text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer" title="Remove roll size">
                     ✕
@@ -1980,6 +1978,27 @@ export function openProductModal(product = null, onSaved) {
         <div class="flex items-center gap-2 pt-1">
           <input type="checkbox" id="prod-active" ${!product || product.isActive ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
           <label for="prod-active" class="font-semibold text-slate-700 cursor-pointer">Active Product in ERP Catalog</label>
+        </div>
+      </section>
+
+      <!-- SECTION 3: Product Variants & SKUs (Direct Variant Definition) -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4" data-purpose="product-variants-section">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+              <span>🏷️</span>
+              <span>3. Product Variants &amp; SKUs</span>
+            </h3>
+            <p class="text-[10px] text-slate-400 mt-0.5">Define one or multiple variant models with separate SKUs, pricing &amp; roll lengths</p>
+          </div>
+          <button type="button" id="modal-add-variant-row-btn" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#138FCB] rounded-xl text-xs font-bold border border-blue-200 transition-all cursor-pointer shadow-2xs">
+            <span class="text-sm font-extrabold leading-none">+</span>
+            <span>Add Variant Row</span>
+          </button>
+        </div>
+
+        <div id="modal-variants-list" class="space-y-3">
+          <!-- Dynamic variant cards rendered in onOpen -->
         </div>
       </section>
     </form>
@@ -2006,7 +2025,7 @@ export function openProductModal(product = null, onSaved) {
     badge: isEdit ? product.code : 'PROD-NEW',
     contentHtml,
     footerHtml,
-    size: 'max-w-3xl',
+    size: 'max-w-4xl',
     onOpen: (modalEl) => {
       const cancelBtn = modalEl.querySelector('#prod-cancel-btn');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
@@ -2014,16 +2033,31 @@ export function openProductModal(product = null, onSaved) {
       // Cut-to-Length toggle visibility
       const rollCheckbox = modalEl.querySelector('#prod-roll-tracking');
       const ctlBox = modalEl.querySelector('#prod-ctl-config-box');
+      const ctlBaseUnitInput = modalEl.querySelector('#prod-ctl-base-unit');
+      const rollContainer = modalEl.querySelector('#roll-sizes-container');
+
       if (rollCheckbox && ctlBox) {
         rollCheckbox.onchange = () => {
-          ctlBox.classList.toggle('hidden', !rollCheckbox.checked);
+          const checked = rollCheckbox.checked;
+          ctlBox.classList.toggle('hidden', !checked);
+          const currentUnit = (ctlBaseUnitInput ? ctlBaseUnitInput.value.trim() : '') || 'ft';
+          modalEl.querySelectorAll('.mvar-ctl-fields').forEach(f => {
+            f.classList.toggle('hidden', !checked);
+          });
+          modalEl.querySelectorAll('.mvar-price-label').forEach(lbl => {
+            lbl.textContent = checked ? `Rate (PKR/${currentUnit})` : 'Selling Price (PKR)';
+          });
+          modalEl.querySelectorAll('.mvar-unit').forEach(inp => {
+            if (checked && (!inp.value || inp.value === 'PCS')) inp.value = currentUnit;
+          });
+          modalEl.querySelectorAll('.mvar-roll-unit').forEach(inp => {
+            if (!inp.value) inp.value = currentUnit;
+          });
         };
       }
 
       // Add & Remove Roll Sizes
       const addRollBtn = modalEl.querySelector('#add-roll-size-btn');
-      const rollContainer = modalEl.querySelector('#roll-sizes-container');
-      const baseUnitSelect = modalEl.querySelector('#prod-ctl-base-unit');
 
       const bindRemoveButtons = () => {
         if (!rollContainer) return;
@@ -2040,18 +2074,26 @@ export function openProductModal(product = null, onSaved) {
       };
       bindRemoveButtons();
 
-      if (baseUnitSelect) {
-        baseUnitSelect.onchange = () => {
-          const u = baseUnitSelect.value;
+      if (ctlBaseUnitInput) {
+        ctlBaseUnitInput.oninput = () => {
+          const u = ctlBaseUnitInput.value.trim() || 'ft';
           if (rollContainer) {
             rollContainer.querySelectorAll('.roll-size-unit-lbl').forEach(lbl => lbl.textContent = u);
+          }
+          if (rollCheckbox && rollCheckbox.checked) {
+            modalEl.querySelectorAll('.mvar-price-label').forEach(lbl => {
+              lbl.textContent = `Rate (PKR/${u})`;
+            });
+            modalEl.querySelectorAll('.mvar-roll-unit').forEach(inp => {
+              inp.value = u;
+            });
           }
         };
       }
 
       if (addRollBtn && rollContainer) {
         addRollBtn.onclick = () => {
-          const u = baseUnitSelect ? baseUnitSelect.value : 'ft';
+          const u = (ctlBaseUnitInput ? ctlBaseUnitInput.value.trim() : '') || 'ft';
           const newRow = document.createElement('div');
           newRow.className = 'roll-size-row flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 shadow-2xs animate-in fade-in duration-100';
           newRow.innerHTML = `
@@ -2071,6 +2113,110 @@ export function openProductModal(product = null, onSaved) {
         };
       }
 
+      // SECTION 3: Dynamic Variant Cards Lifecycle
+      let variantCounter = 0;
+      const renderVariantCard = (v = null, isExisting = false) => {
+        variantCounter++;
+        const card = document.createElement('div');
+        const isCtlNow = rollCheckbox ? rollCheckbox.checked : false;
+        const currentBaseUnit = (ctlBaseUnitInput ? ctlBaseUnitInput.value.trim() : '') || 'ft';
+        const defaultRollLen = 5000;
+
+        card.className = 'modal-variant-card p-3.5 bg-slate-50/80 hover:bg-slate-50 rounded-xl border border-slate-200/90 shadow-2xs space-y-3 transition-all';
+        card.setAttribute('data-is-existing', isExisting ? '1' : '0');
+        if (isExisting && v?.id) {
+          card.setAttribute('data-var-id', v.id);
+        }
+
+        const suggestedSku = isExisting
+          ? (v?.sku || '')
+          : ((product ? product.code : 'PROD') + `-V${String(variantCounter).padStart(2, '0')}`);
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200/60">
+            <div class="flex items-center gap-2">
+              <span class="w-5 h-5 rounded-full bg-blue-100 text-[#138FCB] font-bold text-[10px] flex items-center justify-center font-mono">#${variantCounter}</span>
+              <span class="font-bold text-slate-800 text-xs">${isExisting ? (v?.name || 'Existing SKU') : 'New Variant'}</span>
+              ${isExisting ? '<span class="text-[9px] font-bold bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded">Saved SKU</span>' : '<span class="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">New Variant</span>'}
+            </div>
+            ${!isExisting ? `
+              <button type="button" class="remove-variant-card-btn text-slate-400 hover:text-rose-600 text-xs font-bold p-1 cursor-pointer transition-colors" title="Remove this variant">
+                ✕ Remove
+              </button>
+            ` : ''}
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div class="sm:col-span-5 space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700">Variant Name / Model <span class="text-red-500">*</span></label>
+              <input type="text" class="mvar-name w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${v?.name || ''}" placeholder="e.g. Standard Model, 450 ft Roll, Heavy Gauge">
+            </div>
+
+            <div class="sm:col-span-4 space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700">SKU Code <span class="text-red-500">*</span></label>
+              <input type="text" class="mvar-sku w-full text-xs font-mono font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${suggestedSku}" placeholder="e.g. FP-CN-01">
+            </div>
+
+            <div class="sm:col-span-3 space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700">Packaging Unit</label>
+              <input type="text" class="mvar-unit w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${v?.unit || (isCtlNow ? currentBaseUnit : 'PCS')}" placeholder="${isCtlNow ? currentBaseUnit : 'PCS'}">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+            <div class="sm:col-span-3 space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700">Cost Price (PKR)</label>
+              <input type="number" min="0" step="any" class="mvar-cost w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB]" value="${v?.costPrice || 0}">
+            </div>
+
+            <div class="sm:col-span-3 space-y-1">
+              <label class="text-[11px] font-semibold text-slate-700">
+                <span class="mvar-price-label">${isCtlNow ? `Rate (PKR/${currentBaseUnit})` : 'Selling Price (PKR)'}</span>
+              </label>
+              <input type="number" min="0" step="any" class="mvar-price w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-emerald-800 focus:border-[#138FCB]" value="${v?.sellingPrice || 0}">
+            </div>
+
+            <div class="mvar-ctl-fields sm:col-span-6 grid grid-cols-2 gap-2 ${isCtlNow ? '' : 'hidden'}">
+              <div class="space-y-1">
+                <label class="text-[11px] font-semibold text-blue-900">Standard Roll Length</label>
+                <input type="number" min="1" step="any" class="mvar-roll-len w-full text-xs font-bold rounded-lg border border-blue-200 bg-white py-1.5 px-2.5 text-blue-900 focus:border-[#138FCB]" value="${v?.rollLength || defaultRollLen}" placeholder="5000">
+              </div>
+              <div class="space-y-1">
+                <label class="text-[11px] font-semibold text-blue-900">Roll Unit</label>
+                <input type="text" class="mvar-roll-unit w-full text-xs font-bold rounded-lg border border-blue-200 bg-white py-1.5 px-2.5 text-blue-900 focus:border-[#138FCB]" value="${v?.rollUnit || currentBaseUnit}" placeholder="${currentBaseUnit}">
+              </div>
+            </div>
+          </div>
+        `;
+
+        const rmBtn = card.querySelector('.remove-variant-card-btn');
+        if (rmBtn) {
+          rmBtn.onclick = () => card.remove();
+        }
+
+        return card;
+      };
+
+      const variantsList = modalEl.querySelector('#modal-variants-list');
+      const addVariantRowBtn = modalEl.querySelector('#modal-add-variant-row-btn');
+
+      if (isEdit && product) {
+        const existingVariants = productService.getVariantsByProduct(product.id);
+        existingVariants.forEach(v => {
+          variantsList.appendChild(renderVariantCard(v, true));
+        });
+      }
+
+      if (!isEdit || variantsList.children.length === 0) {
+        variantsList.appendChild(renderVariantCard(null, false));
+      }
+
+      if (addVariantRowBtn) {
+        addVariantRowBtn.onclick = () => {
+          variantsList.appendChild(renderVariantCard(null, false));
+        };
+      }
+
       modalEl.querySelector('#product-master-form').onsubmit = (e) => {
         e.preventDefault();
         const businessName = modalEl.querySelector('#prod-biz-name').value.trim();
@@ -2087,7 +2233,7 @@ export function openProductModal(product = null, onSaved) {
 
         // Cut to length multi-packaging data
         const cut_to_length = enableRollTracking;
-        const base_unit = modalEl.querySelector('#prod-ctl-base-unit')?.value || 'ft';
+        const base_unit = modalEl.querySelector('#prod-ctl-base-unit')?.value.trim() || 'ft';
         const full_unit = modalEl.querySelector('#prod-ctl-full-unit-name')?.value.trim() || 'roll';
 
         const packagingUnits = [];
@@ -2124,13 +2270,76 @@ export function openProductModal(product = null, onSaved) {
           isActive
         };
 
+        let savedProduct = null;
         if (isEdit) {
-          productService.updateProduct(product.id, payload);
+          savedProduct = productService.updateProduct(product.id, payload);
           toast.show('Product updated successfully.', 'success');
         } else {
-          productService.createProduct(payload);
+          savedProduct = productService.createProduct(payload);
           toast.show('Product created successfully.', 'success');
         }
+
+        // Process variant cards defined in modal
+        const variantCards = modalEl.querySelectorAll('.modal-variant-card');
+        const targetProdId = savedProduct.id;
+        const prodCode = savedProduct.code;
+
+        variantCards.forEach((card, idx) => {
+          const isExisting = card.getAttribute('data-is-existing') === '1';
+          const name = card.querySelector('.mvar-name')?.value.trim() || (variantCards.length === 1 ? savedProduct.customerName : `Model ${idx + 1}`);
+          const sku = card.querySelector('.mvar-sku')?.value.trim() || `${prodCode}-V${String(idx + 1).padStart(2, '0')}`;
+          const costPrice = Number(card.querySelector('.mvar-cost')?.value) || 0;
+          const sellingPrice = Number(card.querySelector('.mvar-price')?.value) || 0;
+          const unit = card.querySelector('.mvar-unit')?.value.trim() || (cut_to_length ? base_unit : 'PCS');
+          const rollLength = Number(card.querySelector('.mvar-roll-len')?.value) || 5000;
+          const rollUnit = card.querySelector('.mvar-roll-unit')?.value.trim() || base_unit;
+
+          if (isExisting) {
+            const vId = card.getAttribute('data-var-id');
+            if (vId) {
+              productService.updateVariant(vId, {
+                name,
+                sku,
+                costPrice,
+                sellingPrice,
+                unit,
+                isCutToLength: cut_to_length,
+                rollLength: cut_to_length ? rollLength : undefined,
+                rollUnit: cut_to_length ? rollUnit : undefined
+              });
+              if (cut_to_length) {
+                const stockRec = cutToLengthService.getVariantStock('wh-1', vId);
+                cutToLengthService.saveVariantStock('wh-1', vId, {
+                  fullRolls: stockRec?.fullRolls !== undefined ? stockRec.fullRolls : 5,
+                  rollLength,
+                  loosePieces: stockRec?.loosePieces || [],
+                  unit: rollUnit
+                });
+              }
+            }
+          } else {
+            const createdVar = productService.createVariant({
+              productId: targetProdId,
+              name,
+              sku,
+              costPrice,
+              sellingPrice,
+              unit,
+              isCutToLength: cut_to_length,
+              rollLength: cut_to_length ? rollLength : null,
+              rollUnit: cut_to_length ? rollUnit : null
+            });
+
+            if (cut_to_length && createdVar?.id) {
+              cutToLengthService.saveVariantStock('wh-1', createdVar.id, {
+                fullRolls: 5,
+                rollLength,
+                loosePieces: [],
+                unit: rollUnit
+              });
+            }
+          }
+        });
 
         closeModal();
         if (onSaved) onSaved();
