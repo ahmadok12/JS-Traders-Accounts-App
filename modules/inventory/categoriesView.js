@@ -102,7 +102,7 @@ export function bindCategoriesEvents(container, refreshCallback) {
   });
 }
 
-function openCategoryModal(category = null, onSaved) {
+export function openCategoryModal(category = null, onSaved) {
   const isEdit = !!category;
   const contentHtml = `
     <form id="category-form" class="space-y-4 text-xs">
@@ -151,16 +151,17 @@ function openCategoryModal(category = null, onSaved) {
           return;
         }
 
+        let savedCat = null;
         if (isEdit) {
-          productService.updateCategory(category.id, { name, description, isActive });
+          savedCat = productService.updateCategory(category.id, { name, description, isActive });
           toast.show('Category updated successfully.', 'success');
         } else {
-          productService.createCategory({ name, description, isActive });
+          savedCat = productService.createCategory({ name, description, isActive });
           toast.show('Category created successfully.', 'success');
         }
 
         closeModal();
-        if (onSaved) onSaved();
+        if (onSaved) onSaved(savedCat);
       };
     }
   });

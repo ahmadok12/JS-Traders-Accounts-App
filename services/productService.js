@@ -39,6 +39,22 @@ class ProductService {
     return storageService.delete('categories', id);
   }
 
+  reorderCategories(orderedIds) {
+    const categories = this.getCategories();
+    const catMap = new Map(categories.map(c => [c.id, c]));
+    const newCategories = [];
+    orderedIds.forEach(id => {
+      if (catMap.has(id)) {
+        newCategories.push(catMap.get(id));
+        catMap.delete(id);
+      }
+    });
+    // Append any remaining categories not present in orderedIds
+    catMap.forEach(cat => newCategories.push(cat));
+    storageService.setCollection('categories', newCategories);
+    return newCategories;
+  }
+
   // --- PRODUCTS ---
   getProducts() {
     return storageService.getCollection('products');

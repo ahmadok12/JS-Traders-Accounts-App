@@ -2158,6 +2158,13 @@ class StorageService {
     return this.db[name] || [];
   }
 
+  setCollection(collection, items) {
+    this.db[collection] = items;
+    this.save();
+    this.notifyListeners(collection);
+    return this.db[collection];
+  }
+
   getById(collection, id) {
     const list = this.getCollection(collection);
     return list.find(item => item.id === id) || null;

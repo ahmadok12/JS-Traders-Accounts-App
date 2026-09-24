@@ -1,205 +1,1214 @@
 /**
- * JS Traders ERP - Products Master View
- * Implements 3-tier product naming (Business, Customer, Urdu),
- * Cut-to-length / roll tracking toggles, negative stock rules,
- * View modal with associated variant cards, and direct variant creation.
+ * JS Traders ERP - Products Master View (Redesigned)
+ * - Horizontal Category Tabs at top starting with "All"
+ * - Add Category & Rearrange Categories Order functionality
+ * - Categorized product listing under each category
+ * - 3 Variant View Modes:
+ *     i) Products without variants
+ *    ii) All products + variants (with inline expandable SKU breakdown)
+ *   iii) Only products that have variants
+ * - Live search field (business, customer, Urdu name, SKU, code)
+ * - Product type filtering & active status controls
+ * - 3-Tier Product Naming (Business, Customer, Urdu)
+ * - Cut-to-length / roll tracking multi-packaging support
  */
 
 import { productService } from '../../services/productService.js';
 import { storageService } from '../../services/storageService.js';
 import { inventoryService } from '../../services/inventoryService.js';
-import { renderTable, bindTableActions } from '../../components/table.js';
-import { renderFilterBar } from '../../components/filters.js';
+import { openCategoryModal } from './categoriesView.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
 import { toast } from '../../components/toast.js';
 
+// Module state for persistent tab & filter memory during session
+let currentCategoryId = 'all';
+let currentVariantFilter = 'all_with_variants'; // 'all_with_variants' | 'with_variants' | 'without_variant'
+let currentSearchQuery = '';
+let currentProductType = 'all';
+let expandedProductIds = new Set();
+let isAllExpanded = false;
+
 export function renderProductsView() {
   const products = productService.getProducts();
   const categories = productService.getCategories();
-  const catMap = new Map(categories.map(c => [c.id, c.name]));
+  const allVariants = productService.getVariants();
 
-  const filterBarHtml = renderFilterBar({
-    searchPlaceholder: 'Search by Business, Customer, Urdu name or code...',
-    dropdowns: [
-      {
-        id: 'product-category-filter',
-        label: 'Category',
-        value: 'all',
-        options: [{ value: 'all', label: 'All Categories' }, ...categories.map(c => ({ value: c.id, label: c.name }))]
-      },
-      {
-        id: 'product-type-filter',
-        label: 'Type',
-        value: 'all',
-        options: [
-          { value: 'all', label: 'All Types' },
-          { value: 'Stock', label: 'Stock Item' },
-          { value: 'Non-Stock', label: 'Non-Stock Item' },
-          { value: 'Service', label: 'Service' }
-        ]
-      }
-    ],
-    primaryAction: { label: '+ Add Product' }
-  });
-
-  const columns = [
-    {
-      key: 'code',
-      label: 'Product ID',
-      render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.code}</span>`
-    },
-    {
-      key: 'businessName',
-      label: 'Business Name',
-      render: row => `<span class="font-bold text-slate-800">${row.businessName}</span>`
-    },
-    {
-      key: 'customerName',
-      label: 'Customer Name',
-      render: row => `
-        <div>
-          <div class="font-semibold text-slate-700">${row.customerName}</div>
-          ${row.urduName ? `<div class="text-[11px] font-serif text-slate-500 font-bold" dir="rtl">${row.urduName}</div>` : ''}
-        </div>
-      `
-    },
-    {
-      key: 'categoryId',
-      label: 'Category',
-      render: row => `<span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-semibold">${catMap.get(row.categoryId) || 'Unassigned'}</span>`
-    },
-    {
-      key: 'productType',
-      label: 'Type',
-      render: row => `<span class="font-medium text-slate-600">${row.productType || 'Stock'}</span>`
-    },
-    {
-      key: 'variantsCount',
-      label: 'Variants',
-      render: row => {
-        const count = productService.getVariantsByProduct(row.id).length;
-        return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${count > 0 ? 'bg-blue-50 text-[#138FCB] border border-blue-200' : 'bg-slate-100 text-slate-500'}">${count} SKU${count !== 1 ? 's' : ''}</span>`;
-      }
-    },
-    {
-      key: 'isActive',
-      label: 'Status',
-      render: row => `
-        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${row.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">
-          ${row.isActive ? 'Active' : 'Inactive / Void'}
-        </span>
-      `
+  // Compute category product counts
+  const categoryCounts = new Map();
+  categories.forEach(c => categoryCounts.set(c.id, 0));
+  products.forEach(p => {
+    if (categoryCounts.has(p.categoryId)) {
+      categoryCounts.set(p.categoryId, (categoryCounts.get(p.categoryId) || 0) + 1);
     }
-  ];
-
-  const actions = [
-    { label: 'View', variant: 'secondary' },
-    { label: '+ Add Variant', variant: 'secondary' },
-    { label: 'Edit', variant: 'secondary' }
-  ];
-
-  const tableHtml = renderTable({
-    columns,
-    data: products,
-    actions,
-    emptyMessage: 'No products defined yet. Click "+ Add Product" to create your first item.'
   });
+
+  // Compute variant mode counts
+  const prodVariantMap = new Map();
+  products.forEach(p => {
+    const vars = allVariants.filter(v => v.productId === p.id);
+    prodVariantMap.set(p.id, vars);
+  });
+
+  const totalProducts = products.length;
+  const withVariantsCount = products.filter(p => (prodVariantMap.get(p.id) || []).length > 0).length;
+  const withoutVariantsCount = totalProducts - withVariantsCount;
+
+  // Selected category info
+  const selectedCategory = currentCategoryId !== 'all' ? categories.find(c => c.id === currentCategoryId) : null;
 
   return `
-    <div id="products-view-container" class="space-y-5 animate-in fade-in duration-150">
-      ${filterBarHtml}
+    <div id="products-view-container" class="space-y-4 animate-in fade-in duration-150">
+      
+      <!-- TOP: CATEGORY TABS & MANAGEMENT BAR -->
+      <div class="bg-white p-3 sm:p-4 rounded-2xl border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] space-y-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          
+          <!-- Category Tabs Horizontal Slider -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1.5 lg:pb-0 scrollbar-thin flex-1 min-w-0" id="category-tabs-container">
+            <!-- "All" Tab -->
+            <button
+              type="button"
+              data-cat-id="all"
+              class="cat-tab-btn shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+                currentCategoryId === 'all'
+                  ? 'bg-[#138FCB] text-white font-bold shadow-xs'
+                  : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold'
+              }">
+              <span>All Products</span>
+              <span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded-full font-mono font-bold ${
+                currentCategoryId === 'all' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+              }">${totalProducts}</span>
+            </button>
+
+            <!-- Dynamic Category Tabs -->
+            ${categories.map(cat => {
+              const count = categoryCounts.get(cat.id) || 0;
+              const isActive = currentCategoryId === cat.id;
+              return `
+                <button
+                  type="button"
+                  data-cat-id="${cat.id}"
+                  class="cat-tab-btn shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#138FCB] text-white font-bold shadow-xs'
+                      : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold'
+                  }">
+                  <span>${cat.name}</span>
+                  <span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded-full font-mono font-bold ${
+                    isActive ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+                  }">${count}</span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Category Management Action Buttons -->
+          <div class="flex items-center gap-2 shrink-0 border-t lg:border-t-0 pt-2 lg:pt-0 border-slate-100">
+            <button
+              id="add-category-btn-top"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-[#138FCB] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all shadow-2xs cursor-pointer"
+              title="Add a new product category">
+              <span class="text-sm font-extrabold leading-none">+</span>
+              <span>Add Category</span>
+            </button>
+
+            <button
+              id="rearrange-categories-btn-top"
+              type="button"
+              class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer"
+              title="Change the sequence of category tabs">
+              <span class="text-sm">⇅</span>
+              <span>Rearrange Order</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Selected Category Context Banner (Visible when a category tab is active) -->
+        <div id="category-context-banner" class="${selectedCategory ? 'flex' : 'hidden'} flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+          <div class="flex items-center gap-2.5">
+            <span class="px-2 py-1 rounded-lg bg-blue-50 text-[#138FCB] border border-blue-200 font-mono text-[11px] font-bold">
+              ${selectedCategory ? selectedCategory.code : ''}
+            </span>
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <span>${selectedCategory ? selectedCategory.name : ''}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${selectedCategory?.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'}">
+                  ${selectedCategory?.isActive ? 'Active Category' : 'Inactive'}
+                </span>
+              </h3>
+              <p class="text-xs text-slate-500 line-clamp-1">${selectedCategory?.description || 'Operational inventory category'}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              id="edit-active-category-btn"
+              type="button"
+              class="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer">
+              Edit Category
+            </button>
+            <button
+              id="reset-category-filter-btn"
+              type="button"
+              class="px-2.5 py-1 text-xs font-semibold text-[#138FCB] hover:underline cursor-pointer">
+              View All Categories ✕
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- FILTER CONTROLS & 3-WAY VARIANT VIEW BAR -->
+      <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+        
+        <!-- Left: Search & Product Type -->
+        <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
+          <!-- Search Field -->
+          <div class="relative flex-1 min-w-[220px] max-w-md">
+            <svg class="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+            </svg>
+            <input
+              id="product-search-input"
+              class="w-full pl-8 pr-4 py-2 text-xs bg-white border border-[#E2E5EA] rounded-xl focus:outline-none focus:border-[#138FCB] placeholder-gray-400 shadow-2xs transition-colors"
+              placeholder="Search by Business, Customer, Urdu name, SKU or code..."
+              value="${currentSearchQuery}"
+              type="text">
+          </div>
+
+          <!-- Product Type Dropdown -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Type:</label>
+            <select
+              id="product-type-filter"
+              class="text-xs bg-white border border-[#E2E5EA] rounded-xl px-3 py-2 text-slate-700 font-medium focus:outline-none focus:border-[#138FCB] shadow-2xs cursor-pointer">
+              <option value="all" ${currentProductType === 'all' ? 'selected' : ''}>All Types</option>
+              <option value="Stock" ${currentProductType === 'Stock' ? 'selected' : ''}>Stock Item</option>
+              <option value="Non-Stock" ${currentProductType === 'Non-Stock' ? 'selected' : ''}>Non-Stock Item</option>
+              <option value="Service" ${currentProductType === 'Service' ? 'selected' : ''}>Service</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Right: 3 Variant View Modes & + Add Product -->
+        <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+          
+          <!-- Option i, ii, iii: Variant Display Mode Segmented Switcher -->
+          <div class="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/70 text-xs font-semibold" id="variant-filter-mode-group">
+            <button
+              type="button"
+              data-variant-mode="all_with_variants"
+              class="variant-mode-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                currentVariantFilter === 'all_with_variants'
+                  ? 'bg-white text-slate-900 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }"
+              title="Show all products and their associated variants">
+              <span>All Products (+ Variants)</span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                currentVariantFilter === 'all_with_variants' ? 'bg-blue-50 text-[#138FCB] font-bold' : 'bg-slate-200 text-slate-600'
+              }">${totalProducts}</span>
+            </button>
+
+            <button
+              type="button"
+              data-variant-mode="with_variants"
+              class="variant-mode-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                currentVariantFilter === 'with_variants'
+                  ? 'bg-white text-[#138FCB] font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }"
+              title="Show only products that have at least 1 variant SKU defined">
+              <span>With Variants</span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                currentVariantFilter === 'with_variants' ? 'bg-blue-100 text-[#138FCB] font-bold' : 'bg-slate-200 text-slate-600'
+              }">${withVariantsCount}</span>
+            </button>
+
+            <button
+              type="button"
+              data-variant-mode="without_variant"
+              class="variant-mode-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                currentVariantFilter === 'without_variant'
+                  ? 'bg-white text-amber-700 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }"
+              title="Show only products without any variants">
+              <span>Without Variant</span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                currentVariantFilter === 'without_variant' ? 'bg-amber-100 text-amber-800 font-bold' : 'bg-slate-200 text-slate-600'
+              }">${withoutVariantsCount}</span>
+            </button>
+          </div>
+
+          <!-- Expand / Collapse All Variants Toggle Button -->
+          <button
+            id="toggle-expand-all-btn"
+            type="button"
+            class="${currentVariantFilter === 'without_variant' ? 'hidden' : 'inline-flex'} items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer"
+            title="Expand or collapse nested SKU breakdown for all products">
+            <span id="expand-all-icon">${isAllExpanded ? '▲' : '▼'}</span>
+            <span id="expand-all-text">${isAllExpanded ? 'Collapse All' : 'Expand SKUs'}</span>
+          </button>
+
+          <!-- Primary + Add Product Master Action -->
+          <button
+            id="add-product-primary-btn"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-[#138FCB] text-white rounded-xl hover:bg-[#0E78AC] transition-colors shadow-xs cursor-pointer">
+            <span class="text-sm font-extrabold leading-none">+</span>
+            <span>Add Product</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- PRODUCTS TABLE & NESTED VARIANTS CONTAINER -->
       <div id="products-table-container">
-        ${tableHtml}
+        <!-- Rendered reactively via renderProductsTableContent() -->
+      </div>
+
+    </div>
+  `;
+}
+
+/**
+ * Filter products based on current view state
+ */
+function getFilteredProducts() {
+  const products = productService.getProducts();
+  const allVariants = productService.getVariants();
+
+  // Create variant map
+  const varMap = new Map();
+  allVariants.forEach(v => {
+    if (!varMap.has(v.productId)) varMap.set(v.productId, []);
+    varMap.get(v.productId).push(v);
+  });
+
+  return products.filter(product => {
+    // 1. Category Filter
+    if (currentCategoryId !== 'all' && product.categoryId !== currentCategoryId) {
+      return false;
+    }
+
+    // 2. Product Type Filter
+    if (currentProductType !== 'all' && (product.productType || 'Stock') !== currentProductType) {
+      return false;
+    }
+
+    // 3. Variant Option Filter
+    const productVariants = varMap.get(product.id) || [];
+    if (currentVariantFilter === 'without_variant' && productVariants.length > 0) {
+      return false;
+    }
+    if (currentVariantFilter === 'with_variants' && productVariants.length === 0) {
+      return false;
+    }
+
+    // 4. Search Filter
+    if (currentSearchQuery) {
+      const q = currentSearchQuery.toLowerCase();
+      const inBusiness = product.businessName?.toLowerCase().includes(q);
+      const inCustomer = product.customerName?.toLowerCase().includes(q);
+      const inUrdu = product.urduName && product.urduName.includes(q);
+      const inCode = product.code?.toLowerCase().includes(q);
+      
+      // Match against variant details
+      const inVariants = productVariants.some(v => 
+        v.sku?.toLowerCase().includes(q) ||
+        v.name?.toLowerCase().includes(q) ||
+        Object.values(v.attributes || {}).some(val => String(val).toLowerCase().includes(q))
+      );
+
+      if (!inBusiness && !inCustomer && !inUrdu && !inCode && !inVariants) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Renders the products table with interactive variant expandable sub-rows
+ */
+function renderProductsTableContent(filteredProducts, categories) {
+  const catMap = new Map(categories.map(c => [c.id, c.name]));
+  const allVariants = productService.getVariants();
+  const varMap = new Map();
+  allVariants.forEach(v => {
+    if (!varMap.has(v.productId)) varMap.set(v.productId, []);
+    varMap.get(v.productId).push(v);
+  });
+
+  if (!filteredProducts || filteredProducts.length === 0) {
+    let emptyMsg = 'No products found matching your current filter criteria.';
+    if (currentVariantFilter === 'without_variant') {
+      emptyMsg = 'Great! All products currently have at least one variant SKU defined.';
+    } else if (currentCategoryId !== 'all') {
+      const cat = categories.find(c => c.id === currentCategoryId);
+      emptyMsg = `No products assigned to category "${cat ? cat.name : 'Selected'}" yet. Click "+ Add Product" to add one.`;
+    }
+
+    return `
+      <div class="bg-white rounded-2xl p-12 border border-[#EAECEF] text-center shadow-xs">
+        <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center text-xl mb-3">📦</div>
+        <h4 class="text-sm font-bold text-slate-700">No Products Found</h4>
+        <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">${emptyMsg}</p>
+        <div class="mt-4 flex items-center justify-center gap-2">
+          ${currentCategoryId !== 'all' ? `
+            <button id="empty-clear-cat-btn" class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer">
+              Show All Categories
+            </button>
+          ` : ''}
+          <button id="empty-add-prod-btn" class="px-3.5 py-1.5 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl transition-colors shadow-xs cursor-pointer">
+            + Add Product
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="bg-white rounded-2xl border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-[#6F767E]">
+          <thead>
+            <tr class="border-b border-[#ECEEF2] text-[11px] uppercase font-bold text-gray-400 tracking-wider bg-slate-50/60">
+              <th class="py-3 px-3 w-10 text-center">#</th>
+              <th class="py-3 px-4">Product ID</th>
+              <th class="py-3 px-4">Business Name (Internal)</th>
+              <th class="py-3 px-4">Customer Name / Urdu</th>
+              <th class="py-3 px-4">Category</th>
+              <th class="py-3 px-4">Type</th>
+              <th class="py-3 px-4">Tracking Mode</th>
+              <th class="py-3 px-4 text-center">SKUs / Variants</th>
+              <th class="py-3 px-4 text-center">Status</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#F4F5F7]">
+            ${filteredProducts.map((prod, idx) => {
+              const variants = varMap.get(prod.id) || [];
+              const hasVariants = variants.length > 0;
+              const isExpanded = isAllExpanded || expandedProductIds.has(prod.id);
+              const isCutToLength = !!(prod.cut_to_length || prod.enableRollTracking);
+
+              return `
+                <!-- Main Product Master Row -->
+                <tr class="hover:bg-blue-50/30 transition-colors ${isExpanded ? 'bg-blue-50/20' : ''}" data-prod-id="${prod.id}">
+                  <!-- Expand/Collapse Chevron -->
+                  <td class="py-3 px-3 text-center">
+                    ${hasVariants ? `
+                      <button
+                        type="button"
+                        class="toggle-single-prod-expand-btn w-6 h-6 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-[#138FCB] hover:bg-blue-50 transition-colors cursor-pointer"
+                        data-prod-id="${prod.id}"
+                        title="${isExpanded ? 'Collapse variant list' : 'Expand variant list'}">
+                        <span class="text-[10px] transform ${isExpanded ? 'rotate-90 text-[#138FCB] font-bold' : ''} transition-transform">▶</span>
+                      </button>
+                    ` : `
+                      <span class="text-slate-300 text-[10px]">•</span>
+                    `}
+                  </td>
+
+                  <!-- Product ID -->
+                  <td class="py-3 px-4 whitespace-nowrap">
+                    <span class="font-bold text-[#138FCB] font-mono">${prod.code}</span>
+                  </td>
+
+                  <!-- Business Name -->
+                  <td class="py-3 px-4 font-bold text-slate-800">
+                    <span class="hover:text-[#138FCB] cursor-pointer prod-name-click" data-prod-id="${prod.id}">${prod.businessName}</span>
+                  </td>
+
+                  <!-- Customer Name & Urdu -->
+                  <td class="py-3 px-4">
+                    <div class="font-semibold text-slate-700">${prod.customerName}</div>
+                    ${prod.urduName ? `
+                      <div class="text-[11px] font-serif text-slate-500 font-bold" dir="rtl">${prod.urduName}</div>
+                    ` : ''}
+                  </td>
+
+                  <!-- Category Badge -->
+                  <td class="py-3 px-4 whitespace-nowrap">
+                    <span class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-semibold">
+                      ${catMap.get(prod.categoryId) || 'Unassigned'}
+                    </span>
+                  </td>
+
+                  <!-- Product Type -->
+                  <td class="py-3 px-4 whitespace-nowrap">
+                    <span class="font-medium text-slate-600">${prod.productType || 'Stock'}</span>
+                  </td>
+
+                  <!-- Tracking Mode -->
+                  <td class="py-3 px-4 whitespace-nowrap">
+                    ${isCutToLength ? `
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                        <span>📏</span>
+                        <span>Cut to Length</span>
+                      </span>
+                    ` : `
+                      <span class="text-slate-400 text-[11px]">Standard Qty</span>
+                    `}
+                  </td>
+
+                  <!-- Variants Count Badge (Clickable to toggle expand) -->
+                  <td class="py-3 px-4 text-center whitespace-nowrap">
+                    ${hasVariants ? `
+                      <button
+                        type="button"
+                        class="toggle-single-prod-expand-btn px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-[#138FCB] border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1"
+                        data-prod-id="${prod.id}">
+                        <span>${variants.length} SKU${variants.length !== 1 ? 's' : ''}</span>
+                        <span class="text-[8px]">${isExpanded ? '▲' : '▼'}</span>
+                      </button>
+                    ` : `
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                        0 SKUs
+                      </span>
+                    `}
+                  </td>
+
+                  <!-- Status -->
+                  <td class="py-3 px-4 text-center whitespace-nowrap">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      prod.isActive
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }">
+                      ${prod.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+
+                  <!-- Actions -->
+                  <td class="py-3 px-4 text-right whitespace-nowrap">
+                    <div class="flex items-center justify-end gap-1.5">
+                      <button
+                        class="view-product-btn px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                        data-prod-id="${prod.id}"
+                        title="View master specification card">
+                        View
+                      </button>
+                      <button
+                        class="add-variant-btn px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-blue-50 hover:bg-blue-100 text-[#138FCB] border border-blue-200/80 transition-colors cursor-pointer"
+                        data-prod-id="${prod.id}"
+                        title="Add a new SKU variant">
+                        + Variant
+                      </button>
+                      <button
+                        class="edit-product-btn px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 transition-colors cursor-pointer"
+                        data-prod-id="${prod.id}"
+                        title="Edit product master details">
+                        Edit
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Nested Variants Accordion Sub-Row -->
+                ${isExpanded ? `
+                  <tr class="bg-slate-50/70 border-b border-slate-200/80">
+                    <td colspan="10" class="p-3 sm:p-4">
+                      <div class="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs space-y-3">
+                        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                          <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                              <span>🏷️</span>
+                              <span>Defined Variants &amp; Stock for "${prod.businessName}"</span>
+                            </span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-[#138FCB] border border-blue-200 font-mono">
+                              ${variants.length} SKU${variants.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            class="nested-add-var-btn inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#138FCB] border border-blue-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
+                            data-prod-id="${prod.id}">
+                            <span class="text-xs font-black leading-none">+</span>
+                            <span>Add Variant</span>
+                          </button>
+                        </div>
+
+                        ${variants.length === 0 ? `
+                          <div class="p-4 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 space-y-1.5">
+                            <p class="text-xs font-bold text-slate-700">No SKU variants created yet for this product master.</p>
+                            <p class="text-[11px] text-slate-400">Define cost, selling price, and stock attributes to enable sales and purchases.</p>
+                            <button
+                              type="button"
+                              class="nested-add-var-btn mt-1 inline-flex items-center gap-1 px-3 py-1.5 bg-[#138FCB] hover:bg-[#0E78AC] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                              data-prod-id="${prod.id}">
+                              <span>+ Create First Variant</span>
+                            </button>
+                          </div>
+                        ` : `
+                          <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                              <thead>
+                                <tr class="text-[10px] font-bold uppercase text-slate-400 border-b border-slate-100">
+                                  <th class="py-1.5 px-3">SKU Code</th>
+                                  <th class="py-1.5 px-3">Variant Model / Name</th>
+                                  <th class="py-1.5 px-3">Specifications / Attributes</th>
+                                  <th class="py-1.5 px-3 text-right">Cost Price</th>
+                                  <th class="py-1.5 px-3 text-right">Selling Price</th>
+                                  <th class="py-1.5 px-3 text-right">Live Stock (WH / Off / Total)</th>
+                                  <th class="py-1.5 px-3 text-center">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody class="divide-y divide-slate-100">
+                                ${variants.map(v => {
+                                  const whStock = inventoryService.getBalance('wh-1', v.id);
+                                  const offStock = inventoryService.getBalance('wh-2', v.id);
+                                  const totalStock = whStock + offStock;
+                                  const cost = Number(v.costPrice) || 0;
+                                  const price = Number(v.sellingPrice) || 0;
+                                  const margin = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
+                                  const attrs = Object.entries(v.attributes || {});
+
+                                  return `
+                                    <tr class="hover:bg-slate-50/60">
+                                      <td class="py-2 px-3 whitespace-nowrap">
+                                        <span class="font-mono font-bold text-[#138FCB] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 text-[11px]">${v.sku}</span>
+                                      </td>
+                                      <td class="py-2 px-3 font-semibold text-slate-800">
+                                        ${v.name}
+                                      </td>
+                                      <td class="py-2 px-3">
+                                        ${attrs.length > 0 ? `
+                                          <div class="flex flex-wrap gap-1">
+                                            ${attrs.map(([k, val]) => `
+                                              <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-medium border border-slate-200/50">
+                                                <strong>${k}:</strong> ${val}
+                                              </span>
+                                            `).join('')}
+                                          </div>
+                                        ` : '<span class="text-slate-400 text-[10px]">Standard</span>'}
+                                      </td>
+                                      <td class="py-2 px-3 text-right font-mono font-semibold text-slate-600">
+                                        PKR ${cost.toLocaleString()}
+                                      </td>
+                                      <td class="py-2 px-3 text-right whitespace-nowrap">
+                                        <span class="font-mono font-bold text-emerald-700">PKR ${price.toLocaleString()}</span>
+                                        ${margin > 0 ? `
+                                          <span class="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-100 ml-1">+${margin}%</span>
+                                        ` : ''}
+                                      </td>
+                                      <td class="py-2 px-3 text-right whitespace-nowrap">
+                                        <span class="font-bold text-slate-800 font-mono">${totalStock.toLocaleString()}</span>
+                                        <span class="text-[10px] text-slate-400 font-medium ml-1">(${whStock} WH / ${offStock} Off)</span>
+                                      </td>
+                                      <td class="py-2 px-3 text-center whitespace-nowrap">
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${v.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}">
+                                          ${v.isActive ? 'Active' : 'Disabled'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  `;
+                                }).join('')}
+                              </tbody>
+                            </table>
+                          </div>
+                        `}
+                      </div>
+                    </td>
+                  </tr>
+                ` : ''}
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Table Footer / Count -->
+      <div class="px-5 py-3 border-t border-[#ECEEF2] flex items-center justify-between text-xs text-slate-400 bg-slate-50/40">
+        <span>Showing <strong class="text-slate-700">${filteredProducts.length}</strong> product masters (${allVariants.length} total SKUs across all catalog items)</span>
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-slate-500">View Mode:</span>
+          <span class="font-semibold text-slate-700">
+            ${currentVariantFilter === 'without_variant' ? 'Products without Variants' : currentVariantFilter === 'with_variants' ? 'Products with Variants Only' : 'All Products + Variants'}
+          </span>
+        </div>
       </div>
     </div>
   `;
 }
 
+/**
+ * Event binding for products master view
+ */
 export function bindProductsEvents(container, refreshCallback) {
-  // Add product button
-  const addBtn = container.querySelector('#filter-primary-btn');
-  if (addBtn) {
-    addBtn.onclick = () => openProductModal(null, refreshCallback);
+  const updateTable = () => {
+    const filtered = getFilteredProducts();
+    const categories = productService.getCategories();
+    const tableContainer = container.querySelector('#products-table-container');
+    if (tableContainer) {
+      tableContainer.innerHTML = renderProductsTableContent(filtered, categories);
+      bindTableInnerActions(tableContainer, refreshCallback);
+    }
+  };
+
+  const updateCategoryTabs = () => {
+    const categories = productService.getCategories();
+    const products = productService.getProducts();
+    const tabsContainer = container.querySelector('#category-tabs-container');
+    if (!tabsContainer) return;
+
+    const totalProducts = products.length;
+    const categoryCounts = new Map();
+    categories.forEach(c => categoryCounts.set(c.id, 0));
+    products.forEach(p => {
+      if (categoryCounts.has(p.categoryId)) {
+        categoryCounts.set(p.categoryId, (categoryCounts.get(p.categoryId) || 0) + 1);
+      }
+    });
+
+    let tabsHtml = `
+      <button
+        type="button"
+        data-cat-id="all"
+        class="cat-tab-btn shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+          currentCategoryId === 'all'
+            ? 'bg-[#138FCB] text-white font-bold shadow-xs'
+            : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold'
+        }">
+        <span>All Products</span>
+        <span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded-full font-mono font-bold ${
+          currentCategoryId === 'all' ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+        }">${totalProducts}</span>
+      </button>
+    `;
+
+    categories.forEach(cat => {
+      const count = categoryCounts.get(cat.id) || 0;
+      const isActive = currentCategoryId === cat.id;
+      tabsHtml += `
+        <button
+          type="button"
+          data-cat-id="${cat.id}"
+          class="cat-tab-btn shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+            isActive
+              ? 'bg-[#138FCB] text-white font-bold shadow-xs'
+              : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold'
+          }">
+          <span>${cat.name}</span>
+          <span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] rounded-full font-mono font-bold ${
+            isActive ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'
+          }">${count}</span>
+        </button>
+      `;
+    });
+
+    tabsContainer.innerHTML = tabsHtml;
+
+    // Rebind tabs click
+    tabsContainer.querySelectorAll('.cat-tab-btn').forEach(btn => {
+      btn.onclick = () => {
+        currentCategoryId = btn.getAttribute('data-cat-id');
+        updateCategoryTabs();
+        updateCategoryBanner();
+        updateTable();
+      };
+    });
+  };
+
+  const updateCategoryBanner = () => {
+    const banner = container.querySelector('#category-context-banner');
+    if (!banner) return;
+
+    if (currentCategoryId === 'all') {
+      banner.classList.add('hidden');
+      banner.classList.remove('flex');
+    } else {
+      const category = productService.getCategoryById(currentCategoryId);
+      if (category) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+        banner.innerHTML = `
+          <div class="flex items-center gap-2.5">
+            <span class="px-2 py-1 rounded-lg bg-blue-50 text-[#138FCB] border border-blue-200 font-mono text-[11px] font-bold">
+              ${category.code}
+            </span>
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                <span>${category.name}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${category.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'}">
+                  ${category.isActive ? 'Active Category' : 'Inactive'}
+                </span>
+              </h3>
+              <p class="text-xs text-slate-500 line-clamp-1">${category.description || 'Operational inventory category'}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              id="edit-active-category-btn"
+              type="button"
+              class="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer">
+              Edit Category
+            </button>
+            <button
+              id="reset-category-filter-btn"
+              type="button"
+              class="px-2.5 py-1 text-xs font-semibold text-[#138FCB] hover:underline cursor-pointer">
+              View All Categories ✕
+            </button>
+          </div>
+        `;
+
+        const editCatBtn = banner.querySelector('#edit-active-category-btn');
+        if (editCatBtn) {
+          editCatBtn.onclick = () => {
+            openCategoryModal(category, () => {
+              updateCategoryTabs();
+              updateCategoryBanner();
+              updateTable();
+              if (refreshCallback) refreshCallback();
+            });
+          };
+        }
+
+        const resetCatBtn = banner.querySelector('#reset-category-filter-btn');
+        if (resetCatBtn) {
+          resetCatBtn.onclick = () => {
+            currentCategoryId = 'all';
+            updateCategoryTabs();
+            updateCategoryBanner();
+            updateTable();
+          };
+        }
+      } else {
+        banner.classList.add('hidden');
+        banner.classList.remove('flex');
+      }
+    }
+  };
+
+  // Initial table render
+  updateTable();
+
+  // Category Tabs Click
+  container.querySelectorAll('.cat-tab-btn').forEach(btn => {
+    btn.onclick = () => {
+      currentCategoryId = btn.getAttribute('data-cat-id');
+      updateCategoryTabs();
+      updateCategoryBanner();
+      updateTable();
+    };
+  });
+
+  // Category Banner Actions
+  updateCategoryBanner();
+
+  // Add Category Button at Top
+  const addCatBtn = container.querySelector('#add-category-btn-top');
+  if (addCatBtn) {
+    addCatBtn.onclick = () => {
+      openCategoryModal(null, (newCategory) => {
+        if (newCategory) {
+          currentCategoryId = newCategory.id;
+        }
+        updateCategoryTabs();
+        updateCategoryBanner();
+        updateTable();
+        if (refreshCallback) refreshCallback();
+      });
+    };
   }
 
-  // Bind table actions
-  const products = productService.getProducts();
-  const actions = [
-    { label: 'View', variant: 'secondary', onClick: (row) => openProductDetailModal(row, refreshCallback) },
-    { label: '+ Add Variant', variant: 'secondary', onClick: (row) => openAddVariantModal(row, refreshCallback) },
-    { label: 'Edit', variant: 'secondary', onClick: (row) => openProductModal(row, refreshCallback) }
-  ];
-  bindTableActions(container, actions, products);
+  // Rearrange Categories Button at Top
+  const rearrangeBtn = container.querySelector('#rearrange-categories-btn-top');
+  if (rearrangeBtn) {
+    rearrangeBtn.onclick = () => {
+      openRearrangeCategoriesModal(() => {
+        updateCategoryTabs();
+        updateCategoryBanner();
+        updateTable();
+        if (refreshCallback) refreshCallback();
+      });
+    };
+  }
 
   // Search input filter
-  const searchInput = container.querySelector('#filter-search-input');
+  const searchInput = container.querySelector('#product-search-input');
   if (searchInput) {
     searchInput.oninput = (e) => {
-      const q = e.target.value.toLowerCase().trim();
-      const filtered = products.filter(p =>
-        p.businessName.toLowerCase().includes(q) ||
-        p.customerName.toLowerCase().includes(q) ||
-        (p.urduName && p.urduName.includes(q)) ||
-        p.code.toLowerCase().includes(q)
-      );
-      updateProductsTable(container, filtered, refreshCallback);
+      currentSearchQuery = e.target.value.trim();
+      updateTable();
     };
   }
 
-  // Category filter
-  const catFilter = container.querySelector('#product-category-filter');
-  if (catFilter) {
-    catFilter.onchange = (e) => {
-      const val = e.target.value;
-      const filtered = val === 'all' ? products : products.filter(p => p.categoryId === val);
-      updateProductsTable(container, filtered, refreshCallback);
-    };
-  }
-
-  // Type filter
+  // Product Type filter dropdown
   const typeFilter = container.querySelector('#product-type-filter');
   if (typeFilter) {
     typeFilter.onchange = (e) => {
-      const val = e.target.value;
-      const filtered = val === 'all' ? products : products.filter(p => (p.productType || 'Stock') === val);
-      updateProductsTable(container, filtered, refreshCallback);
+      currentProductType = e.target.value;
+      updateTable();
+    };
+  }
+
+  // 3-Way Variant View Mode buttons
+  container.querySelectorAll('.variant-mode-btn').forEach(btn => {
+    btn.onclick = () => {
+      const mode = btn.getAttribute('data-variant-mode');
+      currentVariantFilter = mode;
+
+      // Update button styles
+      container.querySelectorAll('.variant-mode-btn').forEach(b => {
+        const bMode = b.getAttribute('data-variant-mode');
+        const isActive = bMode === mode;
+        b.className = `variant-mode-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+          isActive
+            ? `bg-white ${mode === 'without_variant' ? 'text-amber-800' : 'text-[#138FCB]'} font-bold shadow-xs`
+            : 'text-slate-600 hover:text-slate-900'
+        }`;
+      });
+
+      // Show/hide Expand All button
+      const expandAllBtn = container.querySelector('#toggle-expand-all-btn');
+      if (expandAllBtn) {
+        expandAllBtn.className = `${mode === 'without_variant' ? 'hidden' : 'inline-flex'} items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer`;
+      }
+
+      updateTable();
+    };
+  });
+
+  // Expand / Collapse All SKUs toggle button
+  const toggleExpandAllBtn = container.querySelector('#toggle-expand-all-btn');
+  if (toggleExpandAllBtn) {
+    toggleExpandAllBtn.onclick = () => {
+      isAllExpanded = !isAllExpanded;
+      if (!isAllExpanded) {
+        expandedProductIds.clear();
+      }
+      const icon = toggleExpandAllBtn.querySelector('#expand-all-icon');
+      const text = toggleExpandAllBtn.querySelector('#expand-all-text');
+      if (icon) icon.textContent = isAllExpanded ? '▲' : '▼';
+      if (text) text.textContent = isAllExpanded ? 'Collapse All' : 'Expand SKUs';
+      updateTable();
+    };
+  }
+
+  // Primary Add Product Button
+  const addProdBtn = container.querySelector('#add-product-primary-btn');
+  if (addProdBtn) {
+    addProdBtn.onclick = () => {
+      openProductModal(null, () => {
+        updateCategoryTabs();
+        updateTable();
+        if (refreshCallback) refreshCallback();
+      });
     };
   }
 }
 
-function updateProductsTable(container, filteredData, refreshCallback) {
-  const tableContainer = container.querySelector('#products-table-container');
-  if (!tableContainer) return;
+/**
+ * Binds row-level events inside the products table
+ */
+function bindTableInnerActions(tableContainer, refreshCallback) {
+  // Empty state buttons
+  const emptyClearCat = tableContainer.querySelector('#empty-clear-cat-btn');
+  if (emptyClearCat) {
+    emptyClearCat.onclick = () => {
+      currentCategoryId = 'all';
+      const catTabs = document.querySelectorAll('.cat-tab-btn');
+      catTabs.forEach(b => {
+        const isAll = b.getAttribute('data-cat-id') === 'all';
+        b.className = `cat-tab-btn shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+          isAll ? 'bg-[#138FCB] text-white font-bold shadow-xs' : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold'
+        }`;
+      });
+      const banner = document.querySelector('#category-context-banner');
+      if (banner) banner.classList.add('hidden');
+      const filtered = getFilteredProducts();
+      tableContainer.innerHTML = renderProductsTableContent(filtered, productService.getCategories());
+      bindTableInnerActions(tableContainer, refreshCallback);
+    };
+  }
 
-  const categories = productService.getCategories();
-  const catMap = new Map(categories.map(c => [c.id, c.name]));
+  const emptyAddProd = tableContainer.querySelector('#empty-add-prod-btn');
+  if (emptyAddProd) {
+    emptyAddProd.onclick = () => openProductModal(null, refreshCallback);
+  }
 
-  const columns = [
-    { key: 'code', label: 'Product ID', render: row => `<span class="font-bold text-[#138FCB] font-mono">${row.code}</span>` },
-    { key: 'businessName', label: 'Business Name', render: row => `<span class="font-bold text-slate-800">${row.businessName}</span>` },
-    { key: 'customerName', label: 'Customer Name', render: row => `<div><div class="font-semibold text-slate-700">${row.customerName}</div>${row.urduName ? `<div class="text-[11px] font-serif text-slate-500 font-bold" dir="rtl">${row.urduName}</div>` : ''}</div>` },
-    { key: 'categoryId', label: 'Category', render: row => `<span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[10px] font-semibold">${catMap.get(row.categoryId) || 'Unassigned'}</span>` },
-    { key: 'productType', label: 'Type', render: row => `<span class="font-medium text-slate-600">${row.productType || 'Stock'}</span>` },
-    {
-      key: 'variantsCount',
-      label: 'Variants',
-      render: row => {
-        const count = productService.getVariantsByProduct(row.id).length;
-        return `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${count > 0 ? 'bg-blue-50 text-[#138FCB] border border-blue-200' : 'bg-slate-100 text-slate-500'}">${count} SKU${count !== 1 ? 's' : ''}</span>`;
+  // Expand / Collapse single product
+  tableContainer.querySelectorAll('.toggle-single-prod-expand-btn').forEach(btn => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const prodId = btn.getAttribute('data-prod-id');
+      if (expandedProductIds.has(prodId)) {
+        expandedProductIds.delete(prodId);
+      } else {
+        expandedProductIds.add(prodId);
       }
-    },
-    { key: 'isActive', label: 'Status', render: row => `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold ${row.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}">${row.isActive ? 'Active' : 'Inactive / Void'}</span>` }
-  ];
+      const filtered = getFilteredProducts();
+      tableContainer.innerHTML = renderProductsTableContent(filtered, productService.getCategories());
+      bindTableInnerActions(tableContainer, refreshCallback);
+    };
+  });
 
-  const actions = [
-    { label: 'View', variant: 'secondary', onClick: (row) => openProductDetailModal(row, refreshCallback) },
-    { label: '+ Add Variant', variant: 'secondary', onClick: (row) => openAddVariantModal(row, refreshCallback) },
-    { label: 'Edit', variant: 'secondary', onClick: (row) => openProductModal(row, refreshCallback) }
-  ];
+  // View Product buttons
+  tableContainer.querySelectorAll('.view-product-btn, .prod-name-click').forEach(btn => {
+    btn.onclick = () => {
+      const prodId = btn.getAttribute('data-prod-id');
+      const product = productService.getProductById(prodId);
+      if (product) openProductDetailModal(product, refreshCallback);
+    };
+  });
 
-  tableContainer.innerHTML = renderTable({ columns, data: filteredData, actions });
-  bindTableActions(tableContainer, actions, filteredData);
+  // Add Variant buttons
+  tableContainer.querySelectorAll('.add-variant-btn, .nested-add-var-btn').forEach(btn => {
+    btn.onclick = () => {
+      const prodId = btn.getAttribute('data-prod-id');
+      const product = productService.getProductById(prodId);
+      if (product) {
+        openAddVariantModal(product, () => {
+          expandedProductIds.add(prodId);
+          const filtered = getFilteredProducts();
+          tableContainer.innerHTML = renderProductsTableContent(filtered, productService.getCategories());
+          bindTableInnerActions(tableContainer, refreshCallback);
+          if (refreshCallback) refreshCallback();
+        });
+      }
+    };
+  });
+
+  // Edit Product buttons
+  tableContainer.querySelectorAll('.edit-product-btn').forEach(btn => {
+    btn.onclick = () => {
+      const prodId = btn.getAttribute('data-prod-id');
+      const product = productService.getProductById(prodId);
+      if (product) openProductModal(product, refreshCallback);
+    };
+  });
+}
+
+/**
+ * Rearrange Categories Order Modal
+ * Supports Move Up / Move Down buttons and fluid Drag & Drop
+ */
+export function openRearrangeCategoriesModal(onSaved) {
+  let categories = [...productService.getCategories()];
+  const products = productService.getProducts();
+
+  const renderCategoryListHtml = () => {
+    return categories.map((cat, idx) => {
+      const prodCount = products.filter(p => p.categoryId === cat.id).length;
+      const isFirst = idx === 0;
+      const isLast = idx === categories.length - 1;
+
+      return `
+        <div
+          class="reorder-cat-row flex items-center justify-between p-3 bg-white hover:bg-blue-50/40 rounded-xl border border-slate-200/90 shadow-2xs transition-all cursor-grab active:cursor-grabbing"
+          draggable="true"
+          data-index="${idx}"
+          data-id="${cat.id}">
+          
+          <div class="flex items-center gap-3">
+            <span class="text-slate-400 select-none text-base cursor-grab" title="Drag to reorder">⋮⋮</span>
+            <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 font-mono text-[11px] font-bold flex items-center justify-center border border-slate-200">
+              ${idx + 1}
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-800 text-xs">${cat.name}</span>
+                <span class="font-mono text-[10px] text-[#138FCB] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-semibold">${cat.code}</span>
+              </div>
+              <span class="text-[11px] text-slate-400 font-medium">${prodCount} product master${prodCount !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              class="move-up-btn w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center border transition-colors ${
+                isFirst
+                  ? 'text-slate-300 border-slate-100 cursor-not-allowed'
+                  : 'text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
+              }"
+              data-index="${idx}"
+              ${isFirst ? 'disabled' : ''}
+              title="Move up">
+              ▲
+            </button>
+            <button
+              type="button"
+              class="move-down-btn w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center border transition-colors ${
+                isLast
+                  ? 'text-slate-300 border-slate-100 cursor-not-allowed'
+                  : 'text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
+              }"
+              data-index="${idx}"
+              ${isLast ? 'disabled' : ''}
+              title="Move down">
+              ▼
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  };
+
+  const contentHtml = `
+    <div class="space-y-4 text-xs">
+      <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-200/80 flex items-center justify-between">
+        <div class="space-y-0.5">
+          <p class="font-bold text-blue-900">Custom Category Tab Order</p>
+          <p class="text-[11px] text-blue-700">Reorder category tabs to reflect your team's frequent operational catalog sequence.</p>
+        </div>
+        <span class="text-xl">↕</span>
+      </div>
+
+      <div id="reorder-categories-list" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+        ${renderCategoryListHtml()}
+      </div>
+
+      <div class="pt-2 flex items-center justify-between border-t border-slate-100 text-[11px] text-slate-400">
+        <span>💡 Tip: Use ▲ / ▼ buttons or drag rows directly to arrange order.</span>
+        <button
+          type="button"
+          id="reorder-sort-alpha-btn"
+          class="text-[#138FCB] hover:underline font-semibold cursor-pointer">
+          Sort A-Z Alphabetically
+        </button>
+      </div>
+    </div>
+  `;
+
+  const footerHtml = `
+    <div class="flex items-center space-x-2 text-xs text-slate-400">
+      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      <span>Instant catalog sync</span>
+    </div>
+    <div class="flex items-center space-x-2.5">
+      <button
+        type="button"
+        id="reorder-cancel-btn"
+        class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
+        Cancel
+      </button>
+      <button
+        type="button"
+        id="reorder-save-btn"
+        class="px-5 py-2 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
+        Save Category Order
+      </button>
+    </div>
+  `;
+
+  openModal({
+    title: 'Rearrange Product Categories Order',
+    subtitle: 'Reorder tabs across the catalog for personalized quick-access',
+    size: 'max-w-lg',
+    contentHtml,
+    footerHtml,
+    onOpen: (modalEl) => {
+      const listEl = modalEl.querySelector('#reorder-categories-list');
+      const cancelBtn = modalEl.querySelector('#reorder-cancel-btn');
+      const saveBtn = modalEl.querySelector('#reorder-save-btn');
+      const alphaBtn = modalEl.querySelector('#reorder-sort-alpha-btn');
+
+      if (cancelBtn) cancelBtn.onclick = () => closeModal();
+
+      const refreshList = () => {
+        if (listEl) {
+          listEl.innerHTML = renderCategoryListHtml();
+          bindListEvents();
+        }
+      };
+
+      const bindListEvents = () => {
+        // Move Up
+        listEl.querySelectorAll('.move-up-btn').forEach(btn => {
+          btn.onclick = () => {
+            const idx = parseInt(btn.getAttribute('data-index'), 10);
+            if (idx > 0) {
+              const temp = categories[idx];
+              categories[idx] = categories[idx - 1];
+              categories[idx - 1] = temp;
+              refreshList();
+            }
+          };
+        });
+
+        // Move Down
+        listEl.querySelectorAll('.move-down-btn').forEach(btn => {
+          btn.onclick = () => {
+            const idx = parseInt(btn.getAttribute('data-index'), 10);
+            if (idx < categories.length - 1) {
+              const temp = categories[idx];
+              categories[idx] = categories[idx + 1];
+              categories[idx + 1] = temp;
+              refreshList();
+            }
+          };
+        });
+
+        // HTML5 Drag and Drop Reordering
+        let draggedIndex = null;
+        listEl.querySelectorAll('.reorder-cat-row').forEach(row => {
+          row.ondragstart = (e) => {
+            draggedIndex = parseInt(row.getAttribute('data-index'), 10);
+            row.classList.add('opacity-40', 'border-blue-400');
+            e.dataTransfer.effectAllowed = 'move';
+          };
+
+          row.ondragend = () => {
+            row.classList.remove('opacity-40', 'border-blue-400');
+            listEl.querySelectorAll('.reorder-cat-row').forEach(r => r.classList.remove('bg-blue-50/70', 'border-blue-500'));
+          };
+
+          row.ondragover = (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            row.classList.add('bg-blue-50/70', 'border-blue-500');
+          };
+
+          row.ondragleave = () => {
+            row.classList.remove('bg-blue-50/70', 'border-blue-500');
+          };
+
+          row.ondrop = (e) => {
+            e.preventDefault();
+            row.classList.remove('bg-blue-50/70', 'border-blue-500');
+            const targetIndex = parseInt(row.getAttribute('data-index'), 10);
+            if (draggedIndex !== null && draggedIndex !== targetIndex) {
+              const item = categories.splice(draggedIndex, 1)[0];
+              categories.splice(targetIndex, 0, item);
+              refreshList();
+            }
+          };
+        });
+      };
+
+      bindListEvents();
+
+      // Alphabetical sort helper
+      if (alphaBtn) {
+        alphaBtn.onclick = () => {
+          categories.sort((a, b) => a.name.localeCompare(b.name));
+          refreshList();
+        };
+      }
+
+      // Save new order
+      if (saveBtn) {
+        saveBtn.onclick = () => {
+          const orderedIds = categories.map(c => c.id);
+          try {
+            productService.reorderCategories(orderedIds);
+            toast.show('Category order saved successfully.', 'success');
+            closeModal();
+            if (onSaved) onSaved();
+          } catch (err) {
+            toast.show(err.message, 'error');
+          }
+        };
+      }
+    }
+  });
 }
 
 /**
@@ -390,7 +1399,7 @@ export function openProductDetailModal(product, refreshCallback) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ SSL 256-bit encrypted ERP transaction</span>
+      <span>🛡️ Enterprise Master Product Record</span>
     </div>
     <div class="flex flex-col sm:flex-row items-center justify-between w-full sm:w-auto gap-3">
       <div>
@@ -578,7 +1587,7 @@ export function openAddVariantModal(product, onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ SSL 256-bit encrypted ERP transaction</span>
+      <span>🛡️ Instant SKU cataloging</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="add-var-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
@@ -697,7 +1706,7 @@ export function openProductModal(product = null, onSaved) {
           <div class="space-y-1.5">
             <label class="text-xs font-semibold text-slate-700" for="prod-category">Product Category <span class="text-red-500">*</span></label>
             <select id="prod-category" required class="w-full text-xs rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
-              ${categories.map(c => `<option value="${c.id}" ${product && product.categoryId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+              ${categories.map(c => `<option value="${c.id}" ${(product ? product.categoryId : currentCategoryId) === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
             </select>
           </div>
 
@@ -777,7 +1786,7 @@ export function openProductModal(product = null, onSaved) {
               ${(product?.packagingUnits && product.packagingUnits.length > 0 ? product.packagingUnits : [
                 { id: 'pkg-default-1', name: 'Roll (5,000 ft)', factor: 5000, unit: 'ft' },
                 { id: 'pkg-default-2', name: 'Roll (3,280 ft)', factor: 3280, unit: 'ft' }
-              ]).map((pkg, idx) => `
+              ]).map((pkg) => `
                 <div class="roll-size-row flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-200 shadow-2xs">
                   <div class="flex-1">
                     <input type="text" value="${pkg.name}" placeholder="e.g. Roll (5,000 ft)" class="roll-size-name w-full text-xs font-bold text-slate-800 border-0 focus:ring-0 p-1">
@@ -811,7 +1820,7 @@ export function openProductModal(product = null, onSaved) {
   const footerHtml = `
     <div class="flex items-center space-x-2 text-xs text-slate-400">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-      <span>🛡️ SSL 256-bit encrypted ERP transaction</span>
+      <span>🛡️ Enterprise Master Product Definition</span>
     </div>
     <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
       <button id="prod-cancel-btn" type="button" class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
