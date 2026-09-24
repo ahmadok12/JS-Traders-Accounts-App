@@ -41,6 +41,7 @@ export function renderFilterBar({
             <span>+</span>
             <span>${primaryAction.label}</span>
           </button>
+        ` : ''}
       </div>
     </div>
   `;

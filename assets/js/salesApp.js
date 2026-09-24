@@ -546,11 +546,17 @@ class SalesAppController {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function startSalesApp() {
   const app = new SalesAppController();
   app.init();
   window.salesApp = app;
   window.openDrawer = openDrawer;
   window.closeDrawer = closeDrawer;
   window.openPortalSwitcherModal = openPortalSwitcherModal;
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startSalesApp);
+} else {
+  startSalesApp();
+}

@@ -608,12 +608,17 @@ class AppController {
   }
 }
 
-// Instantiate and start app on DOM ready
-document.addEventListener('DOMContentLoaded', () => {
+function startMainApp() {
   const app = new AppController();
   app.init();
   window.app = app;
   window.openDrawer = openDrawer;
   window.closeDrawer = closeDrawer;
   window.openPortalSwitcherModal = openPortalSwitcherModal;
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startMainApp);
+} else {
+  startMainApp();
+}

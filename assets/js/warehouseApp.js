@@ -325,11 +325,17 @@ class WarehouseAppController {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function startWarehouseApp() {
   const app = new WarehouseAppController();
   app.init();
   window.warehouseApp = app;
   window.openDrawer = openDrawer;
   window.closeDrawer = closeDrawer;
   window.openPortalSwitcherModal = openPortalSwitcherModal;
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startWarehouseApp);
+} else {
+  startWarehouseApp();
+}
