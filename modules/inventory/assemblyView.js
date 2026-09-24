@@ -2319,7 +2319,6 @@ function openRecordLaborPaymentModal(selectedPartyId = null, onSaved) {
         const paymentDate = modalEl.querySelector('#pay-date').value;
         const paymentAccountId = modalEl.querySelector('#pay-account')?.value;
         const notes = modalEl.querySelector('#pay-notes').value.trim();
-        const notes = modalEl.querySelector('#pay-notes').value.trim();
 
         if (totalAmount <= 0) {
           toast.show('Payment amount must be greater than zero.', 'error');
