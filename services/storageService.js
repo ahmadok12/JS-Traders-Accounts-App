@@ -1059,6 +1059,8 @@ const SEED_DATABASE = {
           variantId: 'var-1',
           orderedQty: 100,
           deliveredQty: 50,
+          warehouseQty: 100,
+          officeQty: 0,
           invoicedQty: 0,
           unit: 'PCS',
           unitPrice: 1450,

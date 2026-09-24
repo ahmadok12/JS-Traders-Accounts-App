@@ -115,9 +115,11 @@ export function renderSalesOrdersView() {
           <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
             ${shownLines.map(l => {
               const pName = l.variantName || varMap.get(l.variantId) || 'Product Item';
-              const wh = Number(l.warehouseQty) || 0;
-              const off = Number(l.officeQty) || 0;
-              const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (wh + off)) || 0;
+              const rawWh = Number(l.warehouseQty) || 0;
+              const rawOff = Number(l.officeQty) || 0;
+              const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (rawWh + rawOff)) || 0;
+              const wh = (rawWh === 0 && rawOff === 0 && ord > 0) ? ord : rawWh;
+              const off = rawOff;
               const del = Number(l.deliveredQty) || 0;
               const pending = Math.max(0, ord - del);
               const unit = l.packagingName || l.unit || 'PCS';
@@ -302,9 +304,11 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
           <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
             ${shownLines.map(l => {
               const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
-              const wh = Number(l.warehouseQty) || 0;
-              const off = Number(l.officeQty) || 0;
-              const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (wh + off)) || 0;
+              const rawWh = Number(l.warehouseQty) || 0;
+              const rawOff = Number(l.officeQty) || 0;
+              const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (rawWh + rawOff)) || 0;
+              const wh = (rawWh === 0 && rawOff === 0 && ord > 0) ? ord : rawWh;
+              const off = rawOff;
               const del = Number(l.deliveredQty) || 0;
               const pending = Math.max(0, ord - del);
               const unit = l.packagingName || l.unit || 'PCS';
