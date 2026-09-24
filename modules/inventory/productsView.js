@@ -21,6 +21,7 @@ import { openCategoryModal } from './categoriesView.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
 import { toast } from '../../components/toast.js';
+import { renderCustomDropdown } from '../../components/filters.js';
 
 // Module state for persistent tab & filter memory during session
 let currentCategoryId = 'all';
@@ -155,17 +156,20 @@ export function renderProductsView() {
               type="text">
           </div>
 
-          <!-- Product Type Dropdown -->
+          <!-- Product Type Dropdown (Rounded Card Theme) -->
           <div class="flex items-center gap-1.5 shrink-0">
             <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Type:</label>
-            <select
-              id="product-type-filter"
-              class="text-xs bg-white border border-[#E2E5EA] rounded-xl px-3 py-2 text-slate-700 font-medium focus:outline-none focus:border-[#138FCB] shadow-2xs cursor-pointer">
-              <option value="all" ${currentProductType === 'all' ? 'selected' : ''}>All Types</option>
-              <option value="Stock" ${currentProductType === 'Stock' ? 'selected' : ''}>Stock Item</option>
-              <option value="Non-Stock" ${currentProductType === 'Non-Stock' ? 'selected' : ''}>Non-Stock Item</option>
-              <option value="Service" ${currentProductType === 'Service' ? 'selected' : ''}>Service</option>
-            </select>
+            ${renderCustomDropdown({
+              id: 'product-type-filter',
+              value: currentProductType,
+              label: 'All Types',
+              options: [
+                { value: 'all', label: 'All Types' },
+                { value: 'Stock', label: 'Stock Item' },
+                { value: 'Non-Stock', label: 'Non-Stock Item' },
+                { value: 'Service', label: 'Service' }
+              ]
+            })}
           </div>
         </div>
 
