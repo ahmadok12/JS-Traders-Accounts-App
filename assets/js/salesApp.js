@@ -377,7 +377,7 @@ class SalesAppController {
           </div>
           <div class="text-xs text-slate-500 font-medium flex items-center gap-2">
             <span>🏢 Multi-facility check:</span>
-            <span class="font-bold text-slate-800">Warehouse, Office, Showroom</span>
+            <span class="font-bold text-slate-800">Warehouse, Office</span>
           </div>
         </div>
 
@@ -392,7 +392,6 @@ class SalesAppController {
                 <th class="p-3.5">Retail / Selling Price</th>
                 <th class="p-3.5">Wh-1 (Main)</th>
                 <th class="p-3.5">Wh-2 (Office)</th>
-                <th class="p-3.5">Wh-3 (Showroom)</th>
                 <th class="p-3.5 pr-6 font-bold text-slate-900">Total Stock</th>
               </tr>
             </thead>
@@ -400,9 +399,8 @@ class SalesAppController {
               ${variants.map(v => {
                 const stock = stockMap.get(v.id) || { onHand: Math.floor(Math.random() * 150) + 10 };
                 const total = stock.onHand || 45;
-                const wh1 = Math.floor(total * 0.7);
-                const wh2 = Math.floor(total * 0.2);
-                const wh3 = total - wh1 - wh2;
+                const wh1 = Math.floor(total * 0.75);
+                const wh2 = total - wh1;
 
                 return `
                   <tr class="hover:bg-slate-50/80 transition-colors">
@@ -412,7 +410,6 @@ class SalesAppController {
                     <td class="p-3.5 font-bold text-emerald-700">PKR ${(v.sellingPrice || 1450).toLocaleString()}</td>
                     <td class="p-3.5 font-medium">${wh1} ${v.unit || 'PCS'}</td>
                     <td class="p-3.5 font-medium">${wh2} ${v.unit || 'PCS'}</td>
-                    <td class="p-3.5 font-medium">${wh3} ${v.unit || 'PCS'}</td>
                     <td class="p-3.5 pr-6">
                       <span class="px-2.5 py-1 rounded-full text-xs font-black ${
                         total > 15 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'

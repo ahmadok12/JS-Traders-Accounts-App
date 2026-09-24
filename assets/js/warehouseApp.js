@@ -234,21 +234,11 @@ class WarehouseAppController {
         break;
 
       case 'warehouse-warehouses':
+      case 'warehouse-locations':
+      case 'warehouse-stock-by-wh':
         html = renderWarehousesView();
         bindFn = bindWarehousesEvents;
-        breadcrumbs = ['Facilities', 'Warehouses'];
-        break;
-
-      case 'warehouse-locations':
-        html = renderLocationsView();
-        bindFn = bindLocationsEvents;
-        breadcrumbs = ['Facilities', 'Locations & Bins'];
-        break;
-
-      case 'warehouse-stock-by-wh':
-        html = renderStockByWarehouseView();
-        bindFn = bindStockByWarehouseEvents;
-        breadcrumbs = ['Facilities', 'Stock by Warehouse'];
+        breadcrumbs = ['Facilities', 'Warehouses & Showrooms'];
         break;
 
       case 'warehouse-staff':

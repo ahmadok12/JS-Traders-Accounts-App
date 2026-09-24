@@ -12,8 +12,7 @@ const STORAGE_KEY = 'js_traders_erp_db_v1';
 const SEED_DATABASE = {
   warehouses: [
     { id: 'wh-1', code: 'WH-001', name: 'Warehouse', city: 'Lahore', address: 'Plot 45-B Industrial Area, Multan Road', contactPerson: 'Tariq Mehmood', phone: '+92 300 1234567', isActive: true },
-    { id: 'wh-2', code: 'WH-002', name: 'Office', city: 'Lahore', address: 'Main Commercial Plaza, Lahore', contactPerson: 'Usman Tariq', phone: '+92 321 7654321', isActive: true },
-    { id: 'wh-3', code: 'WH-003', name: 'Showroom Gujranwala', city: 'Gujranwala', address: 'GT Road Bypass', contactPerson: 'Rizwan Ahmed', phone: '+92 333 9876543', isActive: true }
+    { id: 'wh-2', code: 'WH-002', name: 'Office', city: 'Lahore', address: 'Main Commercial Plaza, Lahore', contactPerson: 'Usman Tariq', phone: '+92 321 7654321', isActive: true }
   ],
 
   warehouseLocations: [
@@ -1836,6 +1835,14 @@ class StorageService {
             const v400 = SEED_DATABASE.variants.find(v => v.id === 'var-9-400');
             if (v400) this.db.variants.push(JSON.parse(JSON.stringify(v400)));
           }
+        }
+
+        // Ensure Gujranwala showroom is removed from existing stored DB
+        if (this.db.warehouses) {
+          this.db.warehouses = this.db.warehouses.filter(w => w.id !== 'wh-3' && !w.name?.toLowerCase().includes('gujranwala'));
+        }
+        if (this.db.stockBalances) {
+          this.db.stockBalances = this.db.stockBalances.filter(b => b.warehouseId !== 'wh-3');
         }
 
         // Ensure new assembly/disassembly/bundle products and variants exist in stored DB

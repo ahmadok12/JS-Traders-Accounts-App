@@ -5,8 +5,14 @@
 import { storageService } from './storageService.js';
 
 class WarehouseService {
-  getWarehouses() {
-    return storageService.getCollection('warehouses');
+  getWarehouses(includeVoided = false) {
+    const list = storageService.getCollection('warehouses') || [];
+    if (includeVoided) return list;
+    return list.filter(w => !w.isVoid && w.isActive !== false);
+  }
+
+  getAllWarehouses() {
+    return storageService.getCollection('warehouses') || [];
   }
 
   getWarehouseById(id) {
@@ -14,17 +20,39 @@ class WarehouseService {
   }
 
   createWarehouse(data) {
-    const warehouses = this.getWarehouses();
+    const warehouses = this.getAllWarehouses();
     const code = `WH-${String(warehouses.length + 1).padStart(3, '0')}`;
     return storageService.insert('warehouses', {
       ...data,
       code,
-      isActive: data.isActive !== undefined ? data.isActive : true
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      isVoid: false,
+      createdAt: new Date().toISOString()
     });
   }
 
   updateWarehouse(id, updates) {
     return storageService.update('warehouses', id, updates);
+  }
+
+  voidWarehouse(id) {
+    return storageService.update('warehouses', id, {
+      isActive: false,
+      isVoid: true,
+      voidedAt: new Date().toISOString()
+    });
+  }
+
+  reactivateWarehouse(id) {
+    return storageService.update('warehouses', id, {
+      isActive: true,
+      isVoid: false,
+      reactivatedAt: new Date().toISOString()
+    });
+  }
+
+  deleteWarehouse(id) {
+    return storageService.delete('warehouses', id);
   }
 
   getAllLocations() {

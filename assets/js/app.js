@@ -253,19 +253,11 @@ class AppController {
         breadcrumbs = ['Operations', 'GDN (Goods Dispatch Note)'];
         break;
       case 'warehouse-warehouses':
+      case 'warehouse-locations':
+      case 'warehouse-stock-by-wh':
         html = renderWarehousesView();
         bindFn = bindWarehousesEvents;
-        breadcrumbs = ['Warehouses', 'Warehouse Facilities'];
-        break;
-      case 'warehouse-locations':
-        html = renderLocationsView();
-        bindFn = bindLocationsEvents;
-        breadcrumbs = ['Warehouses', 'Storage Locations & Racks'];
-        break;
-      case 'warehouse-stock-by-wh':
-        html = renderStockByWarehouseView();
-        bindFn = bindStockByWarehouseEvents;
-        breadcrumbs = ['Warehouses', 'Stock by Warehouse'];
+        breadcrumbs = ['Warehouses', 'Warehouses & Showrooms'];
         break;
       case 'warehouse-staff':
         html = renderStaffManagementView();
