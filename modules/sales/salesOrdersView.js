@@ -112,44 +112,65 @@ export function renderSalesOrdersView() {
         const remainingCount = consolidatedLines.length - shownLines.length;
 
         return `
-          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+          <div class="space-y-2 py-1 min-w-[300px] max-w-[420px]">
             ${shownLines.map(l => {
               const pName = l.variantName || varMap.get(l.variantId) || 'Product Item';
               const rawWh = Number(l.warehouseQty) || 0;
               const rawOff = Number(l.officeQty) || 0;
               const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (rawWh + rawOff)) || 0;
-              const wh = (rawWh === 0 && rawOff === 0 && ord > 0) ? ord : rawWh;
-              const off = rawOff;
-              const del = Number(l.deliveredQty) || 0;
-              const pending = Math.max(0, ord - del);
+              const whTotal = (rawWh === 0 && rawOff === 0 && ord > 0) ? ord : rawWh;
+              const offTotal = rawOff;
+              const totalDel = Number(l.deliveredQty) || 0;
               const unit = l.packagingName || l.unit || 'PCS';
-              const isDone = del >= ord && ord > 0;
+
+              let whDel = 0;
+              let offDel = 0;
+              if (l.deliveredWarehouseQty !== undefined || l.deliveredOfficeQty !== undefined) {
+                whDel = Number(l.deliveredWarehouseQty) || 0;
+                offDel = Number(l.deliveredOfficeQty) || 0;
+              } else if (whTotal > 0 && offTotal === 0) {
+                whDel = Math.min(totalDel, whTotal);
+                offDel = 0;
+              } else if (whTotal === 0 && offTotal > 0) {
+                whDel = 0;
+                offDel = Math.min(totalDel, offTotal);
+              } else {
+                whDel = Math.min(totalDel, whTotal);
+                offDel = Math.min(Math.max(0, totalDel - whDel), offTotal);
+              }
+
+              const whPct = whTotal > 0 ? Math.min(100, Math.round((whDel / whTotal) * 100)) : 0;
+              const offPct = offTotal > 0 ? Math.min(100, Math.round((offDel / offTotal) * 100)) : 0;
+
               return `
-                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
-                  <div class="flex items-center justify-between gap-1.5">
-                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
-                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
-                      isDone ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' :
-                      del > 0 ? 'text-blue-700 bg-blue-50 border border-blue-200' :
-                      'text-slate-600 bg-white border border-slate-200'
-                    }">
-                      ${del}/${ord} del ${isDone ? '✓' : `(${pending} left)`}
-                    </span>
+                <div class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0 bg-transparent">
+                  <div class="min-w-0 pr-2">
+                    <div class="font-bold text-slate-800 text-xs truncate" title="${pName}">${pName}</div>
+                    <div class="text-[10px] text-slate-400 font-medium">${unit}</div>
                   </div>
-                  <div class="flex items-center gap-2 text-[10px]">
-                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
-                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
-                    </span>
-                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
-                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
-                    </span>
-                    <span class="text-slate-400 font-medium ml-auto">${unit}</span>
+
+                  <div class="shrink-0 space-y-1">
+                    <div class="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
+                      <span class="w-6 font-bold text-slate-600">WH :</span>
+                      <span class="font-mono text-slate-700 w-11 text-right">${whDel}/${whTotal}</span>
+                      <div class="w-14 sm:w-16 h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                        <div class="h-full ${whPct >= 100 ? 'bg-emerald-500' : 'bg-[#138FCB]'} rounded-full transition-all" style="width: ${whPct}%"></div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
+                      <span class="w-6 font-bold text-slate-600">O :</span>
+                      <span class="font-mono text-slate-700 w-11 text-right">${offDel}/${offTotal}</span>
+                      <div class="w-14 sm:w-16 h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                        <div class="h-full ${offPct >= 100 ? 'bg-emerald-500' : 'bg-amber-500'} rounded-full transition-all" style="width: ${offPct}%"></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               `;
             }).join('')}
             ${remainingCount > 0 ? `
-              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+              <div class="text-[10px] text-slate-400 font-medium pt-1 text-center">
                 +${remainingCount} more item(s) in this order
               </div>
             ` : ''}
@@ -301,44 +322,65 @@ function updateOrdersTable(container, filteredData, refreshCallback) {
         const remainingCount = lines.length - shownLines.length;
 
         return `
-          <div class="space-y-1.5 py-1 min-w-[270px] max-w-[380px]">
+          <div class="space-y-2 py-1 min-w-[300px] max-w-[420px]">
             ${shownLines.map(l => {
               const pName = varMap.get(l.variantId) || l.variantName || 'Product Item';
               const rawWh = Number(l.warehouseQty) || 0;
               const rawOff = Number(l.officeQty) || 0;
               const ord = Number(l.orderedQty !== undefined ? l.orderedQty : (rawWh + rawOff)) || 0;
-              const wh = (rawWh === 0 && rawOff === 0 && ord > 0) ? ord : rawWh;
-              const off = rawOff;
-              const del = Number(l.deliveredQty) || 0;
-              const pending = Math.max(0, ord - del);
+              const whTotal = (rawWh === 0 && rawOff === 0 && ord > 0) ? ord : rawWh;
+              const offTotal = rawOff;
+              const totalDel = Number(l.deliveredQty) || 0;
               const unit = l.packagingName || l.unit || 'PCS';
-              const isDone = del >= ord && ord > 0;
+
+              let whDel = 0;
+              let offDel = 0;
+              if (l.deliveredWarehouseQty !== undefined || l.deliveredOfficeQty !== undefined) {
+                whDel = Number(l.deliveredWarehouseQty) || 0;
+                offDel = Number(l.deliveredOfficeQty) || 0;
+              } else if (whTotal > 0 && offTotal === 0) {
+                whDel = Math.min(totalDel, whTotal);
+                offDel = 0;
+              } else if (whTotal === 0 && offTotal > 0) {
+                whDel = 0;
+                offDel = Math.min(totalDel, offTotal);
+              } else {
+                whDel = Math.min(totalDel, whTotal);
+                offDel = Math.min(Math.max(0, totalDel - whDel), offTotal);
+              }
+
+              const whPct = whTotal > 0 ? Math.min(100, Math.round((whDel / whTotal) * 100)) : 0;
+              const offPct = offTotal > 0 ? Math.min(100, Math.round((offDel / offTotal) * 100)) : 0;
+
               return `
-                <div class="bg-slate-50/90 hover:bg-slate-100/90 transition-colors p-2 rounded-xl border border-slate-200/80 text-xs space-y-1 shadow-2xs">
-                  <div class="flex items-center justify-between gap-1.5">
-                    <span class="font-bold text-slate-800 text-[11px] truncate" title="${pName}">${pName}</span>
-                    <span class="text-[10px] font-extrabold shrink-0 px-1.5 py-0.5 rounded ${
-                      isDone ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' :
-                      del > 0 ? 'text-blue-700 bg-blue-50 border border-blue-200' :
-                      'text-slate-600 bg-white border border-slate-200'
-                    }">
-                      ${del}/${ord} del ${isDone ? '✓' : `(${pending} left)`}
-                    </span>
+                <div class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0 bg-transparent">
+                  <div class="min-w-0 pr-2">
+                    <div class="font-bold text-slate-800 text-xs truncate" title="${pName}">${pName}</div>
+                    <div class="text-[10px] text-slate-400 font-medium">${unit}</div>
                   </div>
-                  <div class="flex items-center gap-2 text-[10px]">
-                    <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 shadow-2xs">
-                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>WH: ${wh}
-                    </span>
-                    <span class="inline-flex items-center gap-1 text-amber-800 font-bold bg-white px-1.5 py-0.5 rounded border border-amber-100 shadow-2xs">
-                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Office: ${off}
-                    </span>
-                    <span class="text-slate-400 font-medium ml-auto">${unit}</span>
+
+                  <div class="shrink-0 space-y-1">
+                    <div class="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
+                      <span class="w-6 font-bold text-slate-600">WH :</span>
+                      <span class="font-mono text-slate-700 w-11 text-right">${whDel}/${whTotal}</span>
+                      <div class="w-14 sm:w-16 h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                        <div class="h-full ${whPct >= 100 ? 'bg-emerald-500' : 'bg-[#138FCB]'} rounded-full transition-all" style="width: ${whPct}%"></div>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
+                      <span class="w-6 font-bold text-slate-600">O :</span>
+                      <span class="font-mono text-slate-700 w-11 text-right">${offDel}/${offTotal}</span>
+                      <div class="w-14 sm:w-16 h-1.5 bg-slate-200/80 rounded-full overflow-hidden">
+                        <div class="h-full ${offPct >= 100 ? 'bg-emerald-500' : 'bg-amber-500'} rounded-full transition-all" style="width: ${offPct}%"></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               `;
             }).join('')}
             ${remainingCount > 0 ? `
-              <div class="text-[10px] text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg text-center border border-slate-200">
+              <div class="text-[10px] text-slate-400 font-medium pt-1 text-center">
                 +${remainingCount} more product(s) in this order
               </div>
             ` : ''}
