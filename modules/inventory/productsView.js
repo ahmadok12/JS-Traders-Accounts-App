@@ -1,7 +1,8 @@
 /**
  * JS Traders ERP - Products Master View (Redesigned)
  * - Horizontal Category Tabs at top starting with "All"
- * - Add Category & Rearrange Categories Order functionality
+ * - Small down arrow dropdown menu on right: "Add Category" & "Edit Categories"
+ * - Unified Edit Categories Dialog allowing both editing details and rearranging order
  * - Categorized product listing under each category
  * - 3 Variant View Modes:
  *     i) Products without variants
@@ -54,18 +55,15 @@ export function renderProductsView() {
   const withVariantsCount = products.filter(p => (prodVariantMap.get(p.id) || []).length > 0).length;
   const withoutVariantsCount = totalProducts - withVariantsCount;
 
-  // Selected category info
-  const selectedCategory = currentCategoryId !== 'all' ? categories.find(c => c.id === currentCategoryId) : null;
-
   return `
     <div id="products-view-container" class="space-y-4 animate-in fade-in duration-150">
       
-      <!-- TOP: CATEGORY TABS & MANAGEMENT BAR -->
-      <div class="bg-white p-3 sm:p-4 rounded-2xl border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)] space-y-3">
-        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      <!-- TOP: CATEGORY TABS & ACTION DROPDOWN BAR -->
+      <div class="bg-white p-3 sm:p-4 rounded-2xl border border-[#EAECEF] shadow-[0_2px_4px_rgba(0,0,0,0.02)]">
+        <div class="flex items-center justify-between gap-3">
           
           <!-- Category Tabs Horizontal Slider -->
-          <div class="flex items-center gap-1.5 overflow-x-auto pb-1.5 lg:pb-0 scrollbar-thin flex-1 min-w-0" id="category-tabs-container">
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin flex-1 min-w-0" id="category-tabs-container">
             <!-- "All" Tab -->
             <button
               type="button"
@@ -103,60 +101,40 @@ export function renderProductsView() {
             }).join('')}
           </div>
 
-          <!-- Category Management Action Buttons -->
-          <div class="flex items-center gap-2 shrink-0 border-t lg:border-t-0 pt-2 lg:pt-0 border-slate-100">
+          <!-- Small Down Arrow Dropdown Menu Trigger -->
+          <div class="relative shrink-0" id="category-menu-wrapper">
             <button
-              id="add-category-btn-top"
+              id="category-menu-toggle-btn"
               type="button"
-              class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-[#138FCB] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-all shadow-2xs cursor-pointer"
-              title="Add a new product category">
-              <span class="text-sm font-extrabold leading-none">+</span>
-              <span>Add Category</span>
+              class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors shadow-2xs border border-slate-200 cursor-pointer"
+              title="Category actions">
+              <svg class="w-3.5 h-3.5 text-slate-600 transition-transform duration-150" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
 
-            <button
-              id="rearrange-categories-btn-top"
-              type="button"
-              class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-all shadow-2xs cursor-pointer"
-              title="Change the sequence of category tabs">
-              <span class="text-sm">⇅</span>
-              <span>Rearrange Order</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Selected Category Context Banner (Visible when a category tab is active) -->
-        <div id="category-context-banner" class="${selectedCategory ? 'flex' : 'hidden'} flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
-          <div class="flex items-center gap-2.5">
-            <span class="px-2 py-1 rounded-lg bg-blue-50 text-[#138FCB] border border-blue-200 font-mono text-[11px] font-bold">
-              ${selectedCategory ? selectedCategory.code : ''}
-            </span>
-            <div>
-              <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <span>${selectedCategory ? selectedCategory.name : ''}</span>
-                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${selectedCategory?.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'}">
-                  ${selectedCategory?.isActive ? 'Active Category' : 'Inactive'}
-                </span>
-              </h3>
-              <p class="text-xs text-slate-500 line-clamp-1">${selectedCategory?.description || 'Operational inventory category'}</p>
+            <!-- Dropdown Menu -->
+            <div
+              id="category-dropdown-menu"
+              class="hidden absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                id="menu-add-category-btn"
+                type="button"
+                class="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-[#138FCB] flex items-center gap-2 transition-colors cursor-pointer">
+                <span class="text-sm font-extrabold text-[#138FCB] leading-none">+</span>
+                <span>Add Category</span>
+              </button>
+              <button
+                id="menu-edit-categories-btn"
+                type="button"
+                class="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-[#138FCB] flex items-center gap-2 transition-colors cursor-pointer border-t border-slate-100">
+                <span class="text-xs">✏️</span>
+                <span>Edit Categories</span>
+              </button>
             </div>
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <button
-              id="edit-active-category-btn"
-              type="button"
-              class="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer">
-              Edit Category
-            </button>
-            <button
-              id="reset-category-filter-btn"
-              type="button"
-              class="px-2.5 py-1 text-xs font-semibold text-[#138FCB] hover:underline cursor-pointer">
-              View All Categories ✕
-            </button>
-          </div>
-        </div>
 
+        </div>
       </div>
 
       <!-- FILTER CONTROLS & 3-WAY VARIANT VIEW BAR -->
@@ -390,7 +368,7 @@ function renderProductsTableContent(filteredProducts, categories) {
             </tr>
           </thead>
           <tbody class="divide-y divide-[#F4F5F7]">
-            ${filteredProducts.map((prod, idx) => {
+            ${filteredProducts.map((prod) => {
               const variants = varMap.get(prod.id) || [];
               const hasVariants = variants.length > 0;
               const isExpanded = isAllExpanded || expandedProductIds.has(prod.id);
@@ -708,81 +686,9 @@ export function bindProductsEvents(container, refreshCallback) {
       btn.onclick = () => {
         currentCategoryId = btn.getAttribute('data-cat-id');
         updateCategoryTabs();
-        updateCategoryBanner();
         updateTable();
       };
     });
-  };
-
-  const updateCategoryBanner = () => {
-    const banner = container.querySelector('#category-context-banner');
-    if (!banner) return;
-
-    if (currentCategoryId === 'all') {
-      banner.classList.add('hidden');
-      banner.classList.remove('flex');
-    } else {
-      const category = productService.getCategoryById(currentCategoryId);
-      if (category) {
-        banner.classList.remove('hidden');
-        banner.classList.add('flex');
-        banner.innerHTML = `
-          <div class="flex items-center gap-2.5">
-            <span class="px-2 py-1 rounded-lg bg-blue-50 text-[#138FCB] border border-blue-200 font-mono text-[11px] font-bold">
-              ${category.code}
-            </span>
-            <div>
-              <h3 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                <span>${category.name}</span>
-                <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${category.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'}">
-                  ${category.isActive ? 'Active Category' : 'Inactive'}
-                </span>
-              </h3>
-              <p class="text-xs text-slate-500 line-clamp-1">${category.description || 'Operational inventory category'}</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <button
-              id="edit-active-category-btn"
-              type="button"
-              class="px-2.5 py-1 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer">
-              Edit Category
-            </button>
-            <button
-              id="reset-category-filter-btn"
-              type="button"
-              class="px-2.5 py-1 text-xs font-semibold text-[#138FCB] hover:underline cursor-pointer">
-              View All Categories ✕
-            </button>
-          </div>
-        `;
-
-        const editCatBtn = banner.querySelector('#edit-active-category-btn');
-        if (editCatBtn) {
-          editCatBtn.onclick = () => {
-            openCategoryModal(category, () => {
-              updateCategoryTabs();
-              updateCategoryBanner();
-              updateTable();
-              if (refreshCallback) refreshCallback();
-            });
-          };
-        }
-
-        const resetCatBtn = banner.querySelector('#reset-category-filter-btn');
-        if (resetCatBtn) {
-          resetCatBtn.onclick = () => {
-            currentCategoryId = 'all';
-            updateCategoryTabs();
-            updateCategoryBanner();
-            updateTable();
-          };
-        }
-      } else {
-        banner.classList.add('hidden');
-        banner.classList.remove('flex');
-      }
-    }
   };
 
   // Initial table render
@@ -793,41 +699,58 @@ export function bindProductsEvents(container, refreshCallback) {
     btn.onclick = () => {
       currentCategoryId = btn.getAttribute('data-cat-id');
       updateCategoryTabs();
-      updateCategoryBanner();
       updateTable();
     };
   });
 
-  // Category Banner Actions
-  updateCategoryBanner();
+  // Category Actions Dropdown
+  const menuToggleBtn = container.querySelector('#category-menu-toggle-btn');
+  const dropdownMenu = container.querySelector('#category-dropdown-menu');
 
-  // Add Category Button at Top
-  const addCatBtn = container.querySelector('#add-category-btn-top');
-  if (addCatBtn) {
-    addCatBtn.onclick = () => {
-      openCategoryModal(null, (newCategory) => {
-        if (newCategory) {
-          currentCategoryId = newCategory.id;
-        }
-        updateCategoryTabs();
-        updateCategoryBanner();
-        updateTable();
-        if (refreshCallback) refreshCallback();
-      });
+  if (menuToggleBtn && dropdownMenu) {
+    menuToggleBtn.onclick = (e) => {
+      e.stopPropagation();
+      dropdownMenu.classList.toggle('hidden');
     };
-  }
 
-  // Rearrange Categories Button at Top
-  const rearrangeBtn = container.querySelector('#rearrange-categories-btn-top');
-  if (rearrangeBtn) {
-    rearrangeBtn.onclick = () => {
-      openRearrangeCategoriesModal(() => {
-        updateCategoryTabs();
-        updateCategoryBanner();
-        updateTable();
-        if (refreshCallback) refreshCallback();
-      });
+    // Close dropdown on outside click
+    const handleOutsideClick = (e) => {
+      if (!menuToggleBtn.contains(e.target) && !dropdownMenu.contains(e.target)) {
+        dropdownMenu.classList.add('hidden');
+      }
     };
+    document.addEventListener('click', handleOutsideClick);
+
+    // Menu Item: Add Category
+    const menuAddBtn = container.querySelector('#menu-add-category-btn');
+    if (menuAddBtn) {
+      menuAddBtn.onclick = (e) => {
+        e.stopPropagation();
+        dropdownMenu.classList.add('hidden');
+        openCategoryModal(null, (newCategory) => {
+          if (newCategory) {
+            currentCategoryId = newCategory.id;
+          }
+          updateCategoryTabs();
+          updateTable();
+          if (refreshCallback) refreshCallback();
+        });
+      };
+    }
+
+    // Menu Item: Edit Categories (opens unified edit & rearrange modal)
+    const menuEditBtn = container.querySelector('#menu-edit-categories-btn');
+    if (menuEditBtn) {
+      menuEditBtn.onclick = (e) => {
+        e.stopPropagation();
+        dropdownMenu.classList.add('hidden');
+        openEditAndRearrangeCategoriesModal(() => {
+          updateCategoryTabs();
+          updateTable();
+          if (refreshCallback) refreshCallback();
+        });
+      };
+    }
   }
 
   // Search input filter
@@ -920,8 +843,6 @@ function bindTableInnerActions(tableContainer, refreshCallback) {
           isAll ? 'bg-[#138FCB] text-white font-bold shadow-xs' : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 font-semibold'
         }`;
       });
-      const banner = document.querySelector('#category-context-banner');
-      if (banner) banner.classList.add('hidden');
       const filtered = getFilteredProducts();
       tableContainer.innerHTML = renderProductsTableContent(filtered, productService.getCategories());
       bindTableInnerActions(tableContainer, refreshCallback);
@@ -986,44 +907,116 @@ function bindTableInnerActions(tableContainer, refreshCallback) {
 }
 
 /**
- * Rearrange Categories Order Modal
- * Supports Move Up / Move Down buttons and fluid Drag & Drop
+ * Unified Edit & Rearrange Categories Modal
+ * Allows:
+ * 1) Editing category details (Name, description, active status)
+ * 2) Deleting category (if no products assigned)
+ * 3) Rearranging order via Move Up / Move Down buttons or Drag & Drop
+ * 4) Adding new categories on the fly
  */
-export function openRearrangeCategoriesModal(onSaved) {
+export function openEditAndRearrangeCategoriesModal(onSaved) {
   let categories = [...productService.getCategories()];
   const products = productService.getProducts();
+  let editingCatId = null;
 
   const renderCategoryListHtml = () => {
     return categories.map((cat, idx) => {
       const prodCount = products.filter(p => p.categoryId === cat.id).length;
       const isFirst = idx === 0;
       const isLast = idx === categories.length - 1;
+      const isEditing = editingCatId === cat.id;
+
+      if (isEditing) {
+        return `
+          <div class="p-3.5 bg-blue-50/50 rounded-xl border border-blue-300 shadow-2xs space-y-3" data-id="${cat.id}">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-blue-900 text-xs flex items-center gap-1.5">
+                <span>✏️</span>
+                <span>Editing: ${cat.name} (${cat.code})</span>
+              </span>
+              <span class="text-[10px] text-slate-500 font-mono">Position #${idx + 1}</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-700 mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  id="inline-cat-name-${cat.id}"
+                  value="${cat.name}"
+                  class="w-full text-xs font-bold rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB] focus:outline-none">
+              </div>
+              <div class="flex items-end">
+                <label class="inline-flex items-center gap-2 cursor-pointer pb-2">
+                  <input
+                    type="checkbox"
+                    id="inline-cat-active-${cat.id}"
+                    ${cat.isActive ? 'checked' : ''}
+                    class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
+                  <span class="text-xs font-semibold text-slate-700">Active Category</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 mb-1">Description</label>
+              <input
+                type="text"
+                id="inline-cat-desc-${cat.id}"
+                value="${cat.description || ''}"
+                placeholder="Category operational scope..."
+                class="w-full text-xs rounded-lg border border-slate-200 bg-white py-1.5 px-2.5 text-slate-800 focus:border-[#138FCB] focus:outline-none">
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                class="inline-cancel-btn px-3 py-1 text-xs font-semibold text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer">
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="inline-save-btn px-3.5 py-1 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-lg shadow-2xs cursor-pointer"
+                data-id="${cat.id}">
+                Save Details
+              </button>
+            </div>
+          </div>
+        `;
+      }
 
       return `
         <div
-          class="reorder-cat-row flex items-center justify-between p-3 bg-white hover:bg-blue-50/40 rounded-xl border border-slate-200/90 shadow-2xs transition-all cursor-grab active:cursor-grabbing"
+          class="reorder-cat-row flex items-center justify-between p-3 bg-white hover:bg-slate-50/70 rounded-xl border border-slate-200/90 shadow-2xs transition-all cursor-grab active:cursor-grabbing"
           draggable="true"
           data-index="${idx}"
           data-id="${cat.id}">
           
           <div class="flex items-center gap-3">
             <span class="text-slate-400 select-none text-base cursor-grab" title="Drag to reorder">⋮⋮</span>
-            <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 font-mono text-[11px] font-bold flex items-center justify-center border border-slate-200">
+            <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-600 font-mono text-[11px] font-bold flex items-center justify-center border border-slate-200 shrink-0">
               ${idx + 1}
             </span>
             <div>
               <div class="flex items-center gap-2">
                 <span class="font-bold text-slate-800 text-xs">${cat.name}</span>
                 <span class="font-mono text-[10px] text-[#138FCB] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-semibold">${cat.code}</span>
+                <span class="text-[9px] px-1.5 py-0.2 rounded-full font-bold ${cat.isActive ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500'}">
+                  ${cat.isActive ? 'Active' : 'Inactive'}
+                </span>
               </div>
-              <span class="text-[11px] text-slate-400 font-medium">${prodCount} product master${prodCount !== 1 ? 's' : ''}</span>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="text-[11px] text-slate-400 font-medium">${prodCount} product${prodCount !== 1 ? 's' : ''}</span>
+                ${cat.description ? `<span class="text-[10px] text-slate-400 line-clamp-1 max-w-[200px] sm:max-w-xs">• ${cat.description}</span>` : ''}
+              </div>
             </div>
           </div>
 
-          <div class="flex items-center gap-1.5 shrink-0">
+          <div class="flex items-center gap-1 shrink-0">
+            <!-- Move Up -->
             <button
               type="button"
-              class="move-up-btn w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center border transition-colors ${
+              class="move-up-btn w-6 h-6 rounded-lg text-[10px] font-bold flex items-center justify-center border transition-colors ${
                 isFirst
                   ? 'text-slate-300 border-slate-100 cursor-not-allowed'
                   : 'text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
@@ -1033,9 +1026,10 @@ export function openRearrangeCategoriesModal(onSaved) {
               title="Move up">
               ▲
             </button>
+            <!-- Move Down -->
             <button
               type="button"
-              class="move-down-btn w-7 h-7 rounded-lg text-xs font-bold flex items-center justify-center border transition-colors ${
+              class="move-down-btn w-6 h-6 rounded-lg text-[10px] font-bold flex items-center justify-center border transition-colors ${
                 isLast
                   ? 'text-slate-300 border-slate-100 cursor-not-allowed'
                   : 'text-slate-700 border-slate-200 hover:bg-slate-100 cursor-pointer'
@@ -1045,6 +1039,23 @@ export function openRearrangeCategoriesModal(onSaved) {
               title="Move down">
               ▼
             </button>
+            <!-- Edit Button -->
+            <button
+              type="button"
+              class="edit-single-cat-btn px-2 py-1 rounded-lg text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer ml-1"
+              data-id="${cat.id}"
+              title="Edit category details">
+              ✏️ Edit
+            </button>
+            <!-- Delete Button (if 0 products) -->
+            <button
+              type="button"
+              class="delete-single-cat-btn p-1 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer ${prodCount > 0 ? 'opacity-40' : ''}"
+              data-id="${cat.id}"
+              data-count="${prodCount}"
+              title="${prodCount > 0 ? 'Cannot delete: products assigned' : 'Delete category'}">
+              🗑
+            </button>
           </div>
         </div>
       `;
@@ -1053,20 +1064,27 @@ export function openRearrangeCategoriesModal(onSaved) {
 
   const contentHtml = `
     <div class="space-y-4 text-xs">
-      <div class="p-3 bg-blue-50/60 rounded-xl border border-blue-200/80 flex items-center justify-between">
-        <div class="space-y-0.5">
-          <p class="font-bold text-blue-900">Custom Category Tab Order</p>
-          <p class="text-[11px] text-blue-700">Reorder category tabs to reflect your team's frequent operational catalog sequence.</p>
+      <div class="flex items-center justify-between p-3 bg-blue-50/60 rounded-xl border border-blue-200/80">
+        <div>
+          <p class="font-bold text-blue-900">Manage, Edit &amp; Rearrange Categories</p>
+          <p class="text-[11px] text-blue-700">Click ✏️ Edit to modify names or active status. Use ▲ / ▼ or drag rows to rearrange tab sequence.</p>
         </div>
-        <span class="text-xl">↕</span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            id="modal-add-cat-btn"
+            class="inline-flex items-center gap-1 px-3 py-1.5 bg-[#138FCB] hover:bg-[#0E78AC] text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer">
+            <span>+ Add Category</span>
+          </button>
+        </div>
       </div>
 
-      <div id="reorder-categories-list" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+      <div id="edit-reorder-categories-list" class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
         ${renderCategoryListHtml()}
       </div>
 
       <div class="pt-2 flex items-center justify-between border-t border-slate-100 text-[11px] text-slate-400">
-        <span>💡 Tip: Use ▲ / ▼ buttons or drag rows directly to arrange order.</span>
+        <span>💡 Tip: Changes to order will immediately update the catalog category tabs.</span>
         <button
           type="button"
           id="reorder-sort-alpha-btn"
@@ -1085,13 +1103,13 @@ export function openRearrangeCategoriesModal(onSaved) {
     <div class="flex items-center space-x-2.5">
       <button
         type="button"
-        id="reorder-cancel-btn"
+        id="edit-reorder-close-btn"
         class="px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 cursor-pointer">
-        Cancel
+        Close
       </button>
       <button
         type="button"
-        id="reorder-save-btn"
+        id="edit-reorder-save-order-btn"
         class="px-5 py-2 text-xs font-bold text-white bg-[#138FCB] hover:bg-[#0E78AC] rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer">
         Save Category Order
       </button>
@@ -1099,18 +1117,19 @@ export function openRearrangeCategoriesModal(onSaved) {
   `;
 
   openModal({
-    title: 'Rearrange Product Categories Order',
-    subtitle: 'Reorder tabs across the catalog for personalized quick-access',
-    size: 'max-w-lg',
+    title: 'Edit & Rearrange Categories',
+    subtitle: 'Manage category details, status, or reorder catalog tabs',
+    size: 'max-w-2xl',
     contentHtml,
     footerHtml,
     onOpen: (modalEl) => {
-      const listEl = modalEl.querySelector('#reorder-categories-list');
-      const cancelBtn = modalEl.querySelector('#reorder-cancel-btn');
-      const saveBtn = modalEl.querySelector('#reorder-save-btn');
+      const listEl = modalEl.querySelector('#edit-reorder-categories-list');
+      const closeBtn = modalEl.querySelector('#edit-reorder-close-btn');
+      const saveOrderBtn = modalEl.querySelector('#edit-reorder-save-order-btn');
       const alphaBtn = modalEl.querySelector('#reorder-sort-alpha-btn');
+      const modalAddCatBtn = modalEl.querySelector('#modal-add-cat-btn');
 
-      if (cancelBtn) cancelBtn.onclick = () => closeModal();
+      if (closeBtn) closeBtn.onclick = () => closeModal();
 
       const refreshList = () => {
         if (listEl) {
@@ -1181,6 +1200,83 @@ export function openRearrangeCategoriesModal(onSaved) {
             }
           };
         });
+
+        // Edit button click -> expand inline editor
+        listEl.querySelectorAll('.edit-single-cat-btn').forEach(btn => {
+          btn.onclick = () => {
+            editingCatId = btn.getAttribute('data-id');
+            refreshList();
+          };
+        });
+
+        // Cancel inline editor
+        listEl.querySelectorAll('.inline-cancel-btn').forEach(btn => {
+          btn.onclick = () => {
+            editingCatId = null;
+            refreshList();
+          };
+        });
+
+        // Save inline editor
+        listEl.querySelectorAll('.inline-save-btn').forEach(btn => {
+          btn.onclick = () => {
+            const catId = btn.getAttribute('data-id');
+            const name = modalEl.querySelector(`#inline-cat-name-${catId}`)?.value.trim();
+            const desc = modalEl.querySelector(`#inline-cat-desc-${catId}`)?.value.trim();
+            const isActive = modalEl.querySelector(`#inline-cat-active-${catId}`)?.checked ?? true;
+
+            if (!name) {
+              toast.show('Please provide a category name.', 'warning');
+              return;
+            }
+
+            try {
+              productService.updateCategory(catId, { name, description: desc, isActive });
+              // Update local state
+              const found = categories.find(c => c.id === catId);
+              if (found) {
+                found.name = name;
+                found.description = desc;
+                found.isActive = isActive;
+              }
+              editingCatId = null;
+              toast.show('Category updated successfully.', 'success');
+              refreshList();
+              if (onSaved) onSaved();
+            } catch (err) {
+              toast.show(err.message, 'error');
+            }
+          };
+        });
+
+        // Delete button click
+        listEl.querySelectorAll('.delete-single-cat-btn').forEach(btn => {
+          btn.onclick = () => {
+            const catId = btn.getAttribute('data-id');
+            const count = parseInt(btn.getAttribute('data-count'), 10);
+
+            if (count > 0) {
+              toast.show(`Cannot delete category: ${count} product(s) are assigned to it.`, 'warning');
+              return;
+            }
+
+            confirmAction({
+              title: 'Delete Category',
+              message: 'Are you sure you want to delete this category?',
+              onConfirm: () => {
+                try {
+                  productService.deleteCategory(catId);
+                  categories = categories.filter(c => c.id !== catId);
+                  toast.show('Category deleted.', 'success');
+                  refreshList();
+                  if (onSaved) onSaved();
+                } catch (err) {
+                  toast.show(err.message, 'error');
+                }
+              }
+            });
+          };
+        });
       };
 
       bindListEvents();
@@ -1193,9 +1289,22 @@ export function openRearrangeCategoriesModal(onSaved) {
         };
       }
 
+      // Add Category from inside modal
+      if (modalAddCatBtn) {
+        modalAddCatBtn.onclick = () => {
+          openCategoryModal(null, (newCat) => {
+            if (newCat) {
+              categories.push(newCat);
+              refreshList();
+              if (onSaved) onSaved();
+            }
+          });
+        };
+      }
+
       // Save new order
-      if (saveBtn) {
-        saveBtn.onclick = () => {
+      if (saveOrderBtn) {
+        saveOrderBtn.onclick = () => {
           const orderedIds = categories.map(c => c.id);
           try {
             productService.reorderCategories(orderedIds);
@@ -1793,7 +1902,7 @@ export function openProductModal(product = null, onSaved) {
                   </div>
                   <div class="w-32 flex items-center gap-1">
                     <input type="number" min="1" value="${pkg.factor}" placeholder="5000" class="roll-size-qty w-full text-xs font-mono font-bold text-blue-900 border border-slate-200 rounded px-2 py-1 text-right focus:border-[#138FCB]">
-                    <span class="roll-size-unit-lbl text-[10px] text-slate-500 font-bold shrink-0">ft</span>
+                    <span class="roll-size-unit-lbl text-[10px] text-slate-500 font-bold shrink-0">${pkg.unit || 'ft'}</span>
                   </div>
                   <button type="button" class="remove-roll-size-btn text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer" title="Remove roll size">
                     ✕
