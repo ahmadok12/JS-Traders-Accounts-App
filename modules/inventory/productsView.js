@@ -17,6 +17,7 @@
 import { productService } from '../../services/productService.js';
 import { storageService } from '../../services/storageService.js';
 import { inventoryService } from '../../services/inventoryService.js';
+import { cutToLengthService } from '../../services/cutToLengthService.js';
 import { openCategoryModal } from './categoriesView.js';
 import { openModal, closeModal } from '../../components/modal.js';
 import { confirmAction } from '../../components/confirmation.js';
@@ -1694,6 +1695,35 @@ export function openAddVariantModal(product, onSaved) {
           </div>
         </div>
       </section>
+
+      <!-- Section 3: Roll & Cut-to-Length Configuration -->
+      <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+            <span>📏</span>
+            <span>Roll / Cut-to-Length Packaging</span>
+          </h3>
+          <span class="text-[10px] font-medium text-slate-400">Variant-level roll length definition</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="add-var-is-ctl" ${product && (product.cut_to_length || product.enableRollTracking) ? 'checked' : ''} class="rounded border-slate-300 text-[#138FCB] focus:ring-0">
+          <label for="add-var-is-ctl" class="font-semibold text-slate-700 cursor-pointer">Enable Roll &amp; Cut-to-Length for this Variant</label>
+        </div>
+
+        <div id="add-var-ctl-config-box" class="${product && (product.cut_to_length || product.enableRollTracking) ? '' : 'hidden'} grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="add-var-roll-length">Standard Roll Length <span class="text-red-500">*</span></label>
+            <input type="number" id="add-var-roll-length" min="1" step="any" value="${product?.packagingUnits?.[0]?.factor || 5000}" placeholder="5000" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+            <span class="text-[10px] text-slate-400">e.g. 5000, 450, 400</span>
+          </div>
+
+          <div class="space-y-1.5">
+            <label class="text-xs font-semibold text-slate-700" for="add-var-roll-unit">Measurement Unit</label>
+            <input type="text" id="add-var-roll-unit" value="${product?.base_unit || 'ft'}" placeholder="ft" class="w-full text-xs font-bold rounded-xl border border-slate-200 focus:border-[#138FCB] py-2.5 px-3 text-slate-800 bg-white shadow-2xs">
+          </div>
+        </div>
+      </section>
     </form>
   `;
 
@@ -1724,6 +1754,14 @@ export function openAddVariantModal(product, onSaved) {
       const cancelBtn = modalEl.querySelector('#add-var-cancel-btn');
       if (cancelBtn) cancelBtn.onclick = () => closeModal();
 
+      const ctlCheckbox = modalEl.querySelector('#add-var-is-ctl');
+      const ctlBox = modalEl.querySelector('#add-var-ctl-config-box');
+      if (ctlCheckbox && ctlBox) {
+        ctlCheckbox.onchange = (e) => {
+          ctlBox.classList.toggle('hidden', !e.target.checked);
+        };
+      }
+
       modalEl.querySelector('#add-variant-form').onsubmit = (e) => {
         e.preventDefault();
         const name = modalEl.querySelector('#var-name').value.trim();
@@ -1731,6 +1769,10 @@ export function openAddVariantModal(product, onSaved) {
         const costPrice = Number(modalEl.querySelector('#var-cost').value) || 0;
         const sellingPrice = Number(modalEl.querySelector('#var-price').value) || 0;
         const unit = modalEl.querySelector('#var-unit').value.trim() || 'PCS';
+
+        const isCutToLength = modalEl.querySelector('#add-var-is-ctl')?.checked || false;
+        const rollLength = isCutToLength ? (Number(modalEl.querySelector('#add-var-roll-length')?.value) || 5000) : null;
+        const rollUnit = isCutToLength ? (modalEl.querySelector('#add-var-roll-unit')?.value.trim() || 'ft') : null;
 
         const origin = modalEl.querySelector('#var-attr-origin').value.trim();
         const material = modalEl.querySelector('#var-attr-material').value.trim();
@@ -1742,16 +1784,29 @@ export function openAddVariantModal(product, onSaved) {
         if (size) attributes.Size = size;
 
         try {
-          productService.createVariant({
+          const created = productService.createVariant({
             productId: product.id,
             name,
             sku,
             costPrice,
             sellingPrice,
             unit,
+            isCutToLength,
+            rollLength,
+            rollSize: rollLength,
+            rollUnit,
             attributes,
             isActive: true
           });
+
+          if (isCutToLength && created?.id) {
+            cutToLengthService.saveVariantStock('wh-1', created.id, {
+              fullRolls: 5,
+              rollLength,
+              loosePieces: [],
+              unit: rollUnit || 'ft'
+            });
+          }
 
           toast.show(`Variant SKU "${sku}" added successfully to ${product.businessName}.`, 'success');
           closeModal();

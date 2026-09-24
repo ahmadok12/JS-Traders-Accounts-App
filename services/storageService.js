@@ -453,6 +453,9 @@ const SEED_DATABASE = {
       name: '3mm Galvanized Steel Wire (Continuous)',
       costPrice: 20, // Per foot
       sellingPrice: 32,
+      isCutToLength: true,
+      rollLength: 5000,
+      rollUnit: 'ft',
       attributes: { Origin: 'China', Material: 'Galvanized High-Tensile Steel', Size: '3mm' },
       isActive: true
     },
@@ -497,7 +500,10 @@ const SEED_DATABASE = {
       name: 'Galvanized Feeder Auger 45mm (450 ft Roll)',
       costPrice: 180, // Per foot
       sellingPrice: 260,
+      isCutToLength: true,
+      rollLength: 450,
       rollSize: 450,
+      rollUnit: 'ft',
       packagingName: 'Roll (450 ft)',
       attributes: { Origin: 'South Africa', Material: 'Spring Steel', Size: '45mm', Packaging: '450 ft Roll' },
       isActive: true
@@ -510,7 +516,10 @@ const SEED_DATABASE = {
       name: 'Galvanized Feeder Auger 45mm (400 ft Roll)',
       costPrice: 180, // Per foot
       sellingPrice: 260,
+      isCutToLength: true,
+      rollLength: 400,
       rollSize: 400,
+      rollUnit: 'ft',
       packagingName: 'Roll (400 ft)',
       attributes: { Origin: 'South Africa', Material: 'Spring Steel', Size: '45mm', Packaging: '400 ft Roll' },
       isActive: true
@@ -657,6 +666,53 @@ const SEED_DATABASE = {
       sellingPrice: 5000,
       attributes: { Origin: 'China', Size: '7-inch' },
       isActive: true
+    }
+  ],
+
+  // Variant-Level Roll & Loose Stock Balances
+  variantRollStocks: [
+    // 3mm Galvanized Steel Wire (var-5, prod-4): 5 full rolls of 5,000 ft, 0 loose pieces (total 25,000 ft) in wh-1
+    {
+      id: 'vrs-wh-1-var-5',
+      warehouseId: 'wh-1',
+      variantId: 'var-5',
+      productId: 'prod-4',
+      fullRolls: 5,
+      rollLength: 5000,
+      loosePieces: [],
+      unit: 'ft'
+    },
+    {
+      id: 'vrs-wh-2-var-5',
+      warehouseId: 'wh-2',
+      variantId: 'var-5',
+      productId: 'prod-4',
+      fullRolls: 0,
+      rollLength: 5000,
+      loosePieces: [],
+      unit: 'ft'
+    },
+    // Auger 450 (var-9-450): 5 full rolls of 450 ft, 0 loose pieces (total 2,250 ft) in wh-1
+    {
+      id: 'vrs-wh-1-var-9-450',
+      warehouseId: 'wh-1',
+      variantId: 'var-9-450',
+      productId: 'prod-9',
+      fullRolls: 5,
+      rollLength: 450,
+      loosePieces: [250],
+      unit: 'ft'
+    },
+    // Auger 400 (var-9-400): 3 full rolls of 400 ft, 0 loose pieces (total 1,200 ft) in wh-1
+    {
+      id: 'vrs-wh-1-var-9-400',
+      warehouseId: 'wh-1',
+      variantId: 'var-9-400',
+      productId: 'prod-9',
+      fullRolls: 3,
+      rollLength: 400,
+      loosePieces: [],
+      unit: 'ft'
     }
   ],
 
@@ -1940,7 +1996,7 @@ class StorageService {
     // Smart-merge core operational collections
     const collections = [
       'gatepasses', 'staffNotifications', 'deliveries', 'salesOrders', 'stockInwardOrders', 'stockAdjustments',
-      'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions',
+      'stockBalances', 'stockMovements', 'cutToLengthUnits', 'cutToLengthTransactions', 'variantRollStocks',
       'users', 'assemblies', 'disassemblies', 'assemblyRecipes', 'disassemblyTemplates',
       'assemblyPayables', 'assemblyPayments', 'bundleDefinitions'
     ];

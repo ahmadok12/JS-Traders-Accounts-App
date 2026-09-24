@@ -922,8 +922,8 @@ function openCreateOrderModal(onSaved) {
     }
 
     const vId = selectedVariant ? selectedVariant.id : '';
-    const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
-    const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS');
+    const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
+    const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || selectedProduct?.baseUnitId || 'PCS'));
     const packagingUnits = isCtl ? (selectedProduct.packagingUnits || []) : [];
     const curPackaging = initialPackaging || (packagingUnits.length > 0 ? packagingUnits[0].name : baseUnit);
 
@@ -945,22 +945,22 @@ function openCreateOrderModal(onSaved) {
     });
 
     const ctlHtml = `
-      <div class="so-ctl-container ${isCtl ? '' : 'hidden'} mt-2.5 pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/80 p-2 rounded-xl border border-slate-200/60">
-        <div class="flex items-center gap-1.5">
-          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Dispatch Mode:</span>
-          <select class="so-item-packaging text-xs font-bold border border-slate-200 rounded-lg px-2.5 py-1 bg-white text-slate-800 focus:outline-none focus:border-[#138FCB] shadow-2xs cursor-pointer">
-            ${packagingUnits.map(p => `
-              <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1" ${curPackaging === p.name ? 'selected' : ''}>
-                Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
-              </option>
-            `).join('')}
-            <option value="${baseUnit}" data-factor="1" data-is-roll="0" ${curPackaging === baseUnit ? 'selected' : ''}>
-              ✂️ ${baseUnit} (Loose Cut)
-            </option>
-          </select>
+      <div class="so-ctl-container ${isCtl ? '' : 'hidden'} mt-2.5 pt-2 border-t border-slate-100 space-y-2 bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/60">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">📦 Dispatch Mode:</span>
+            <select class="so-item-packaging text-xs font-bold border border-slate-200 rounded-xl px-2.5 py-1 bg-white text-slate-800 focus:outline-none focus:border-[#138FCB] shadow-2xs cursor-pointer">
+              <option value="rolls">1. Rolls</option>
+              <option value="loose_continuous" selected>2. loose - continuous</option>
+              <option value="loose_pcs">3. loose - pcs (more than 1 pcs joined together)</option>
+            </select>
+          </div>
+          <div class="so-ctl-stock-pill text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
+            <!-- Live variant rolls & loose breakdown -->
+          </div>
         </div>
-        <div class="so-ctl-stock-pill text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
-          <!-- Live physical rolls & loose breakdown -->
+        <div class="so-ctl-sim-preview hidden text-[11px] font-medium p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-950 transition-all">
+          <!-- Real-time simulation of cuts and remaining rolls & loose pieces -->
         </div>
       </div>
     `;
@@ -1229,71 +1229,79 @@ function openCreateOrderModal(onSaved) {
           if (offIndicator) offIndicator.textContent = 'Office Stock: —';
           if (totalDisplay) totalDisplay.textContent = '—';
           if (ctlContainer) ctlContainer.classList.add('hidden');
+          const ctlSimPreview = row.querySelector('.so-ctl-sim-preview');
+          if (ctlSimPreview) {
+            ctlSimPreview.classList.add('hidden');
+            ctlSimPreview.innerHTML = '';
+          }
+          row._simWh = null;
+          row._simOff = null;
           return;
         }
 
         const selectedVariant = variants.find(v => v.id === vId);
         const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
-        const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
-        const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+        const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
+        const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
 
         if (isCtl && ctlContainer && packagingSelect) {
           ctlContainer.classList.remove('hidden');
 
-          const packagingUnits = selectedProduct.packagingUnits || [];
-          const currentVal = packagingSelect.value;
-          const existingOptions = Array.from(packagingSelect.options).map(o => o.value);
-          const expectedValues = [...packagingUnits.map(p => p.name), baseUnit];
-          const isSame = existingOptions.length === expectedValues.length && existingOptions.every((v, idx) => v === expectedValues[idx]);
+          const whStockRec = cutToLengthService.getVariantStock('wh-1', vId);
+          const offStockRec = cutToLengthService.getVariantStock('wh-2', vId);
 
+          const rollLength = whStockRec?.rollLength || Number(selectedVariant?.rollLength) || 5000;
+          const whRolls = whStockRec ? whStockRec.fullRolls : 0;
+          const whLoose = whStockRec ? (whStockRec.loosePieces || []) : [];
+          const whTotalLoose = whLoose.reduce((sum, p) => sum + p, 0);
+          const whTotalFootage = (whRolls * rollLength) + whTotalLoose;
+
+          const offRolls = offStockRec ? offStockRec.fullRolls : 0;
+          const offLoose = offStockRec ? (offStockRec.loosePieces || []) : [];
+          const offTotalLoose = offLoose.reduce((sum, p) => sum + p, 0);
+          const offTotalFootage = (offRolls * rollLength) + offTotalLoose;
+
+          // Ensure packaging select options are preserved for 3 modes
+          const currentVal = packagingSelect.value || 'loose_continuous';
+          const expectedOptions = [
+            { val: 'rolls', label: `1. Rolls (${rollLength.toLocaleString()} ${baseUnit}/roll)` },
+            { val: 'loose_continuous', label: `2. loose - continuous (${baseUnit})` },
+            { val: 'loose_pcs', label: `3. loose - pcs (${baseUnit}, can join pieces)` }
+          ];
+
+          const existingVals = Array.from(packagingSelect.options).map(o => o.value);
+          const isSame = existingVals.length === expectedOptions.length && existingVals.every((v, i) => v === expectedOptions[i].val);
           if (!isSame) {
-            packagingSelect.innerHTML = `
-              ${packagingUnits.map(p => `
-                <option value="${p.name}" data-factor="${p.factor}" data-is-roll="1">
-                  Roll (${Number(p.factor).toLocaleString()} ${baseUnit})
-                </option>
-              `).join('')}
-              <option value="${baseUnit}" data-factor="1" data-is-roll="0">
-                ✂️ ${baseUnit} (Loose Cut)
-              </option>
-            `;
-            if (currentVal && expectedValues.includes(currentVal)) {
-              packagingSelect.value = currentVal;
-            }
+            packagingSelect.innerHTML = expectedOptions.map(opt => `
+              <option value="${opt.val}" ${opt.val === currentVal ? 'selected' : ''}>${opt.label}</option>
+            `).join('');
+            packagingSelect.value = currentVal;
           }
 
-          const selectedOption = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
-          const isRoll = selectedOption?.getAttribute('data-is-roll') === '1';
-          const rollFactor = Number(selectedOption?.getAttribute('data-factor')) || 1;
-          const packName = selectedOption?.value || baseUnit;
+          const mode = packagingSelect.value || 'loose_continuous';
 
-          const whSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-1', vId);
-          const offSummary = cutToLengthService.getSummary(selectedProduct.id, 'wh-2', vId);
-
-          if (ctlStockPill && whSummary) {
+          // Update stock pill
+          if (ctlStockPill) {
+            const whPcsStr = whLoose.length > 0 ? ` + [${whLoose.map(n => n.toLocaleString()).join(', ')}] ${baseUnit} loose` : '';
+            const offPcsStr = offLoose.length > 0 ? ` + [${offLoose.map(n => n.toLocaleString()).join(', ')}] ${baseUnit} loose` : '';
             ctlStockPill.innerHTML = `
-              <span class="font-bold text-[#138FCB]">WH:</span> ${whSummary.fullRollsCount} rolls + ${whSummary.loosePiecesFootage.toLocaleString()} ${baseUnit} loose | <span class="font-bold text-amber-700">Office:</span> ${offSummary?.fullRollsCount || 0} rolls + ${(offSummary?.loosePiecesFootage || 0).toLocaleString()} ${baseUnit}
+              <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px]">
+                <span><strong class="text-[#138FCB]">WH:</strong> ${whRolls} roll(s)${whPcsStr} (${whTotalFootage.toLocaleString()} ${baseUnit})</span>
+                <span class="text-slate-300">|</span>
+                <span><strong class="text-amber-700">Office:</strong> ${offRolls} roll(s)${offPcsStr} (${offTotalFootage.toLocaleString()} ${baseUnit})</span>
+              </div>
             `;
           }
 
-          if (isRoll) {
-            const whRollMatch = (whSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
-            const offRollMatch = (offSummary?.rollsBySize || []).find(r => r.packagingName === packName || r.rollSize === rollFactor);
-            const whRollCount = whRollMatch ? whRollMatch.count : 0;
-            const offRollCount = offRollMatch ? offRollMatch.count : 0;
-
-            if (whIndicator) whIndicator.textContent = `WH: ${whRollCount} Full Rolls (${packName})`;
-            if (offIndicator) offIndicator.textContent = `Office: ${offRollCount} Full Rolls (${packName})`;
+          // Update indicators & placeholders according to mode
+          if (mode === 'rolls') {
+            if (whIndicator) whIndicator.textContent = `WH: ${whRolls} Full Rolls (${rollLength.toLocaleString()} ${baseUnit}/roll)`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offRolls} Full Rolls (${rollLength.toLocaleString()} ${baseUnit}/roll)`;
             if (whQtyInput) whQtyInput.placeholder = '0 Rolls';
             if (offQtyInput) offQtyInput.placeholder = '0 Rolls';
           } else {
-            const whLoose = whSummary ? whSummary.loosePiecesFootage : 0;
-            const whTotal = whSummary ? whSummary.totalFootage : 0;
-            const offLoose = offSummary ? offSummary.loosePiecesFootage : 0;
-            const offTotal = offSummary ? offSummary.totalFootage : 0;
-
-            if (whIndicator) whIndicator.textContent = `WH: ${whLoose.toLocaleString()} ${baseUnit} Loose (${whTotal.toLocaleString()} ${baseUnit} Total)`;
-            if (offIndicator) offIndicator.textContent = `Office: ${offLoose.toLocaleString()} ${baseUnit} Loose (${offTotal.toLocaleString()} ${baseUnit} Total)`;
+            if (whIndicator) whIndicator.textContent = `WH: ${whTotalFootage.toLocaleString()} ${baseUnit} (${whRolls} rolls, ${whLoose.length} loose)`;
+            if (offIndicator) offIndicator.textContent = `Office: ${offTotalFootage.toLocaleString()} ${baseUnit} (${offRolls} rolls, ${offLoose.length} loose)`;
             if (whQtyInput) whQtyInput.placeholder = `0 ${baseUnit}`;
             if (offQtyInput) offQtyInput.placeholder = `0 ${baseUnit}`;
           }
@@ -1307,15 +1315,103 @@ function openCreateOrderModal(onSaved) {
           if (!rawW && !rawO) {
             if (totalDisplay) totalDisplay.textContent = '—';
           } else {
-            if (isRoll) {
-              const totalFeet = lineTotal * rollFactor;
+            if (mode === 'rolls') {
+              const totalFeet = lineTotal * rollLength;
               if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal} Roll${lineTotal > 1 ? 's' : ''}</span> <span class="text-[10px] text-slate-500 font-semibold block">(${totalFeet.toLocaleString()} ${baseUnit})</span>`;
             } else {
-              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(Loose Cut)</span>`;
+              if (totalDisplay) totalDisplay.innerHTML = `<span class="text-slate-900 font-extrabold">${lineTotal.toLocaleString()} ${baseUnit}</span> <span class="text-[10px] text-amber-600 font-semibold block">(${mode === 'loose_continuous' ? 'Continuous Cut' : 'Joined Pieces'})</span>`;
+            }
+          }
+
+          // Real-time allocation simulation preview
+          const ctlSimPreview = row.querySelector('.so-ctl-sim-preview');
+          if (ctlSimPreview) {
+            if (wQty <= 0 && oQty <= 0) {
+              ctlSimPreview.classList.add('hidden');
+              ctlSimPreview.innerHTML = '';
+              row._simWh = null;
+              row._simOff = null;
+            } else {
+              ctlSimPreview.classList.remove('hidden');
+              const previewSections = [];
+
+              if (wQty > 0) {
+                const simWh = cutToLengthService.simulateAllocation({
+                  warehouseId: 'wh-1',
+                  variantId: vId,
+                  mode,
+                  quantity: wQty
+                });
+                row._simWh = simWh;
+
+                if (simWh.canFulfill) {
+                  previewSections.push(`
+                    <div class="flex items-start gap-1.5 text-blue-950">
+                      <span class="text-emerald-600 font-bold text-xs mt-0.5">✓</span>
+                      <div>
+                        <span class="font-bold text-[#138FCB]">WH Allocation:</span> ${simWh.summaryText}
+                      </div>
+                    </div>
+                  `);
+                } else {
+                  previewSections.push(`
+                    <div class="flex items-start gap-1.5 text-rose-900">
+                      <span class="text-rose-600 font-bold text-xs mt-0.5">⚠️</span>
+                      <div>
+                        <span class="font-bold text-rose-700">WH Allocation Error:</span> ${simWh.error}
+                      </div>
+                    </div>
+                  `);
+                }
+              } else {
+                row._simWh = null;
+              }
+
+              if (oQty > 0) {
+                const simOff = cutToLengthService.simulateAllocation({
+                  warehouseId: 'wh-2',
+                  variantId: vId,
+                  mode,
+                  quantity: oQty
+                });
+                row._simOff = simOff;
+
+                if (simOff.canFulfill) {
+                  previewSections.push(`
+                    <div class="flex items-start gap-1.5 text-amber-950 ${wQty > 0 ? 'mt-1.5 pt-1.5 border-t border-blue-200/60' : ''}">
+                      <span class="text-emerald-600 font-bold text-xs mt-0.5">✓</span>
+                      <div>
+                        <span class="font-bold text-amber-800">Office Allocation:</span> ${simOff.summaryText}
+                      </div>
+                    </div>
+                  `);
+                } else {
+                  previewSections.push(`
+                    <div class="flex items-start gap-1.5 text-rose-900 ${wQty > 0 ? 'mt-1.5 pt-1.5 border-t border-blue-200/60' : ''}">
+                      <span class="text-rose-600 font-bold text-xs mt-0.5">⚠️</span>
+                      <div>
+                        <span class="font-bold text-rose-700">Office Allocation Error:</span> ${simOff.error}
+                      </div>
+                    </div>
+                  `);
+                }
+              } else {
+                row._simOff = null;
+              }
+
+              ctlSimPreview.innerHTML = previewSections.join('');
             }
           }
         } else {
           if (ctlContainer) ctlContainer.classList.add('hidden');
+          const ctlSimPreview = row.querySelector('.so-ctl-sim-preview');
+          if (ctlSimPreview) {
+            ctlSimPreview.classList.add('hidden');
+            ctlSimPreview.innerHTML = '';
+          }
+          row._simWh = null;
+          row._simOff = null;
+
           const unit = selectedVariant ? (selectedVariant.unit || 'PCS') : 'PCS';
           const wStock = inventoryService.getBalance('wh-1', vId);
           const oStock = inventoryService.getBalance('wh-2', vId);
@@ -1459,14 +1555,15 @@ function openCreateOrderModal(onSaved) {
 
         const rows = tbody.querySelectorAll('.so-line-row');
         const lines = [];
+        const ctlPlansToCommit = [];
 
-        rows.forEach(row => {
+        for (const row of rows) {
           const varInput = row.querySelector('.pv-var-input');
           const variantId = varInput ? varInput.value : '';
           const selectedVariant = variants.find(v => v.id === variantId);
           const selectedProduct = selectedVariant ? products.find(p => p.id === selectedVariant.productId) : null;
-          const isCtl = Boolean(selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking));
-          const baseUnit = isCtl ? (selectedProduct.base_unit || 'ft') : (selectedVariant?.unit || 'PCS');
+          const isCtl = Boolean(selectedVariant?.isCutToLength || selectedVariant?.rollLength || (selectedProduct && (selectedProduct.cut_to_length || selectedProduct.enableRollTracking)));
+          const baseUnit = selectedVariant?.rollUnit || (isCtl ? (selectedProduct?.base_unit || 'ft') : (selectedVariant?.unit || 'PCS'));
 
           const warehouseQty = Number(row.querySelector('.so-wh-qty')?.value) || 0;
           const officeQty = Number(row.querySelector('.so-office-qty')?.value) || 0;
@@ -1474,17 +1571,46 @@ function openCreateOrderModal(onSaved) {
 
           if (variantId && totalQty > 0) {
             const packagingSelect = row.querySelector('.so-item-packaging');
-            let packagingName = null;
+            const mode = isCtl && packagingSelect ? packagingSelect.value : null;
             let isRoll = false;
             let rollSize = null;
             let totalFeet = null;
 
-            if (isCtl && packagingSelect) {
-              const selectedOpt = packagingSelect.options[packagingSelect.selectedIndex] || packagingSelect.options[0];
-              isRoll = selectedOpt?.getAttribute('data-is-roll') === '1';
-              rollSize = Number(selectedOpt?.getAttribute('data-factor')) || 1;
-              packagingName = selectedOpt?.value || baseUnit;
+            if (isCtl) {
+              const stockRec = cutToLengthService.getVariantStock('wh-1', variantId);
+              rollSize = stockRec?.rollLength || Number(selectedVariant?.rollLength) || 5000;
+              isRoll = (mode === 'rolls');
               totalFeet = isRoll ? totalQty * rollSize : totalQty;
+
+              // Validate & prepare warehouse allocation
+              if (warehouseQty > 0) {
+                const whPlan = cutToLengthService.simulateAllocation({
+                  warehouseId: 'wh-1',
+                  variantId,
+                  mode,
+                  quantity: warehouseQty
+                });
+                if (!whPlan.canFulfill) {
+                  toast.show(`WH Allocation: ${whPlan.error || 'Cannot fulfill requested quantity'}`, 'error');
+                  return;
+                }
+                ctlPlansToCommit.push(whPlan);
+              }
+
+              // Validate & prepare office allocation
+              if (officeQty > 0) {
+                const offPlan = cutToLengthService.simulateAllocation({
+                  warehouseId: 'wh-2',
+                  variantId,
+                  mode,
+                  quantity: officeQty
+                });
+                if (!offPlan.canFulfill) {
+                  toast.show(`Office Allocation: ${offPlan.error || 'Cannot fulfill requested quantity'}`, 'error');
+                  return;
+                }
+                ctlPlansToCommit.push(offPlan);
+              }
             }
 
             lines.push({
@@ -1494,8 +1620,9 @@ function openCreateOrderModal(onSaved) {
               orderedQty: totalQty,
               deliveredQty: 0,
               remainingDeliveryQty: totalQty,
-              unit: isCtl ? (isRoll ? packagingName : baseUnit) : (selectedVariant?.unit || 'PCS'),
-              packagingName: isCtl ? packagingName : null,
+              unit: isCtl ? (isRoll ? 'Rolls' : baseUnit) : (selectedVariant?.unit || 'PCS'),
+              packagingName: isCtl ? mode : null,
+              mode: isCtl ? mode : null,
               isRoll,
               rollSize,
               totalFeet,
@@ -1503,7 +1630,7 @@ function openCreateOrderModal(onSaved) {
               lineTotal: 0
             });
           }
-        });
+        }
 
         if (lines.length === 0) {
           toast.show('Please allocate at least one product with quantity > 0.', 'error');
@@ -1521,7 +1648,17 @@ function openCreateOrderModal(onSaved) {
             lines,
             total: 0
           });
-          toast.show(`Sales Order ${so.orderNumber} created! This draft gatepass can now be converted to GDN.`, 'success');
+
+          // Commit all cut-to-length allocations
+          for (const plan of ctlPlansToCommit) {
+            cutToLengthService.commitAllocation(plan, {
+              referenceDocType: 'salesOrder',
+              referenceDocId: so.orderNumber,
+              notes: so.notes || ''
+            });
+          }
+
+          toast.show(`Sales Order ${so.orderNumber} created! Inventory allocated successfully.`, 'success');
           closeModal();
           if (onSaved) onSaved();
         } catch (err) {

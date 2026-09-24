@@ -222,10 +222,8 @@ class AppController {
         breadcrumbs = ['Manufacturing', 'Bundles & Systems'];
         break;
       case 'inventory-rolls':
-        html = renderRollInventoryView();
-        bindFn = bindRollInventoryEvents;
-        breadcrumbs = ['Inventory', 'Roll / Cut-to-Length'];
-        break;
+        window.location.hash = '#/inventory-stock';
+        return;
 
       // Warehouse & Operations Flow
       case 'warehouse-gdn':

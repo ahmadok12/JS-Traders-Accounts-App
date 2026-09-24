@@ -96,11 +96,20 @@ function buildStockColumns(warehouses, canViewCost) {
       align: 'right',
       render: row => {
         const qty = row.warehouseStock[w.id] || 0;
+        const isCtl = Boolean(row.product?.cut_to_length || row.variant?.isCutToLength || row.variant?.rollLength);
         if (qty > 0) {
+          let ctlSub = '';
+          if (isCtl) {
+            const whSummary = cutToLengthService.getSummary(row.product?.id, w.id, row.variant?.id);
+            if (whSummary) {
+              ctlSub = `<div class="text-[9px] text-slate-500 font-semibold">${whSummary.fullRollsCount}R + ${whSummary.loosePiecesFootage.toLocaleString()}${whSummary.baseUnit}</div>`;
+            }
+          }
           return `
             <div class="text-right">
               <span class="font-bold text-slate-800 font-mono">${qty.toLocaleString()}</span>
               <span class="text-[10px] text-slate-400 font-medium ml-0.5">${row.unit}</span>
+              ${ctlSub}
             </div>
           `;
         }
@@ -123,17 +132,22 @@ function buildStockColumns(warehouses, canViewCost) {
     label: 'Total Balance',
     align: 'right',
     render: row => {
-      if (row.product?.cut_to_length) {
-        const ctlSummary = cutToLengthService.getSummary(row.product.id, null, row.variant.id);
+      const isCtl = Boolean(row.product?.cut_to_length || row.variant?.isCutToLength || row.variant?.rollLength);
+      if (isCtl) {
+        const ctlSummary = cutToLengthService.getSummary(row.product?.id, null, row.variant?.id);
         if (ctlSummary) {
+          const looseText = ctlSummary.loosePiecesCount > 0
+            ? `${Number(ctlSummary.loosePiecesFootage).toLocaleString()} ${ctlSummary.baseUnit} loose (${ctlSummary.loosePiecesCount} pc${ctlSummary.loosePiecesCount > 1 ? 's' : ''})`
+            : `0 ${ctlSummary.baseUnit} loose`;
           return `
             <div class="text-right">
               <div class="text-xs font-black text-slate-900 font-mono">
                 ${Number(ctlSummary.totalFootage).toLocaleString()} ${ctlSummary.baseUnit}
               </div>
-              <div class="text-[10px] text-slate-400 font-medium flex items-center justify-end gap-1 mt-0.5">
-                <span>${ctlSummary.fullRollsCount} rolls + ${Number(ctlSummary.loosePiecesFootage).toLocaleString()} ${ctlSummary.baseUnit}</span>
-                <a href="#/inventory-rolls" class="text-[#138FCB] hover:underline font-bold ml-1">Rolls →</a>
+              <div class="text-[10px] text-slate-500 font-medium flex items-center justify-end gap-1 mt-0.5">
+                <span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-100">${ctlSummary.fullRollsCount} rolls</span>
+                <span>+</span>
+                <span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-100">${looseText}</span>
               </div>
             </div>
           `;

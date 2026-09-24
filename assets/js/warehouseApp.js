@@ -206,10 +206,8 @@ class WarehouseAppController {
         break;
 
       case 'inventory-rolls':
-        html = renderRollInventoryView();
-        bindFn = bindRollInventoryEvents;
-        breadcrumbs = ['Inventory', 'Roll & Cut-to-Length'];
-        break;
+        window.location.hash = '#/inventory-stock';
+        return;
 
       case 'inventory-assembly':
         html = renderAssemblyView('assembly');
