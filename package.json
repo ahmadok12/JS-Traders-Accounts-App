@@ -1,0 +1,16 @@
+{
+  "name": "js-traders-erp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @jst/admin-erp",
+    "build": "npm run build -w @jst/admin-erp",
+    "typecheck": "tsc --noEmit -p apps/admin-erp/tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
