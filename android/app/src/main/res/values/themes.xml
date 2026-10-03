@@ -1,0 +1,9 @@
+<resources>
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#111827</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+    <style name="AlarmTheme" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#B91C1C</item>
+    </style>
+</resources>

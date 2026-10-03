@@ -14,11 +14,35 @@ import { usePickingRealtime, useMyNotifications, type StaffNotification } from "
  * Staff phone app (installable web app). Pickers see only the tasks they are on, get a loud
  * buzzer for new work, tick what they picked, report shortages and finish. Everything is live.
  */
+/** window.JSTNative — present when the page runs inside the Android picking app */
+interface NativeBridge { isApp(): boolean; isOnDuty(): boolean; status(): string; startDuty(token: string, url: string, key: string): void; stopDuty(): void; stopAlarm(): void; fixSettings(): void }
+const native: NativeBridge | undefined = (window as unknown as { JSTNative?: NativeBridge }).JSTNative;
+interface NativeStatus { onDuty: boolean; notifications: boolean; battery: boolean; fullScreen: boolean; version: string }
+const nativeStatus = (): NativeStatus | null => { try { return native ? (JSON.parse(native.status()) as NativeStatus) : null; } catch { return null; } };
+const DEVICE_KEY = "jst.deviceKey";
+function deviceKey() {
+  let k: string | null = null;
+  try { k = localStorage.getItem(DEVICE_KEY); } catch { /* ignore */ }
+  if (!k) {
+    k = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
+    try { localStorage.setItem(DEVICE_KEY, k); } catch { /* ignore */ }
+  }
+  return k;
+}
+
 export function StaffApp() {
   const { session, sessionLoading, accessLoading, companies, company, can, signOut } = useAccess();
   const [params, setParams] = useSearchParams();
   const taskId = params.get("task");
-  const [onDuty, setOnDuty] = React.useState(false);
+  const [onDuty, setOnDuty] = React.useState(() => !!native?.isOnDuty());
+  const [nst, setNst] = React.useState<NativeStatus | null>(() => nativeStatus());
+  React.useEffect(() => {
+    if (!native) return;
+    const f = () => document.visibilityState === "visible" && setNst(nativeStatus());
+    document.addEventListener("visibilitychange", f);
+    const t = window.setInterval(f, 5000);
+    return () => { document.removeEventListener("visibilitychange", f); window.clearInterval(t); };
+  }, []);
   const [alarm, setAlarm] = React.useState<StaffNotification[]>([]);
   const userId = session?.user.id ?? null;
   const allowed = companies.length > 0 && can("picking.perform");
@@ -27,7 +51,7 @@ export function StaffApp() {
   const onNew = React.useCallback((nt: StaffNotification) => {
     if (nt.urgent) {
       setAlarm((a) => (a.some((x) => x.id === nt.id) ? a : [...a, nt]));
-      startAlarm();
+      if (!native) startAlarm(); // the Android app rings on its own (alarm volume, even when closed)
       if (document.visibilityState !== "visible") void systemNotify(nt.title, nt.body ?? "", { tag: `task-${nt.task_id}`, urgent: true, url: `/m?task=${nt.task_id}` });
     } else {
       chime();
@@ -43,7 +67,7 @@ export function StaffApp() {
     const waiting = notes.unread.filter((x) => x.urgent);
     if (waiting.length) {
       setAlarm((a) => [...a, ...waiting.filter((w) => !a.some((x) => x.id === w.id))]);
-      startAlarm();
+      if (!native) startAlarm();
     }
     const info = notes.unread.filter((x) => !x.urgent);
     if (info.length) void notes.ack(info.map((x) => x.id));
@@ -61,6 +85,7 @@ export function StaffApp() {
 
   const accept = async () => {
     stopAlarm();
+    native?.stopAlarm();
     const ids = alarm.map((a) => a.id);
     const first = alarm[0]?.task_id;
     setAlarm([]);
@@ -72,6 +97,15 @@ export function StaffApp() {
   if (!session) return <Navigate to="/login" replace state={{ from: "/m" }} />;
 
   const startDuty = async () => {
+    if (native) {
+      const key = deviceKey();
+      const { error } = await sb().rpc("register_staff_device", { p_token: key, p_name: `Android · ${session.user.email ?? ""}` });
+      if (error) { toast.error(friendlyError(error)); return; }
+      native.startDuty(key, import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
+      setOnDuty(true);
+      toast.success("On duty — the phone will ring for new work even when the app is closed");
+      return;
+    }
     const ok = await unlockAlarm();
     const perm = await askNotificationPermission();
     await keepScreenAwake();
@@ -79,6 +113,17 @@ export function StaffApp() {
     if (!ok) toast.error("Sound could not be turned on — check the phone volume and tap again");
     else if (perm === "denied") toast("Phone notifications are blocked — allow them in browser settings for alerts when the app is in the background");
   };
+
+  const goOff = async (andSignOut: boolean) => {
+    stopAlarm();
+    if (native) {
+      native.stopDuty();
+      try { const k = localStorage.getItem(DEVICE_KEY); if (k) await sb().rpc("unregister_staff_device", { p_token: k }); } catch { /* ignore */ }
+      setOnDuty(false);
+    }
+    if (andSignOut) await signOut();
+  };
+  const appMissing = nst && onDuty && (!nst.notifications || !nst.battery || !nst.fullScreen);
 
   return (
     <div className="flex min-h-dvh flex-col bg-page">
@@ -94,11 +139,22 @@ export function StaffApp() {
             <Radio className={cn("h-3 w-3", live ? "text-success" : "text-ink-faint")} />{live ? "Live" : "Connecting"} · {company?.company_name}
           </div>
         </div>
-        <button className="flex h-10 w-10 items-center justify-center rounded-control hover:bg-subtle" aria-label="Sound" onClick={() => (alarmReady() ? (chime(), toast.success("Sound is on")) : void startDuty())}>
-          {onDuty && alarmReady() ? <Volume2 className="h-5 w-5 text-success" /> : <VolumeX className="h-5 w-5 text-danger" />}
-        </button>
-        <button className="flex h-10 w-10 items-center justify-center rounded-control hover:bg-subtle" aria-label="Sign out" onClick={() => { stopAlarm(); void signOut(); }}><LogOut className="h-4 w-4 text-ink-muted" /></button>
+        {native ? (
+          <button className="flex h-10 items-center gap-1 rounded-control px-2 text-2xs font-medium hover:bg-subtle" aria-label="Duty" onClick={() => (onDuty ? void goOff(false) : void startDuty())}>
+            {onDuty ? <><Volume2 className="h-5 w-5 text-success" /> On duty</> : <><VolumeX className="h-5 w-5 text-danger" /> Off duty</>}
+          </button>
+        ) : (
+          <button className="flex h-10 w-10 items-center justify-center rounded-control hover:bg-subtle" aria-label="Sound" onClick={() => (alarmReady() ? (chime(), toast.success("Sound is on")) : void startDuty())}>
+            {onDuty && alarmReady() ? <Volume2 className="h-5 w-5 text-success" /> : <VolumeX className="h-5 w-5 text-danger" />}
+          </button>
+        )}
+        <button className="flex h-10 w-10 items-center justify-center rounded-control hover:bg-subtle" aria-label="Sign out" onClick={() => void goOff(true)}><LogOut className="h-4 w-4 text-ink-muted" /></button>
       </header>
+      {appMissing && (
+        <button onClick={() => native?.fixSettings()} className="mx-3 mt-3 rounded-card border border-warning-line bg-warning-soft p-3 text-left text-sm text-warning">
+          <b>The alarm may not ring when the app is closed.</b> Tap to allow{!nst!.notifications ? " notifications" : ""}{!nst!.battery ? " · no battery limits" : ""}{!nst!.fullScreen ? " · full-screen alarm" : ""}.
+        </button>
+      )}
       {!allowed ? (
         <p className="m-4 rounded-card border border-line bg-surface p-4 text-sm text-ink-muted">You have no picking work in this app. Ask your warehouse manager to add you as warehouse staff.</p>
       ) : !onDuty ? (

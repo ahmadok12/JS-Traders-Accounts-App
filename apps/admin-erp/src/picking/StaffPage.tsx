@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowRightLeft, KeyRound, Plus, ShieldAlert, Smartphone, UserPlus, Users } from "lucide-react";
+import { ArrowRightLeft, Download, KeyRound, Plus, ShieldAlert, Smartphone, UserPlus, Users } from "lucide-react";
 import { Badge, Button, Card, EmptyState, ErpDialog, Field, FormGrid, Input, PageHeader, Skeleton, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -11,6 +11,7 @@ import { loginLabel, usePickingStaff, type StaffRow } from "./common";
 import { usePickingRealtime } from "./realtime";
 
 const icon = <Users className="h-4 w-4" />;
+const APK_URL = "https://github.com/ahmadok12/JS-Traders-Accounts-App/releases/latest/download/js-picking.apk";
 
 async function callStaffFn(body: Record<string, unknown>) {
   const { data, error } = await sb().functions.invoke("warehouse-staff", { body });
@@ -76,9 +77,14 @@ export function StaffPage() {
           )}
         </div>
       )}
-      <Card className="mt-3 flex items-start gap-3 p-3 text-sm text-ink-muted">
+      <Card className="mt-3 flex flex-wrap items-start gap-3 p-3 text-sm text-ink-muted">
         <Smartphone className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>Staff open <b className="font-mono text-ink">{window.location.origin}/m</b> on their phone, sign in with their login name and password, tap <b>Start duty</b>, and add it to the home screen. Keep volume up and the app open while working.</span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p><b className="text-ink">Android phones (recommended):</b> install the JS Picking app — it rings on the alarm volume even when the app is closed or the screen is off.
+            On the phone open <b className="font-mono text-ink">{APK_URL.replace("https://", "")}</b>, install, sign in with the login name and password, tap <b>Start duty</b> and allow the permissions it asks for.</p>
+          <p><b className="text-ink">Other phones:</b> open <b className="font-mono text-ink">{window.location.origin}/m</b> in the browser, sign in, tap <b>Start duty</b> and keep the app open while working.</p>
+        </div>
+        <a href={APK_URL} className="inline-flex h-control items-center gap-2 rounded-control bg-primary px-3.5 text-sm font-medium text-primary-fg hover:bg-primary-hover"><Download className="h-4 w-4" /> Android app (APK)</a>
       </Card>
       {adding && <AddStaffDialog whs={whs.data ?? []} onClose={() => setAdding(false)} />}
       {moving && <MoveDialog person={moving} whs={whs.data ?? []} onClose={() => setMoving(null)} />}
