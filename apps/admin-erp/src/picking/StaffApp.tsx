@@ -9,6 +9,7 @@ import { formatDate } from "@jst/utilities";
 import { PICK_TONE, PickLineCard, PickProgress, pickLabel, usePickingTask } from "./common";
 import { alarmReady, askNotificationPermission, chime, keepScreenAwake, startAlarm, stopAlarm, systemNotify, unlockAlarm } from "./alarm";
 import { usePickingRealtime, useMyNotifications, type StaffNotification } from "./realtime";
+import { CountScreen, JobCard, ReceiptScreen, useMyJobs, type MyJob } from "./StaffJobs";
 
 /**
  * Staff phone app (installable web app). Pickers see only the tasks they are on, get a loud
@@ -34,6 +35,9 @@ export function StaffApp() {
   const { session, sessionLoading, accessLoading, companies, company, can, signOut } = useAccess();
   const [params, setParams] = useSearchParams();
   const taskId = params.get("task");
+  const countId = params.get("count");
+  const receiptId = params.get("receipt");
+  const inside = !!(taskId || countId || receiptId);
   const [onDuty, setOnDuty] = React.useState(() => !!native?.isOnDuty());
   const [nst, setNst] = React.useState<NativeStatus | null>(() => nativeStatus());
   React.useEffect(() => {
@@ -87,10 +91,12 @@ export function StaffApp() {
     stopAlarm();
     native?.stopAlarm();
     const ids = alarm.map((a) => a.id);
-    const first = alarm[0]?.task_id;
+    const first = alarm[0];
     setAlarm([]);
     await notes.ack(ids);
-    if (first) setParams({ task: first });
+    if (first?.task_id) setParams({ task: first.task_id });
+    else if (first?.job_type === "COUNT" && first.job_id) setParams({ count: first.job_id });
+    else if (first?.job_type === "RECEIPT" && first.job_id) setParams({ receipt: first.job_id });
   };
 
   if (sessionLoading || (session && accessLoading)) return <div className="flex h-dvh items-center justify-center bg-page"><Loader2 className="h-6 w-6 animate-spin text-ink-faint" /></div>;
@@ -128,13 +134,13 @@ export function StaffApp() {
   return (
     <div className="flex min-h-dvh flex-col bg-page">
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-        {taskId ? (
+        {inside ? (
           <button className="-ml-1 flex h-10 w-10 items-center justify-center rounded-control hover:bg-subtle" aria-label="Back" onClick={() => setParams({})}><ArrowLeft className="h-5 w-5" /></button>
         ) : (
           <div className="flex h-9 w-9 items-center justify-center rounded-control bg-ink text-xs font-bold text-surface">JS</div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{taskId ? "Picking" : "My tasks"}</div>
+          <div className="truncate text-sm font-semibold">{taskId ? "Picking" : countId ? "Stock count" : receiptId ? "Receiving" : "My tasks"}</div>
           <div className="flex items-center gap-1 truncate text-2xs text-ink-muted">
             <Radio className={cn("h-3 w-3", live ? "text-success" : "text-ink-faint")} />{live ? "Live" : "Connecting"} · {company?.company_name}
           </div>
@@ -159,7 +165,10 @@ export function StaffApp() {
         <p className="m-4 rounded-card border border-line bg-surface p-4 text-sm text-ink-muted">You have no picking work in this app. Ask your warehouse manager to add you as warehouse staff.</p>
       ) : !onDuty ? (
         <DutyGate name={session.user.user_metadata?.full_name as string | undefined} waiting={notes.unread.filter((x) => x.urgent).length} onStart={startDuty} />
-      ) : taskId ? <TaskScreen id={taskId} userId={session.user.id} onDone={() => setParams({})} /> : <TaskList userId={session.user.id} onOpen={(id) => setParams({ task: id })} />}
+      ) : taskId ? <TaskScreen id={taskId} userId={session.user.id} onDone={() => setParams({})} />
+        : countId ? <CountScreen id={countId} onDone={() => setParams({})} />
+        : receiptId ? <ReceiptScreen id={receiptId} onDone={() => setParams({})} />
+        : <TaskList userId={session.user.id} onOpen={(id) => setParams({ task: id })} onJob={(j) => setParams(j.type === "COUNT" ? { count: j.id } : { receipt: j.id })} />}
       {alarm.length > 0 && <AlarmOverlay items={alarm} onAccept={accept} />}
     </div>
   );
@@ -198,7 +207,8 @@ function AlarmOverlay({ items, onAccept }: { items: StaffNotification[]; onAccep
 }
 
 interface TaskRow { id: string; doc_no: string; so_doc_no: string; status: string; due_date: string | null; notes: string | null; completed_at: string | null; warehouse: { code: string; name: string } | null; lines: { qty_picked: number | null }[] }
-function TaskList({ userId, onOpen }: { userId: string; onOpen: (id: string) => void }) {
+function TaskList({ userId, onOpen, onJob }: { userId: string; onOpen: (id: string) => void; onJob: (j: MyJob) => void }) {
+  const jobs = useMyJobs(userId);
   const q = useQuery({
     queryKey: ["my-picking", userId],
     refetchInterval: 60_000,
@@ -229,6 +239,12 @@ function TaskList({ userId, onOpen }: { userId: string; onOpen: (id: string) => 
           <p className="text-xs text-ink-muted">Keep this open — the phone will buzz when work comes.</p>
         </div>
       ) : open.map((t) => <TaskCard key={t.id} t={t} onOpen={() => onOpen(t.id)} />)}
+      {(jobs.data ?? []).length > 0 && (
+        <>
+          <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Counts &amp; receiving ({jobs.data!.length})</div>
+          {jobs.data!.map((j) => <JobCard key={j.type + j.id} j={j} onOpen={() => onJob(j)} />)}
+        </>
+      )}
       {done.length > 0 && (
         <>
           <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Finished today</div>

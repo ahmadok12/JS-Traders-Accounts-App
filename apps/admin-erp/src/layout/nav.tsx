@@ -1,4 +1,5 @@
 import {
+  Gauge,
   Banknote,
   BookOpen,
   Boxes,
@@ -61,7 +62,7 @@ export interface NavGroup {
 
 /** Navigation follows the ERP module structure (spec §3.1), filtered by role. */
 export const NAV: NavGroup[] = [
-  { label: "", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }] },
+  { label: "", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }, { to: "/warehouse-desk", label: "Warehouse Desk", icon: Gauge, perms: [P.pickingManage] }] },
   {
     label: "Sales",
     items: [

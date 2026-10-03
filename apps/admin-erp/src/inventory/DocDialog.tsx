@@ -27,6 +27,8 @@ import { ADJUSTMENT_REASONS, STATUS_TONE, type InvDocConfig } from "./docConfigs
 import { useStorageLocations } from "../lib/settings";
 import { Availability, LocationPicker, ProductPicker, SupplierPicker, VariantPicker, WarehousePicker, useProductMeta, useStockFigures } from "./pickers";
 import { MovementsTable } from "./MovementsTable";
+import { P } from "@jst/permissions";
+import { ReceiptCheckPanel } from "../picking/WarehouseJobs";
 import { RollCutsEditor, RollLengthsEditor, newRoll, sumCuts, sumRolls, type CutMode, type Cuts, type RollEntry } from "./rolls";
 
 type Row = Record<string, unknown>;
@@ -178,7 +180,8 @@ function ViewDoc({
         subtitle={h ? `${cfg.singular} · ${formatDate(h.doc_date as string)}` : undefined}
         icon={cfg.icon}
         status={<Badge tone={STATUS_TONE[status]}>{humanize(status)}</Badge>}
-        size="xl"
+        size="full"
+        accent="dispatch"
         footer={
           <>
             {status === "DRAFT" && can(cfg.perms.create) && (
@@ -222,6 +225,7 @@ function ViewDoc({
               {h.reversal_reason ? <KeyValue label="Reversal reason" className="col-span-2">{String(h.reversal_reason)}</KeyValue> : null}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-4">{String(h.notes)}</KeyValue> : null}
             </dl>
+            {cfg.kind === "receipt" && can(P.pickingManage) && <ReceiptCheckPanel receiptId={id} />}
             <Tabs
               value={tab}
               onChange={setTab}

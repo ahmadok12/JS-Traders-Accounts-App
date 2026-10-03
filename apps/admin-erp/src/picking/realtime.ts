@@ -22,10 +22,13 @@ export function usePickingRealtime(enabled = true) {
         qc.invalidateQueries({ queryKey: ["picking-staff"] });
         qc.invalidateQueries({ queryKey: ["so-pick-lines"] });
         qc.invalidateQueries({ queryKey: ["pending-shortages"] });
+        qc.invalidateQueries({ queryKey: ["my-jobs"] });
+        qc.invalidateQueries({ queryKey: ["job"] });
+        qc.invalidateQueries({ queryKey: ["warehouse-desk"] });
       }, 250);
     };
     const ch = sb().channel(`picking-live-${Math.random().toString(36).slice(2)}`);
-    for (const table of ["picking_tasks", "picking_task_lines", "picking_task_assignees"]) {
+    for (const table of ["picking_tasks", "picking_task_lines", "picking_task_assignees", "warehouse_job_assignees", "stock_count_lines", "receipt_check_lines"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table }, refresh);
     }
     ch.subscribe((status) => setLive(status === "SUBSCRIBED"));
@@ -43,6 +46,7 @@ export function usePickingRealtime(enabled = true) {
 
 export interface StaffNotification {
   id: string; kind: string; urgent: boolean; title: string; body: string | null; task_id: string | null; created_at: string; read_at: string | null;
+  job_type?: "COUNT" | "RECEIPT" | null; job_id?: string | null;
 }
 
 /**
@@ -58,7 +62,7 @@ export function useMyNotifications(userId: string | null | undefined, onNew?: (n
     enabled: !!userId,
     refetchInterval: 60_000, // safety net if the live connection drops
     queryFn: async () => {
-      const { data, error } = await sb().from("staff_notifications").select("id, kind, urgent, title, body, task_id, created_at, read_at")
+      const { data, error } = await sb().from("staff_notifications").select("id, kind, urgent, title, body, task_id, job_type, job_id, created_at, read_at")
         .eq("user_id", userId!).is("read_at", null).order("created_at", { ascending: false }).limit(50);
       if (error) throw error;
       return (data ?? []) as StaffNotification[];

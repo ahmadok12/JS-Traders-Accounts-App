@@ -9,6 +9,7 @@ import {
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { formatDate, formatNumber, humanize } from "@jst/utilities";
+import { JobTeamPanel } from "../picking/WarehouseJobs";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
@@ -41,7 +42,7 @@ export function CountsPage() {
 
   const list = useEntityList<Row>({
     table: "stock_counts",
-    select: "id, doc_no, doc_date, status, count_type, notes, warehouse:warehouses(code, name), lines:stock_count_lines(count)",
+    select: "id, doc_no, doc_date, status, count_type, notes, submitted_at, warehouse:warehouses(code, name), lines:stock_count_lines(count)",
     companyId,
     search: q,
     searchColumns: ["doc_no", "notes"],
@@ -82,7 +83,7 @@ export function CountsPage() {
               { key: "t", header: "Type", hideBelow: "md", cell: (r) => COUNT_TYPES.find((c) => c.value === r.count_type)?.label ?? String(r.count_type) },
               { key: "n", header: "Notes", hideBelow: "lg", cell: (r) => <span className="text-xs text-ink-muted">{(r.notes as string) || ""}</span> },
               { key: "l", header: "Items", align: "right", width: "70px", cell: (r) => (r.lines as { count: number }[])?.[0]?.count ?? 0 },
-              { key: "s", header: "Status", width: "90px", cell: (r) => <Badge tone={STATUS_TONE[String(r.status)]}>{humanize(String(r.status))}</Badge> },
+              { key: "s", header: "Status", width: "170px", cell: (r) => <span className="flex flex-wrap gap-1"><Badge tone={STATUS_TONE[String(r.status)]}>{humanize(String(r.status))}</Badge>{r.status === "OPEN" && !!r.submitted_at && <Badge tone="info">Counted — approve</Badge>}</span> },
             ]}
             empty={<EmptyState icon={icon} title="No counts" description="Start a count to establish or verify physical stock." />}
           />
@@ -159,7 +160,7 @@ function CountDialog({ id, onClose }: { id: string; onClose: () => void }) {
     queryKey: ["record", "stock_counts", id],
     queryFn: async () => {
       const [h, l] = await Promise.all([
-        sb().from("stock_counts").select("id, doc_no, doc_date, status, count_type, notes, warehouse_id, closed_at, warehouse:warehouses(code, name)").eq("id", id).single(),
+        sb().from("stock_counts").select("id, doc_no, doc_date, status, count_type, notes, warehouse_id, closed_at, submitted_at, submitted_by, submit_note, warehouse:warehouses(code, name)").eq("id", id).single(),
         sb().from("stock_count_lines").select("id, product_id, variant_id, location_id, counted_qty, status, system_qty_before, adjustment_qty, variance_note, product:products(sku, name, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), location:warehouse_locations(code)").eq("count_id", id).limit(1000),
       ]);
       if (h.error) throw h.error;
@@ -251,7 +252,8 @@ function CountDialog({ id, onClose }: { id: string; onClose: () => void }) {
       <ErpDialog
         open
         onRequestClose={() => guard(onClose)}
-        size="xl"
+        size="full"
+        accent="dispatch"
         icon={icon}
         title={h ? String(h.doc_no) : "Stock Count"}
         subtitle={h ? `${(h.warehouse as { name: string }).name} · ${COUNT_TYPES.find((c) => c.value === h.count_type)?.label}` : undefined}
@@ -283,6 +285,8 @@ function CountDialog({ id, onClose }: { id: string; onClose: () => void }) {
               <KeyValue label="Approved"><span className="tabular-nums">{posted}</span></KeyValue>
               {h!.notes ? <KeyValue label="Notes">{String(h!.notes)}</KeyValue> : null}
             </dl>
+            <JobTeamPanel jobType="COUNT" jobId={id} warehouseId={String(h!.warehouse_id)} editable={open}
+              submitted={h!.submitted_at ? { at: h!.submitted_at as string, by: h!.submitted_by as string | null, note: h!.submit_note as string | null } : null} />
             <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-field">
               <div className="h-full bg-success" style={{ width: `${lines.length ? (posted / lines.length) * 100 : 0}%` }} />
             </div>

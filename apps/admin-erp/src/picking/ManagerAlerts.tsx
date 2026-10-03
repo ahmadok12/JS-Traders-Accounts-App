@@ -18,14 +18,15 @@ export function ManagerAlerts() {
 
   const show = React.useCallback((nt: StaffNotification, ack: (ids?: string[]) => Promise<void>) => {
     chime();
-    const open = () => { void ack([nt.id]); if (nt.task_id) navigate(`/picking?view=${nt.task_id}`); };
+    const target = nt.task_id ? `/picking?view=${nt.task_id}` : nt.job_type === "COUNT" ? `/stock-counts?view=${nt.job_id}` : nt.job_type === "RECEIPT" ? `/goods-receipts?view=${nt.job_id}` : null;
+    const open = () => { void ack([nt.id]); if (target) navigate(target); };
     toast[nt.kind === "SHORTAGE" ? "warning" : "success"](nt.title, {
       id: nt.id, description: nt.body ?? undefined,
-      duration: nt.kind === "SHORTAGE" ? Infinity : 10_000,
-      action: nt.task_id ? { label: "Open", onClick: open } : undefined,
+      duration: ["SHORTAGE", "COUNT_SUBMITTED", "RECEIPT_SUBMITTED"].includes(nt.kind) ? Infinity : 10_000,
+      action: target ? { label: "Open", onClick: open } : undefined,
       onDismiss: () => void ack([nt.id]), onAutoClose: () => void ack([nt.id]),
     });
-    if (document.visibilityState !== "visible") void systemNotify(nt.title, nt.body ?? "", { tag: nt.id, url: nt.task_id ? `/picking?view=${nt.task_id}` : "/picking" });
+    if (document.visibilityState !== "visible") void systemNotify(nt.title, nt.body ?? "", { tag: nt.id, url: target ?? "/picking" });
   }, [navigate]);
 
   const ackRef = React.useRef<(ids?: string[]) => Promise<void>>(async () => undefined);
