@@ -1,0 +1,64 @@
+name: Android picking app
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_B64 secret missing — building with a debug key (updates will need uninstall first)"
+          fi
+
+      - name: Build APK
+        env:
+          APP_VERSION_CODE: ${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          gradle -p android assembleRelease --no-daemon --stacktrace
+          cp android/app/build/outputs/apk/release/app-release.apk js-picking.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: js-picking-apk
+          path: js-picking.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ github.run_number }}
+          name: JS Picking app (build ${{ github.run_number }})
+          body: |
+            Android picking app for warehouse staff. Install on the phone: download **js-picking.apk**, open it and allow installing from this source.
+            Always the newest: https://github.com/${{ github.repository }}/releases/latest/download/js-picking.apk
+          files: js-picking.apk
+          make_latest: true
