@@ -55,7 +55,7 @@ export function PickingPage() {
   const flt = FILTERS[f];
   const list = useEntityList<Row>({
     table: "picking_tasks",
-    select: "id, doc_no, so_doc_no, status, assigned_to, due_date, created_at, gdn_id, warehouse:warehouses(code), lines:picking_task_lines(qty_picked), team:picking_task_assignees(user_id, acknowledged_at, removed_at)",
+    select: "id, doc_no, so_doc_no, status, assigned_to, due_date, created_at, gdn_id, warehouse:warehouses(code), lines:picking_task_lines!picking_task_lines_task_id_fkey(qty_picked), team:picking_task_assignees(user_id, acknowledged_at, removed_at)",
     companyId, search: q, searchColumns: ["doc_no", "so_doc_no"],
     filters: { status: flt.status },
     orderBy: { column: "created_at", ascending: false }, page, pageSize: 50, enabled: allowed,

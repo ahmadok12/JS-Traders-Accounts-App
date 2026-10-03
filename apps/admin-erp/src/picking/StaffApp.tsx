@@ -150,7 +150,7 @@ function TaskList({ userId, onOpen }: { userId: string; onOpen: (id: string) => 
     queryFn: async () => {
       const since = new Date(); since.setHours(0, 0, 0, 0);
       const { data, error } = await sb().from("picking_tasks")
-        .select("id, doc_no, so_doc_no, status, due_date, notes, completed_at, warehouse:warehouses(code, name), lines:picking_task_lines(qty_picked), team:picking_task_assignees!inner(user_id, removed_at)")
+        .select("id, doc_no, so_doc_no, status, due_date, notes, completed_at, warehouse:warehouses(code, name), lines:picking_task_lines!picking_task_lines_task_id_fkey(qty_picked), team:picking_task_assignees!inner(user_id, removed_at)")
         .eq("team.user_id", userId).is("team.removed_at", null)
         .or(`status.in.(OPEN,IN_PROGRESS),completed_at.gte.${since.toISOString()}`)
         .order("created_at", { ascending: true }).limit(100);
