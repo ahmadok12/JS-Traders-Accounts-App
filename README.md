@@ -14,6 +14,21 @@ One Supabase PostgreSQL database per environment, multiple controlled apps.
 | 3b | Physical units/rolls, assembly/disassembly, bundles | next |
 | 4+ | Accounting, sales/GDN/pricing, payroll, purchasing, FX/agents, PDC, reconciliation, reports | planned |
 
+## Picking (teams, buzzer, realtime) — 2026-10-03
+
+- **Warehouse Staff** page (`/warehouse-staff`): add staff (login name + password, no email needed), set/shift their warehouses, reset passwords.
+  Accounts are created by the `warehouse-staff` edge function. Staff sign in with just their login name (e.g. `ali`).
+- **New picking** (Picking page or the sales order's "Picking task" button): per item, quantity from each warehouse
+  (defaults to the order's allocation; more can be taken from another warehouse — allocation + reservation move with it),
+  then one / several / all staff of each warehouse. One task per warehouse; every chosen picker's phone buzzes.
+- **Phone app** (`/m`): tap *Start duty* once (unlocks the loud siren, notifications, keeps screen awake). New work rings until *ACCEPT*.
+  Tick "Picked all" or "Short" (quantity found + reason).
+- **Shortage**: managers get a chime + alert on any ERP screen; in the task they choose *re-pick* (same/other warehouse, any of its staff),
+  *reduce the order*, or *keep on order*. Managers see "seen / not seen yet" per picker, can *Buzz again* or change pickers.
+- Everything updates live via Supabase Realtime (`picking_tasks`, `picking_task_lines`, `picking_task_assignees`, `staff_notifications`).
+- Test: `tests/sql/picking_teams.sql` (runs as admin / ali / bilal and rolls back).
+- If moving staff errors with "function does not exist", run `supabase/RUN_ME_set_staff_warehouses.sql` once in the SQL editor.
+
 ## Layout
 
 ```

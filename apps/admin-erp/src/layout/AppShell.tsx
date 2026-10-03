@@ -8,6 +8,7 @@ import { ROLE_LABELS } from "@jst/permissions";
 import { NavigationGuard } from "../lib/unsaved";
 import { NAV } from "./nav";
 import { useFeatures } from "../lib/settings";
+import { ManagerAlerts } from "../picking/ManagerAlerts";
 
 function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { can } = useAccess();
@@ -215,6 +216,7 @@ export function AppShell() {
         </main>
       </div>
       <NavigationGuard />
+      <ManagerAlerts />
     </div>
   );
 }

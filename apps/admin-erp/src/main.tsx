@@ -36,6 +36,7 @@ const SalesOrdersPage = React.lazy(() => import("./sales/SalesOrdersPage").then(
 const GdnPage = React.lazy(() => import("./sales/GdnPage").then((m) => ({ default: m.GdnPage })));
 const QuotationsPage = React.lazy(() => import("./sales/QuotationsPage").then((m) => ({ default: m.QuotationsPage })));
 const PickingPage = React.lazy(() => import("./picking/PickingPage").then((m) => ({ default: m.PickingPage })));
+const StaffPage = React.lazy(() => import("./picking/StaffPage").then((m) => ({ default: m.StaffPage })));
 const StaffApp = React.lazy(() => import("./picking/StaffApp").then((m) => ({ default: m.StaffApp })));
 const InvoicesPage = React.lazy(() => import("./sales/InvoicesPage").then((m) => ({ default: m.InvoicesPage })));
 const SettingsPage = React.lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
@@ -79,6 +80,7 @@ const router = createBrowserRouter([
       { path: "gdn", element: lazy(<GdnPage />) },
       { path: "quotations", element: lazy(<QuotationsPage />) },
       { path: "picking", element: lazy(<PickingPage />) },
+      { path: "warehouse-staff", element: lazy(<StaffPage />) },
       { path: "invoices", element: lazy(<InvoicesPage />) },
       ...Object.values(INV_DOCS).map((c) => ({ path: c.route, element: lazy(<DocPage key={c.type} cfg={c} />) })),
       { path: "users", element: lazy(<UsersPage />) },

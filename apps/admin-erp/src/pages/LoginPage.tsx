@@ -22,8 +22,9 @@ export function LoginPage() {
     setBusy(true);
     setMsg(null);
     if (mode === "signin") {
-      const { error } = await sb().auth.signInWithPassword({ email: email.trim(), password });
-      if (error) setMsg({ tone: "error", text: error.message === "Invalid login credentials" ? "Email or password is incorrect." : error.message });
+      const login = email.trim().toLowerCase();
+      const { error } = await sb().auth.signInWithPassword({ email: login.includes("@") ? login : `${login}@staff.jstradersokr.shop`, password });
+      if (error) setMsg({ tone: "error", text: error.message === "Invalid login credentials" ? "Login or password is incorrect." : error.message });
     } else {
       const { error } = await sb().auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + "/login" });
       setMsg(error ? { tone: "error", text: error.message } : { tone: "ok", text: "If that email has an account, a reset link is on its way." });
@@ -42,8 +43,8 @@ export function LoginPage() {
           </div>
         </div>
         <form onSubmit={submit} className="rounded-dialog border border-line bg-surface p-5 shadow-card">
-          <Field label="Email" htmlFor="email">
-            <Input id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          <Field label={mode === "signin" ? "Email or staff login" : "Email"} htmlFor="email">
+            <Input id="email" type={mode === "signin" ? "text" : "email"} autoCapitalize="none" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
           </Field>
           {mode === "signin" && (
             <Field label="Password" htmlFor="password">
