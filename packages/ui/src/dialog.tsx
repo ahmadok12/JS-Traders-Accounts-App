@@ -10,12 +10,27 @@ import { Button, cn } from "./primitives";
  * full-screen sheet. Close requests go through `onRequestClose` so callers can
  * intercept them when there are unsaved changes.
  */
-export type DialogSize = "sm" | "md" | "lg" | "xl";
+export type DialogSize = "sm" | "md" | "lg" | "xl" | "full";
 const sizeClass: Record<DialogSize, string> = {
   sm: "sm:max-w-dialog-sm",
   md: "sm:max-w-dialog-md",
   lg: "sm:max-w-dialog-lg",
   xl: "sm:max-w-dialog-xl",
+  full: "",
+};
+const centred = "sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-h-[90vh] sm:w-[calc(100vw-48px)]";
+/** full: a document workspace that uses the whole screen (long orders, invoices, GDNs) */
+const fullScreen = "sm:inset-3 lg:inset-4";
+
+/** Document colour accents — each document type gets its own header tint so it is recognisable at a glance. */
+export type DialogAccent = "neutral" | "order" | "quote" | "dispatch" | "invoice" | "picking";
+const accentClass: Record<DialogAccent, { bar: string; head: string; icon: string }> = {
+  neutral: { bar: "", head: "", icon: "border border-line bg-subtle text-ink-2" },
+  order: { bar: "before:bg-indigo-500", head: "bg-gradient-to-r from-indigo-50 via-white to-white", icon: "bg-indigo-600 text-white shadow-sm" },
+  quote: { bar: "before:bg-violet-500", head: "bg-gradient-to-r from-violet-50 via-white to-white", icon: "bg-violet-600 text-white shadow-sm" },
+  dispatch: { bar: "before:bg-amber-500", head: "bg-gradient-to-r from-amber-50 via-white to-white", icon: "bg-amber-500 text-white shadow-sm" },
+  invoice: { bar: "before:bg-emerald-500", head: "bg-gradient-to-r from-emerald-50 via-white to-white", icon: "bg-emerald-600 text-white shadow-sm" },
+  picking: { bar: "before:bg-sky-500", head: "bg-gradient-to-r from-sky-50 via-white to-white", icon: "bg-sky-600 text-white shadow-sm" },
 };
 
 export function ErpDialog({
@@ -26,6 +41,7 @@ export function ErpDialog({
   icon,
   status,
   size = "md",
+  accent = "neutral",
   headerActions,
   footer,
   children,
@@ -37,6 +53,7 @@ export function ErpDialog({
   icon?: React.ReactNode;
   status?: React.ReactNode;
   size?: DialogSize;
+  accent?: DialogAccent;
   headerActions?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -57,17 +74,18 @@ export function ErpDialog({
           }}
           onInteractOutside={(e) => e.preventDefault()}
           className={cn(
-            "fixed z-50 flex flex-col bg-surface shadow-dialog focus:outline-none",
-            "inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2",
-            "sm:max-h-[90vh] sm:w-[calc(100vw-48px)] sm:rounded-dialog sm:border sm:border-line",
+            "fixed z-50 flex flex-col overflow-hidden bg-surface shadow-dialog focus:outline-none",
+            "inset-0 sm:rounded-dialog sm:border sm:border-line",
+            size === "full" ? fullScreen : cn("sm:inset-auto", centred),
             sizeClass[size],
           )}
         >
-          <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-            {icon && <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control border border-line bg-subtle text-ink-2">{icon}</div>}
+          <div className={cn("relative flex items-center gap-3 border-b border-line px-5", size === "full" ? "py-3.5" : "py-3",
+            accent !== "neutral" && "before:absolute before:inset-y-0 before:left-0 before:w-1", accentClass[accent].bar, accentClass[accent].head)}>
+            {icon && <div className={cn("flex shrink-0 items-center justify-center rounded-control", size === "full" ? "h-9 w-9" : "h-8 w-8", accentClass[accent].icon)}>{icon}</div>}
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <RD.Title className="truncate text-lg font-semibold text-ink">{title}</RD.Title>
+                <RD.Title className={cn("truncate font-semibold tracking-tight text-ink", size === "full" ? "text-xl" : "text-lg")}>{title}</RD.Title>
                 {status}
               </div>
               {subtitle ? (
@@ -81,8 +99,8 @@ export function ErpDialog({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-          {footer && <div className="flex flex-wrap items-center gap-2 border-t border-line bg-subtle/60 px-5 py-3">{footer}</div>}
+          <div className={cn("min-h-0 flex-1 overflow-y-auto", size === "full" ? "px-4 py-4 sm:px-6" : "px-5 py-4")}>{children}</div>
+          {footer && <div className={cn("flex flex-wrap items-center gap-2 border-t border-line px-5 py-3", size === "full" ? "bg-white shadow-[0_-4px_12px_rgba(16,24,40,0.05)]" : "bg-subtle/60")}>{footer}</div>}
         </RD.Content>
       </RD.Portal>
     </RD.Root>

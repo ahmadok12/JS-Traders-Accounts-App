@@ -220,7 +220,7 @@ function NewPickingDialog({ presetSo, onClose, onCreated }: { presetSo: string |
   const onHand = (wh: string, l: SoPickLine) => stock.data?.get(`${wh}|${l.product_id}|${l.variant_id ?? ""}`) ?? 0;
 
   return (
-    <ErpDialog open onRequestClose={onClose} size="xl" icon={icon} title="New picking"
+    <ErpDialog open onRequestClose={onClose} size="full" accent="picking" icon={icon} title="New picking"
       subtitle="Quantities default to what the order allocated to each warehouse — change them to pick from anywhere."
       footer={<>
         <div className="flex-1 text-sm text-ink-muted">{usedWh.length} warehouse{usedWh.length === 1 ? "" : "s"} · {pickerCount} picker{pickerCount === 1 ? "" : "s"}</div>
@@ -328,7 +328,7 @@ function TaskDialog({ id, staff, names, onClose, onOpen }: { id: string; staff: 
   const whStaff = staffOf(staff, h?.warehouse_id);
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="lg" icon={icon} title={h ? String(h.doc_no) : "Picking task"}
+      <ErpDialog open onRequestClose={onClose} size="lg" accent="picking" icon={icon} title={h ? String(h.doc_no) : "Picking task"}
         subtitle={h ? `${String(h.so_doc_no)} · ${(h.warehouse as { code: string } | null)?.code ?? ""}` : undefined}
         status={h ? <Badge tone={PICK_TONE[status]}>{pickLabel(status)}</Badge> : null}
         footer={<>

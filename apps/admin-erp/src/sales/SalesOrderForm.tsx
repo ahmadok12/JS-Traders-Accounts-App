@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2, Plus, Save, ShoppingCart, Trash2 } from "lucide-react";
+import { BellRing, CheckCircle2, Plus, Save, ShoppingCart, Trash2 } from "lucide-react";
 import { Badge, Button, ErpDialog, Field, FormGrid, Input, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -9,6 +9,7 @@ import { useUnsavedGuard } from "../lib/unsaved";
 import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "../inventory/pickers";
 import { money } from "../accounting/common";
 import { n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
+import { PickerChips, staffOf, usePickingStaff } from "../picking/common";
 
 type Row = Record<string, unknown>;
 interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number }
@@ -43,6 +44,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
   const dirty = JSON.stringify(f) !== snapshot.current;
   const { guard, dialog } = useUnsavedGuard(dirty);
   const [showErrors, setShowErrors] = React.useState(false);
+  const [pickers, setPickers] = React.useState<Record<string, string[]>>({});
+  const staff = usePickingStaff();
   const setLine = (key: string, patch: Partial<Line>) => setF((s) => ({ ...s, lines: s.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) }));
 
   const lineTotal = (l: Line) => Object.values(l.alloc).reduce((a, v) => a + (n(v) > 0 ? n(v) : 0), 0);
@@ -75,7 +78,12 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       if (revise) {
         const r = await sb().rpc("revise_sales_order", { p_id: id, ...payload });
         if (r.error) throw r.error;
-        return { nid: id!, approve: false };
+        if (approve && sending) {
+          const t = await sb().rpc("start_so_picking", { p_so_id: id, p_plan: plan, p_notes: f.notes || null });
+          if (t.error) throw Object.assign(t.error, { savedId: id });
+          return { nid: id!, approve: false, tasks: (t.data as string[]).length };
+        }
+        return { nid: id!, approve: false, tasks: 0 };
       }
       const { data, error } = await sb().rpc("save_sales_order", {
         p_id: id,
@@ -92,18 +100,23 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
         const q = await sb().rpc("link_quotation_order", { p_quotation_id: quotationId, p_so_id: nid });
         if (q.error) throw Object.assign(q.error, { savedId: nid });
       }
+      if (approve && sending) {
+        const t = await sb().rpc("start_so_picking", { p_so_id: nid, p_plan: plan, p_notes: f.notes || null });
+        if (t.error) throw Object.assign(t.error, { savedId: nid });
+        return { nid, approve, tasks: (t.data as string[]).length };
+      }
       if (approve) {
         const r = await sb().rpc("approve_sales_order", { p_id: nid });
         if (r.error) throw Object.assign(r.error, { savedId: nid });
       }
-      return { nid, approve };
+      return { nid, approve, tasks: 0 };
     },
-    onSuccess: ({ nid, approve }) => {
+    onSuccess: ({ nid, approve, tasks }) => {
       snapshot.current = JSON.stringify(f); idem.current = crypto.randomUUID();
-      toast.success(approve ? "Sales order approved — stock reserved" : revise ? "Order updated — reserved stock adjusted" : "Sales order saved"); qc.invalidateQueries(); onSaved(nid);
+      toast.success(tasks ? `${revise ? "Order updated" : "Approved"} — ${tasks} picking task${tasks > 1 ? "s" : ""} sent, pickers' phones are buzzing` : approve ? "Sales order approved — stock reserved" : revise ? "Order updated — reserved stock adjusted" : "Sales order saved"); qc.invalidateQueries(); onSaved(nid);
     },
     onError: (e: Error & { savedId?: string }) => {
-      if (e.savedId) { snapshot.current = JSON.stringify(f); toast.error(`Saved, but not approved: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
+      if (e.savedId) { snapshot.current = JSON.stringify(f); toast.error(`Saved, but not ${sending ? "sent to pickers" : "approved"}: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else toast.error(friendlyError(e));
     },
   });
@@ -113,39 +126,91 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     if (!save.isPending) save.mutate(approve);
   };
 
+  const showPickers = can(P.pickingManage);
+  const usedWh = (whs.data ?? []).filter((w) => used.some((l) => n(l.alloc[w.id] ?? "0") > (l.sent[w.id] ?? 0)));
+  const plan = Object.fromEntries(usedWh.map((w) => [w.id, pickers[w.id] ?? []]).filter(([, v]) => (v as string[]).length));
+  const sending = Object.keys(plan).length > 0;
+  const primaryLabel = revise ? (sending ? "Save & send to pickers" : null) : can(P.salesApprove) ? (sending ? "Save, approve & send to pickers" : "Save & approve") : null;
+  const qtyTotal = used.reduce((a, l) => a + lineTotal(l), 0);
+
   return (
     <>
       <ErpDialog
-        open onRequestClose={() => guard(onClose)} size="xl" icon={<ShoppingCart className="h-4 w-4" />}
+        open onRequestClose={() => guard(onClose)} size="full" accent="order" icon={<ShoppingCart className="h-4 w-4" />}
         title={id ? `Edit ${String(initial?.header.doc_no ?? "")}` : "New Sales Order"} status={revise ? <Badge tone="info">Approved order</Badge> : <Badge tone="warning">Awaiting approval</Badge>}
+        subtitle={`${used.length} item${used.length === 1 ? "" : "s"} · ${qtyFmt(qtyTotal)} units`}
         footer={
           <>
             {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
-            <div className="flex-1 text-right text-sm">
-              {canPrices && <>Total <b className="tabular-nums">{money(total)}</b>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} item{pending > 1 ? "s" : ""} price pending</span>}</>}
+            <div className="flex-1 text-right">
+              {canPrices && <span className="text-sm text-ink-muted">Order total <b className="ml-1 text-lg tabular-nums text-ink">{money(total)}</b>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} price{pending > 1 ? "s" : ""} pending</span>}</span>}
             </div>
             <Button onClick={() => guard(onCancel)}>Cancel</Button>
-            <Button icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending && save.variables === false} disabled={save.isPending} onClick={() => submit(false)}>{revise ? "Save changes" : "Save"}</Button>
-            {!revise && can(P.salesApprove) && <Button variant="primary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} loading={save.isPending && save.variables === true} disabled={save.isPending} onClick={() => submit(true)}>Save & approve</Button>}
+            <Button icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending && save.variables === false} disabled={save.isPending} onClick={() => submit(false)}>{revise ? "Save changes" : "Save draft"}</Button>
+            {primaryLabel && <Button variant="primary" icon={sending ? <BellRing className="h-3.5 w-3.5" /> : <CheckCircle2 className="h-3.5 w-3.5" />} loading={save.isPending && save.variables === true} disabled={save.isPending} onClick={() => submit(true)}>{primaryLabel}</Button>}
           </>
         }
       >
-        <FormGrid cols={4}>
-          <Field label="Customer" required error={err("customer")} className="sm:col-span-2"><CustomerPicker value={f.customer_id} onChange={(v) => setF((s) => ({ ...s, customer_id: v }))} /></Field>
-          <Field label="Order date" required><Input type="date" value={f.order_date} onChange={(e) => setF((s) => ({ ...s, order_date: e.target.value }))} /></Field>
-          <Field label="Customer's PO / reference"><Input value={f.customer_reference} onChange={(e) => setF((s) => ({ ...s, customer_reference: e.target.value }))} /></Field>
-        </FormGrid>
-        {revise && <p className="mb-2 rounded-control bg-info/10 px-2 py-1.5 text-xs text-info">This order is approved. Saving re-reserves stock for what is still to be sent. Quantities cannot go below what was already dispatched, and dispatched items cannot be removed.</p>}
-        <p className="mb-2 text-xs text-ink-muted">Enter how many to send from each warehouse.{canPrices && <> Leave the price empty if it is not agreed yet — it stays <b>Pending</b> (never zero) until invoicing.</>}</p>
-        {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
-        <div className="space-y-2">
-          {f.lines.map((l, i) => (
-            <SoLine key={l.key} idx={i} line={l} customerId={f.customer_id} showPrice={canPrices} warehouses={whs.data ?? []} err={err}
-              onChange={(p) => setLine(l.key, p)} onRemove={f.lines.length > 1 && sentTotal(l) === 0 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
-          ))}
+        <div className="mx-auto max-w-[1600px] space-y-4">
+          <section className="rounded-card border border-line bg-subtle/50 p-3">
+            <FormGrid cols={4}>
+              <Field label="Customer" required error={err("customer")} className="sm:col-span-2"><CustomerPicker value={f.customer_id} onChange={(v) => setF((s) => ({ ...s, customer_id: v }))} /></Field>
+              <Field label="Order date" required><Input type="date" value={f.order_date} onChange={(e) => setF((s) => ({ ...s, order_date: e.target.value }))} /></Field>
+              <Field label="Customer's PO / reference"><Input value={f.customer_reference} onChange={(e) => setF((s) => ({ ...s, customer_reference: e.target.value }))} /></Field>
+            </FormGrid>
+          </section>
+          {revise && <p className="rounded-control bg-info/10 px-3 py-2 text-xs text-info">This order is approved. Saving re-reserves stock for what is still to be sent. Quantities cannot go below what was already dispatched, and dispatched items cannot be removed.</p>}
+          <section>
+            <div className="mb-2 flex items-end justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-ink">Items</h3>
+                <p className="text-xs text-ink-muted">Quantity to send from each warehouse.{canPrices && <> Leave the price empty if not agreed yet — it stays <b>Pending</b> until invoicing.</>}</p>
+              </div>
+              <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newLine()] }))}>Add item</Button>
+            </div>
+            {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
+            <div className="overflow-x-auto rounded-card border border-line">
+              <table className="w-full min-w-[900px] border-collapse text-sm">
+                <thead className="sticky top-0 z-[1]">
+                  <tr className="bg-indigo-50/70 text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
+                    <th className="h-9 w-10 px-2 text-center">#</th>
+                    <th className="min-w-[280px] px-2">Item</th>
+                    {(whs.data ?? []).map((w) => <th key={w.id} className="w-[128px] px-2 text-right"><span className="font-mono">{w.code}</span><div className="font-normal normal-case tracking-normal text-ink-faint">{w.name}</div></th>)}
+                    <th className="w-[96px] px-2 text-right">Total</th>
+                    {canPrices && <><th className="w-[150px] px-2 text-right">Unit price</th><th className="w-[130px] px-2 text-right">Amount</th></>}
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {f.lines.map((l, i) => (
+                    <SoLine key={l.key} idx={i} line={l} customerId={f.customer_id} showPrice={canPrices} warehouses={whs.data ?? []} err={err}
+                      onChange={(p) => setLine(l.key, p)} onRemove={f.lines.length > 1 && sentTotal(l) === 0 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button size="sm" variant="ghost" className="mt-2" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newLine()] }))}>Add another item</Button>
+          </section>
+          <div className={cn("grid gap-4", showPickers && "lg:grid-cols-2")}>
+            {showPickers && (
+              <section className="rounded-card border border-sky-200 bg-sky-50/40 p-3">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink"><BellRing className="h-4 w-4 text-sky-600" /> Send to warehouse staff</h3>
+                <p className="mb-2 text-xs text-ink-muted">{revise ? "Choose pickers to create picking tasks for what is still to pick." : "Choose pickers and use “Save, approve & send” — the order is approved and their phones buzz straight away."} Leave empty to do it later.</p>
+                {usedWh.length === 0 ? <p className="text-xs text-ink-faint">Enter quantities first.</p> : (
+                  <div className="space-y-2">
+                    {usedWh.map((w) => (
+                      <div key={w.id} className="flex flex-wrap items-start gap-3 rounded-control bg-white p-2">
+                        <span className="w-16 shrink-0 pt-1 font-mono text-xs font-semibold">{w.code}</span>
+                        <div className="min-w-0 flex-1"><PickerChips people={staffOf(staff.data, w.id)} value={pickers[w.id] ?? []} onChange={(v) => setPickers((s) => ({ ...s, [w.id]: v }))} /></div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+            <section><Field label="Notes"><Textarea rows={showPickers ? 4 : 2} value={f.notes} onChange={(e) => setF((s) => ({ ...s, notes: e.target.value }))} /></Field></section>
+          </div>
         </div>
-        <Button size="sm" className="mt-2" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newLine()] }))}>Add item</Button>
-        <Field label="Notes" className="mt-3"><Textarea rows={2} value={f.notes} onChange={(e) => setF((s) => ({ ...s, notes: e.target.value }))} /></Field>
       </ErpDialog>
       {dialog}
     </>
@@ -177,64 +242,56 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
     onChange({ alloc: out, want: undefined });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [line.want, avail.data, warehouses]);
+  const td = "border-b border-line/70 px-2 py-1.5 align-top";
   return (
-    <div className="rounded-card border border-line bg-surface p-2">
-      <div className="grid grid-cols-12 items-start gap-2">
-        <div className="col-span-12 flex items-center gap-2 md:col-span-5">
-          <span className="w-5 shrink-0 text-center text-2xs text-ink-faint">{idx + 1}</span>
+    <tr className="group bg-white hover:bg-indigo-50/30">
+      <td className={cn(td, "pt-3 text-center text-2xs text-ink-faint")}>{idx + 1}</td>
+      <td className={td}>
+        <div className="flex gap-1.5">
           <div className="min-w-0 flex-1">
             <ProductPicker value={line.product_id} disabled={locked} onChange={(v) => onChange({ product_id: v, variant_id: null, alloc: {} })} invalid={!!err(`${line.key}.p`)} />
-            {err(`${line.key}.p`) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.p`)}</p>}
           </div>
+          {needsVariant && <div className="w-[42%] shrink-0"><VariantPicker productId={line.product_id} value={line.variant_id} disabled={locked} onChange={(v) => onChange({ variant_id: v })} /></div>}
         </div>
-        <div className="col-span-6 md:col-span-3"><VariantPicker productId={line.product_id} value={line.variant_id} disabled={locked} onChange={(v) => onChange({ variant_id: v })} /></div>
-        <div className={cn("col-span-5 md:col-span-3", !showPrice && "invisible")}>
-          <Input inputMode="decimal" className="text-right tabular-nums" placeholder="Price (pending)" aria-label="Unit price" value={line.unit_price} invalid={!!err(`${line.key}.price`)}
+        {err(`${line.key}.p`) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.p`)}</p>}
+        {meta.data?.is_bundle && <p className="mt-0.5 text-2xs text-ink-muted">Bundle — availability from its components</p>}
+        {err(`${line.key}.q`) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.q`)}</p>}
+      </td>
+      {warehouses.map((w) => {
+        const raw = avail.data?.get(w.id);
+        // stock already held for this order counts as available to it
+        const a = raw || line.held[w.id] ? { on_hand: raw?.on_hand ?? 0, reserved: (raw?.reserved ?? 0) - (line.held[w.id] ?? 0), available: (raw?.available ?? 0) + (line.held[w.id] ?? 0) } : undefined;
+        const v = line.alloc[w.id] ?? "";
+        const over = a && n(v) - (line.sent[w.id] ?? 0) > a.available;
+        return (
+          <td key={w.id} className={td}>
+            <Input inputMode="decimal" aria-label={`Quantity from ${w.code}`} disabled={!ready} placeholder="0" value={v}
+              className={cn("h-control-sm text-right tabular-nums", n(v) > 0 && !over && "border-indigo-300 bg-white", over && "border-danger bg-danger-soft/40")}
+              onChange={(e) => onChange({ alloc: { ...line.alloc, [w.id]: e.target.value } })} />
+            {ready && (
+              <div className={cn("mt-0.5 text-right text-2xs tabular-nums", over ? "text-danger" : (a?.available ?? 0) <= 0 ? "text-ink-faint" : "text-ink-muted")} title={a ? `On hand ${qtyFmt(a.on_hand)} · reserved ${qtyFmt(a.reserved)}` : "No stock"}>
+                {over ? "over · " : ""}avail {qtyFmt(a?.available ?? 0)}{(line.sent[w.id] ?? 0) > 0 && <> · {qtyFmt(line.sent[w.id])} sent</>}
+              </div>
+            )}
+          </td>
+        );
+      })}
+      <td className={cn(td, "pt-2.5 text-right font-semibold tabular-nums")}>{total > 0 ? qtyFmt(total) : <span className="text-ink-faint">—</span>} <span className="text-2xs font-normal text-ink-faint">{meta.data?.uom}</span></td>
+      {showPrice && (
+        <td className={td}>
+          <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="Pending" aria-label="Unit price" value={line.unit_price} invalid={!!err(`${line.key}.price`)}
             onChange={(e) => onChange({ unit_price: e.target.value })} />
-          {showPrice && last.data && (
-            <button type="button" className="mt-0.5 text-2xs text-info hover:underline" onClick={() => onChange({ unit_price: String(Number(last.data!.unit_price)) })}>
-              Last charged {money(last.data.unit_price)} ({last.data.doc_no})
+          {last.data && (
+            <button type="button" className="mt-0.5 block w-full text-right text-2xs text-info hover:underline" onClick={() => onChange({ unit_price: String(Number(last.data!.unit_price)) })}>
+              last {money(last.data.unit_price)}
             </button>
           )}
-        </div>
-        <div className="col-span-1 flex justify-end">
-          {onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" onClick={onRemove}><Trash2 className="h-3.5 w-3.5 text-ink-faint" /></Button>}
-        </div>
-      </div>
-      {ready && (
-        <div className="mt-2 border-t border-dashed border-line pt-2 md:pl-7">
-          <div className="flex flex-wrap items-start gap-2">
-            {warehouses.map((w) => {
-              const raw = avail.data?.get(w.id);
-              // stock already held for this order counts as available to it
-              const a = raw || line.held[w.id] ? { on_hand: raw?.on_hand ?? 0, reserved: (raw?.reserved ?? 0) - (line.held[w.id] ?? 0), available: (raw?.available ?? 0) + (line.held[w.id] ?? 0) } : undefined;
-              const v = line.alloc[w.id] ?? "";
-              const over = a && n(v) - (line.sent[w.id] ?? 0) > a.available;
-              return (
-                <label key={w.id} className={cn("w-[132px] rounded-control border p-1.5", n(v) > 0 ? (over ? "border-danger" : "border-primary") : "border-line")}>
-                  <div className="flex items-baseline justify-between text-2xs">
-                    <span className="font-mono font-medium">{w.code}</span>
-                    <span className={cn("tabular-nums", (a?.available ?? 0) <= 0 ? "text-ink-faint" : "text-ink-muted")} title={a ? `On hand ${qtyFmt(a.on_hand)} · reserved ${qtyFmt(a.reserved)}` : "No stock"}>
-                      avail {qtyFmt(a?.available ?? 0)}
-                    </span>
-                  </div>
-                  <Input inputMode="decimal" aria-label={`Quantity from ${w.code}`} className="mt-1 h-control-sm text-right tabular-nums" placeholder="0" value={v}
-                    onChange={(e) => onChange({ alloc: { ...line.alloc, [w.id]: e.target.value } })} />
-                  {over && <span className="text-2xs text-danger">more than available</span>}
-                  {(line.sent[w.id] ?? 0) > 0 && <span className="block text-2xs text-ink-muted">{qtyFmt(line.sent[w.id])} sent</span>}
-                </label>
-              );
-            })}
-            <div className="ml-auto self-center text-right">
-              <div className="text-2xs uppercase text-ink-muted">Total</div>
-              <div className="text-base font-semibold tabular-nums">{qtyFmt(total)} <span className="text-2xs font-normal text-ink-faint">{meta.data?.uom}</span></div>
-              {showPrice && line.unit_price.trim() !== "" && total > 0 && <div className="text-xs tabular-nums text-ink-muted">{money(total * n(line.unit_price))}</div>}
-            </div>
-          </div>
-          {meta.data?.is_bundle && <p className="mt-1 text-2xs text-ink-muted">Bundle — availability is worked out from its components; components are taken when dispatched.</p>}
-          {err(`${line.key}.q`) && <p className="mt-1 text-2xs text-danger">{err(`${line.key}.q`)}</p>}
-        </div>
+        </td>
       )}
-    </div>
+      {showPrice && <td className={cn(td, "pt-2.5 text-right tabular-nums")}>{line.unit_price.trim() !== "" && total > 0 ? money(total * n(line.unit_price)) : <span className="text-ink-faint">—</span>}</td>}
+      <td className={cn(td, "pt-1.5 text-center")}>
+        {onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" className="opacity-50 group-hover:opacity-100" onClick={onRemove}><Trash2 className="h-3.5 w-3.5" /></Button>}
+      </td>
+    </tr>
   );
 }

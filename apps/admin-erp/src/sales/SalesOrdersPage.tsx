@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, CheckCircle2, ClipboardList, ExternalLink, Lock, Pencil, Plus, ShieldAlert, ShoppingCart, Truck } from "lucide-react";
+import { Ban, BellRing, CheckCircle2, ClipboardList, ExternalLink, Lock, Pencil, Plus, ShieldAlert, ShoppingCart, Truck } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, KeyValue, PageHeader, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -13,6 +13,7 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { money } from "../accounting/common";
 import { SO_TONE, qtyFmt, soLabel, useSoLinePrices } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
+import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPicking";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -139,6 +140,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
   const [tab, setTab] = React.useState("lines");
   const [confirm, setConfirm] = React.useState<null | "approve" | "cancel" | "close">(null);
   const [reason, setReason] = React.useState("");
+  const [sendOpen, setSendOpen] = React.useState(false);
   const act = useMutation({
     mutationFn: async (kind: "approve" | "cancel" | "close") => {
       const r = kind === "approve" ? await sb().rpc("approve_sales_order", { p_id: id })
@@ -159,10 +161,11 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
   const dispatchable = ["APPROVED", "PARTIALLY_DELIVERED"].includes(status);
   const canPrices = can(P.salesViewPrices);
   const quote = h?.quote as { doc_no: string } | null | undefined;
+  const tasks = useSoTasks(can(P.pickingManage) ? id : null);
 
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon}
+      <ErpDialog open onRequestClose={onClose} size="full" accent="order" icon={icon}
         title={h ? String(h.doc_no) : "Sales Order"} subtitle={cust ? `${cust.name}${cust.city ? ` · ${cust.city}` : ""}` : undefined}
         status={h ? <Badge tone={SO_TONE[status]}>{soLabel(status)}</Badge> : null}
         footer={
@@ -176,7 +179,8 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
               <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
             {status === "DRAFT" && can(P.salesApprove) && <Button variant="primary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => setConfirm("approve")}>Approve</Button>}
             {quote && canPrices && <Button icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => navigate(`/quotations?view=${(h!.quote as { id: string }).id}`)}>{quote.doc_no}</Button>}
-            {dispatchable && can(P.pickingManage) && <Button icon={<ClipboardList className="h-3.5 w-3.5" />} onClick={() => navigate(`/picking?new=1&so=${id}`)}>Picking task</Button>}
+            {dispatchable && can(P.pickingManage) && <Button icon={<ClipboardList className="h-3.5 w-3.5" />} title="Split quantities between warehouses yourself" onClick={() => navigate(`/picking?new=1&so=${id}`)}>Custom picking</Button>}
+            {(dispatchable || status === "DRAFT") && can(P.pickingManage) && (status !== "DRAFT" || can(P.salesApprove)) && <Button variant={status === "DRAFT" ? "secondary" : "primary"} icon={<BellRing className="h-3.5 w-3.5" />} onClick={() => setSendOpen(true)}>{status === "DRAFT" ? "Approve & send to pickers" : "Send to pickers"}</Button>}
             {dispatchable && can(P.salesDispatch) && <Button variant="primary" icon={<Truck className="h-3.5 w-3.5" />} onClick={() => navigate(`/gdn?new=1&so=${id}`)}>Create GDN</Button>}
           </>
         }
@@ -196,10 +200,12 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
             </dl>
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${lines.length})` },
+              ...(can(P.pickingManage) ? [{ key: "picking", label: `Picking (${tasks.data?.length ?? 0})` }] : []),
               { key: "gdns", label: `Dispatches (${doc.data!.gdns.filter((g) => g.status !== "CANCELLED").length})` },
               ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
             ]} />
             {tab === "history" && <AuditTimeline table="sales_orders" id={id} />}
+            {tab === "picking" && <SoPickingTab tasks={tasks.data ?? []} onOpen={(tid) => navigate(`/picking?view=${tid}`)} />}
             {tab === "gdns" && (
               <div className="flex flex-wrap gap-2">
                 {doc.data!.gdns.map((g) => (
@@ -249,6 +255,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
           </>
         )}
       </ErpDialog>
+      {sendOpen && h && <SendToPickersDialog soId={id} docNo={String(h.doc_no)} draft={status === "DRAFT"} onClose={() => setSendOpen(false)} />}
       <ConfirmDialog open={confirm === "approve"} title={`Approve ${h?.doc_no ?? ""}?`} message="Stock is reserved in each warehouse for this order and it is released to the warehouse for dispatch."
         confirmLabel="Approve" loading={act.isPending} onCancel={() => setConfirm(null)} onConfirm={() => act.mutate("approve")} />
       <ConfirmDialog open={confirm === "cancel" || confirm === "close"} title={confirm === "close" ? `Close ${h?.doc_no ?? ""}?` : `Cancel ${h?.doc_no ?? ""}?`}

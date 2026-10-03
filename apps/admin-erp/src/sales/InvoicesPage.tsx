@@ -150,7 +150,7 @@ function CreateInvoiceDialog({ presetGdn, onClose, onCreated }: { presetGdn: str
   const toggle = (id: string, on: boolean) => setPicked((s) => { const n = new Set(s); if (on) n.add(id); else n.delete(id); return n; });
 
   return (
-    <ErpDialog open onRequestClose={onClose} size="lg" icon={icon} title="New Invoice" subtitle="Choose the customer and the dispatched GDNs to bill"
+    <ErpDialog open onRequestClose={onClose} size="lg" accent="invoice" icon={icon} title="New Invoice" subtitle="Choose the customer and the dispatched GDNs to bill"
       footer={
         <>
           <div className="flex-1 text-sm text-ink-muted">{picked.size} GDN{picked.size === 1 ? "" : "s"} selected</div>
@@ -252,7 +252,7 @@ function InvoiceDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const doc = useInvoice(id);
   if (doc.isLoading || doc.error || !doc.data) {
     return (
-      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon} title="Invoice" footer={<Button onClick={onClose}>Close</Button>}>
+      <ErpDialog open onRequestClose={onClose} size="full" accent="invoice" icon={icon} title="Invoice" footer={<Button onClick={onClose}>Close</Button>}>
         {doc.error ? <p className="text-sm text-danger">{friendlyError(doc.error)}</p> : <Skeleton className="h-40" />}
       </ErpDialog>
     );
@@ -351,7 +351,7 @@ function InvoiceDraft({ data, onClose }: { data: InvData; onClose: () => void })
 
   return (
     <>
-      <ErpDialog open onRequestClose={() => guard(onClose)} size="xl" icon={icon} title={String(h.doc_no)} subtitle={`${cust.name}${cust.city ? ` · ${cust.city}` : ""}`}
+      <ErpDialog open onRequestClose={() => guard(onClose)} size="full" accent="invoice" icon={icon} title={String(h.doc_no)} subtitle={`${cust.name}${cust.city ? ` · ${cust.city}` : ""}`}
         status={<Badge tone="warning">Draft</Badge>}
         footer={
           <>
@@ -510,7 +510,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
 
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon} title={String(h.doc_no)} subtitle={`${cust.name}${cust.city ? ` · ${cust.city}` : ""}`}
+      <ErpDialog open onRequestClose={onClose} size="full" accent="invoice" icon={icon} title={String(h.doc_no)} subtitle={`${cust.name}${cust.city ? ` · ${cust.city}` : ""}`}
         status={<>{h.is_quick ? <Badge tone="neutral" className="mr-1">Quick</Badge> : null}{status === "POSTED" ? <Badge tone={overdue ? "danger" : PAY_TONE[String(data.pay.payment_status)]}>{overdue ? "Overdue" : payLabel(String(data.pay.payment_status))}</Badge> : <Badge tone={STATUS_TONE[status]}>{status.charAt(0) + status.slice(1).toLowerCase()}</Badge>}</>}
         footer={
           <>
@@ -748,7 +748,7 @@ function QuickInvoiceDialog({ onClose, onPosted }: { onClose: () => void; onPost
 
   return (
     <>
-      <ErpDialog open onRequestClose={() => guard(onClose)} size="xl" icon={<Zap className="h-4 w-4" />} title="Quick invoice" subtitle="Invoice and dispatch in one step"
+      <ErpDialog open onRequestClose={() => guard(onClose)} size="full" accent="invoice" icon={<Zap className="h-4 w-4" />} title="Quick invoice" subtitle="Invoice and dispatch in one step"
         footer={
           <>
             <div className="flex-1 text-right text-sm">Total <b className="tabular-nums">{money(total)}</b></div>
@@ -762,11 +762,19 @@ function QuickInvoiceDialog({ onClose, onPosted }: { onClose: () => void; onPost
           <Field label="Due date"><Input type="date" value={due} onChange={(e) => setDue(e.target.value)} /></Field>
         </FormGrid>
         {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
-        <div className="space-y-2">
-          {lines.map((l, i) => (
-            <QuickLine key={l.key} idx={i} line={l} customerId={customer} warehouses={whs.data ?? []} err={err} onChange={(p) => setLine(l.key, p)}
-              onRemove={lines.length > 1 ? () => setLines((s) => s.filter((x) => x.key !== l.key)) : undefined} />
-          ))}
+        <div className="overflow-x-auto rounded-card border border-line">
+          <table className="w-full min-w-[900px] border-collapse text-sm">
+            <thead className="sticky top-0 z-[1]"><tr className="bg-emerald-50/70 text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
+              <th className="h-9 w-10 px-2 text-center">#</th><th className="px-2">Item</th><th className="w-[200px] px-2">From warehouse</th><th className="w-[120px] px-2 text-right">Qty</th>
+              <th className="w-[150px] px-2 text-right">Unit price</th><th className="w-[140px] px-2 text-right">Amount</th><th className="w-10" />
+            </tr></thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <QuickLine key={l.key} idx={i} line={l} customerId={customer} warehouses={whs.data ?? []} err={err} onChange={(p) => setLine(l.key, p)}
+                  onRemove={lines.length > 1 ? () => setLines((s) => s.filter((x) => x.key !== l.key)) : undefined} />
+              ))}
+            </tbody>
+          </table>
         </div>
         <Button size="sm" className="mt-2" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setLines((s) => [...s, newQLine()])}>Add item</Button>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -827,34 +835,32 @@ function QuickLine({ idx, line, customerId, warehouses, err, onChange, onRemove 
   const a = line.warehouse_id ? avail.data?.get(line.warehouse_id) : undefined;
   const short = !!line.warehouse_id && !!avail.data && n(line.qty) > (a?.available ?? 0);
   const options = warehouses.map((w) => ({ value: w.id, label: w.code, secondary: avail.data ? `${qtyFmt(avail.data.get(w.id)?.available ?? 0)} available` : w.name }));
+  const td = "border-b border-line/70 px-2 py-1.5 align-top";
   return (
-    <div className="rounded-card border border-line bg-surface p-2">
-      <div className="grid grid-cols-12 items-start gap-2">
-        <div className="col-span-12 flex items-start gap-2 md:col-span-4">
-          <span className="mt-2 w-5 shrink-0 text-center text-2xs text-ink-faint">{idx + 1}</span>
-          <div className="min-w-0 flex-1">
-            <ProductPicker value={line.product_id} onChange={(v) => onChange({ product_id: v, variant_id: null, warehouse_id: null, price: "" })} invalid={!!err(`${line.key}.p`)} />
-            {needsVariant && <div className="mt-1"><VariantPicker productId={line.product_id} value={line.variant_id} onChange={(v) => onChange({ variant_id: v, warehouse_id: null })} /></div>}
-            <input className="mt-1 w-full bg-transparent text-xs text-ink-muted outline-none placeholder:text-ink-faint" placeholder="Description (optional)" value={line.desc} onChange={(e) => onChange({ desc: e.target.value })} />
-          </div>
+    <tr className="group bg-white hover:bg-emerald-50/30">
+      <td className={cn(td, "pt-3 text-center text-2xs text-ink-faint")}>{idx + 1}</td>
+      <td className={td}>
+        <div className="flex gap-1.5">
+          <div className="min-w-0 flex-1"><ProductPicker value={line.product_id} onChange={(v) => onChange({ product_id: v, variant_id: null, warehouse_id: null, price: "" })} invalid={!!err(`${line.key}.p`)} /></div>
+          {needsVariant && <div className="w-[42%] shrink-0"><VariantPicker productId={line.product_id} value={line.variant_id} onChange={(v) => onChange({ variant_id: v, warehouse_id: null })} /></div>}
         </div>
-        <div className="col-span-6 md:col-span-3">
-          <SearchableSelect value={line.warehouse_id} options={options} placeholder="From warehouse…" invalid={!!err(`${line.key}.w`)} clearable={false} onChange={(v) => onChange({ warehouse_id: v })} />
-          {line.warehouse_id && a && <div className="mt-0.5 text-2xs text-ink-muted">{qtyFmt(a.available)} available here</div>}
-        </div>
-        <div className="col-span-6 md:col-span-2">
-          <Input inputMode="decimal" className="text-right tabular-nums" placeholder="Qty" aria-label="Quantity" value={line.qty} invalid={!!err(`${line.key}.q`) || short} onChange={(e) => onChange({ qty: e.target.value })} />
-          {short && <div className="mt-0.5 text-2xs text-danger">more than available</div>}
-        </div>
-        <div className="col-span-6 md:col-span-2">
-          <Input inputMode="decimal" className="text-right tabular-nums" placeholder="Price" aria-label="Unit price" value={line.price} invalid={!!err(`${line.key}.price`)} onChange={(e) => onChange({ price: e.target.value })} />
-          {last.data && <div className="mt-0.5 text-right text-2xs text-ink-muted">last {money(last.data.unit_price)}</div>}
-          {n(line.qty) > 0 && line.price.trim() !== "" && <div className="text-right text-xs tabular-nums">{money(n(line.qty) * n(line.price))}</div>}
-        </div>
-        <div className="col-span-6 flex justify-end md:col-span-1">
-          {onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" onClick={onRemove}><X className="h-3.5 w-3.5 text-ink-faint" /></Button>}
-        </div>
-      </div>
-    </div>
+        <input className="mt-1 w-full bg-transparent text-xs text-ink-muted outline-none placeholder:text-ink-faint" placeholder="Description (optional)" value={line.desc} onChange={(e) => onChange({ desc: e.target.value })} />
+      </td>
+      <td className={td}>
+        <SearchableSelect value={line.warehouse_id} options={options} placeholder="From warehouse…" invalid={!!err(`${line.key}.w`)} clearable={false} onChange={(v) => onChange({ warehouse_id: v })} />
+        {line.warehouse_id && a && <div className="mt-0.5 text-2xs text-ink-muted">{qtyFmt(a.available)} available here</div>}
+      </td>
+      <td className={td}>
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0" aria-label="Quantity" value={line.qty} invalid={!!err(`${line.key}.q`) || short} onChange={(e) => onChange({ qty: e.target.value })} />
+        {short && <div className="mt-0.5 text-right text-2xs text-danger">more than available</div>}
+      </td>
+      <td className={td}>
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0.00" aria-label="Unit price" value={line.price} invalid={!!err(`${line.key}.price`)} onChange={(e) => onChange({ price: e.target.value })} />
+        {last.data && <div className="mt-0.5 text-right text-2xs text-ink-muted">last {money(last.data.unit_price)}</div>}
+      </td>
+      <td className={cn(td, "pt-2.5 text-right tabular-nums")}>{n(line.qty) > 0 && line.price.trim() !== "" ? money(n(line.qty) * n(line.price)) : <span className="text-ink-faint">—</span>}</td>
+      <td className={cn(td, "pt-1.5 text-center")}>{onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" className="opacity-50 group-hover:opacity-100" onClick={onRemove}><X className="h-3.5 w-3.5" /></Button>}</td>
+    </tr>
   );
 }
+

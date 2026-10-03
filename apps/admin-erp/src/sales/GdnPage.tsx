@@ -262,7 +262,7 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
 
   return (
     <>
-      <ErpDialog open onRequestClose={() => guard(onClose)} size="xl" icon={icon}
+      <ErpDialog open onRequestClose={() => guard(onClose)} size="full" accent="dispatch" icon={icon}
         title={id ? `Edit ${String(header?.doc_no ?? "")}` : "New GDN"} status={<Badge tone="warning">Draft</Badge>}
         footer={
           <>
@@ -406,7 +406,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
 
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon}
+      <ErpDialog open onRequestClose={onClose} size="full" accent="dispatch" icon={icon}
         title={h ? String(h.doc_no) : "GDN"} subtitle={cust ? `${cust.name}${cust.city ? ` · ${cust.city}` : ""}` : undefined}
         status={h ? <Badge tone={GDN_TONE[status]}>{gdnLabel(status)}</Badge> : null}
         footer={

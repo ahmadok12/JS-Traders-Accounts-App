@@ -176,11 +176,11 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
   };
   return (
     <>
-      <ErpDialog open onRequestClose={() => guard(onClose)} size="xl" icon={icon} title={id ? `Edit ${String(h?.doc_no ?? "")}` : "New Quotation"}
+      <ErpDialog open onRequestClose={() => guard(onClose)} size="full" accent="quote" icon={icon} title={id ? `Edit ${String(h?.doc_no ?? "")}` : "New Quotation"}
         footer={
           <>
             {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
-            <div className="flex-1 text-right text-sm">Total <b className="tabular-nums">{money(total)}</b></div>
+            <div className="flex-1 text-right text-sm text-ink-muted">Total <b className="ml-1 text-lg tabular-nums text-ink">{money(total)}</b></div>
             <Button onClick={() => guard(onCancel)}>Cancel</Button>
             <Button variant="primary" icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending} onClick={submit}>Save</Button>
           </>
@@ -191,11 +191,19 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
           <Field label="Valid until"><Input type="date" value={f.valid_until} onChange={(e) => setF((s) => ({ ...s, valid_until: e.target.value }))} /></Field>
         </FormGrid>
         {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
-        <div className="space-y-2">
-          {f.lines.map((l, i) => (
-            <QFormLine key={l.key} idx={i} line={l} customerId={f.customer_id} err={err} onChange={(p) => setLine(l.key, p)}
-              onRemove={f.lines.length > 1 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
-          ))}
+        <div className="overflow-x-auto rounded-card border border-line">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
+            <thead className="sticky top-0 z-[1]"><tr className="bg-violet-50/70 text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
+              <th className="h-9 w-10 px-2 text-center">#</th><th className="px-2">Item</th><th className="w-[130px] px-2 text-right">Qty</th>
+              <th className="w-[150px] px-2 text-right">Unit price</th><th className="w-[140px] px-2 text-right">Amount</th><th className="w-10" />
+            </tr></thead>
+            <tbody>
+              {f.lines.map((l, i) => (
+                <QFormLine key={l.key} idx={i} line={l} customerId={f.customer_id} err={err} onChange={(p) => setLine(l.key, p)}
+                  onRemove={f.lines.length > 1 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
+              ))}
+            </tbody>
+          </table>
         </div>
         <Button size="sm" className="mt-2" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newFLine()] }))}>Add item</Button>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -222,29 +230,28 @@ function QFormLine({ idx, line, customerId, err, onChange, onRemove }: {
 }) {
   const meta = useProductMeta(line.product_id);
   const last = useLastPrice(customerId, line.product_id, line.variant_id);
+  const td = "border-b border-line/70 px-2 py-1.5 align-top";
   return (
-    <div className="rounded-card border border-line bg-surface p-2">
-      <div className="grid grid-cols-12 items-start gap-2">
-        <div className="col-span-12 flex items-start gap-2 md:col-span-5">
-          <span className="mt-2 w-5 shrink-0 text-center text-2xs text-ink-faint">{idx + 1}</span>
-          <div className="min-w-0 flex-1">
-            <ProductPicker value={line.product_id} onChange={(v) => onChange({ product_id: v, variant_id: null })} invalid={!!err(`${line.key}.p`)} />
-            {meta.data?.has_variants && <div className="mt-1"><VariantPicker productId={line.product_id} value={line.variant_id} onChange={(v) => onChange({ variant_id: v })} /></div>}
-            <input className="mt-1 w-full bg-transparent text-xs text-ink-muted outline-none placeholder:text-ink-faint" placeholder="Description (optional)" value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
-          </div>
+    <tr className="group bg-white hover:bg-violet-50/30">
+      <td className={cn(td, "pt-3 text-center text-2xs text-ink-faint")}>{idx + 1}</td>
+      <td className={td}>
+        <div className="flex gap-1.5">
+          <div className="min-w-0 flex-1"><ProductPicker value={line.product_id} onChange={(v) => onChange({ product_id: v, variant_id: null })} invalid={!!err(`${line.key}.p`)} /></div>
+          {meta.data?.has_variants && <div className="w-[42%] shrink-0"><VariantPicker productId={line.product_id} value={line.variant_id} onChange={(v) => onChange({ variant_id: v })} /></div>}
         </div>
-        <div className="col-span-4 md:col-span-2">
-          <Input inputMode="decimal" className="text-right tabular-nums" placeholder="Qty" aria-label="Quantity" value={line.quantity} invalid={!!err(`${line.key}.q`)} onChange={(e) => onChange({ quantity: e.target.value })} />
-          {meta.data?.uom && <div className="mt-0.5 text-right text-2xs text-ink-faint">{meta.data.uom}</div>}
-        </div>
-        <div className="col-span-4 md:col-span-2">
-          <Input inputMode="decimal" className="text-right tabular-nums" placeholder="Price" aria-label="Unit price" value={line.unit_price} invalid={!!err(`${line.key}.price`)} onChange={(e) => onChange({ unit_price: e.target.value })} />
-          {last.data && <button type="button" className="mt-0.5 block w-full text-right text-2xs text-info hover:underline" onClick={() => onChange({ unit_price: String(Number(last.data!.unit_price)) })}>last {money(last.data.unit_price)}</button>}
-        </div>
-        <div className="col-span-3 pt-2 text-right text-sm tabular-nums md:col-span-2">{n(line.quantity) > 0 && line.unit_price.trim() !== "" ? money(n(line.quantity) * n(line.unit_price)) : ""}</div>
-        <div className="col-span-1 flex justify-end">{onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" onClick={onRemove}><Trash2 className="h-3.5 w-3.5 text-ink-faint" /></Button>}</div>
-      </div>
-    </div>
+        <input className="mt-1 w-full bg-transparent text-xs text-ink-muted outline-none placeholder:text-ink-faint" placeholder="Description (optional)" value={line.description} onChange={(e) => onChange({ description: e.target.value })} />
+      </td>
+      <td className={td}>
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0" aria-label="Quantity" value={line.quantity} invalid={!!err(`${line.key}.q`)} onChange={(e) => onChange({ quantity: e.target.value })} />
+        {meta.data?.uom && <div className="mt-0.5 text-right text-2xs text-ink-faint">{meta.data.uom}</div>}
+      </td>
+      <td className={td}>
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0.00" aria-label="Unit price" value={line.unit_price} invalid={!!err(`${line.key}.price`)} onChange={(e) => onChange({ unit_price: e.target.value })} />
+        {last.data && <button type="button" className="mt-0.5 block w-full text-right text-2xs text-info hover:underline" onClick={() => onChange({ unit_price: String(Number(last.data!.unit_price)) })}>last {money(last.data.unit_price)}</button>}
+      </td>
+      <td className={cn(td, "pt-2.5 text-right tabular-nums")}>{n(line.quantity) > 0 && line.unit_price.trim() !== "" ? money(n(line.quantity) * n(line.unit_price)) : <span className="text-ink-faint">—</span>}</td>
+      <td className={cn(td, "pt-1.5 text-center")}>{onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" className="opacity-50 group-hover:opacity-100" onClick={onRemove}><Trash2 className="h-3.5 w-3.5" /></Button>}</td>
+    </tr>
   );
 }
 
@@ -281,7 +288,7 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
   const open = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"].includes(status);
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon} title={h ? String(h.doc_no) : "Quotation"} subtitle={cust ? `${cust.name}${cust.city ? ` · ${cust.city}` : ""}` : undefined}
+      <ErpDialog open onRequestClose={onClose} size="full" accent="quote" icon={icon} title={h ? String(h.doc_no) : "Quotation"} subtitle={cust ? `${cust.name}${cust.city ? ` · ${cust.city}` : ""}` : undefined}
         status={h ? <Badge tone={isExpired(h) ? "danger" : Q_TONE[status]}>{isExpired(h) ? "Expired" : qLabel(status)}</Badge> : null}
         footer={
           <>
