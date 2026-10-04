@@ -14,6 +14,7 @@ import { qtyFmt } from "../sales/common";
 import { printDocument } from "../sales/print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { CurrencyInput, rpc, useAction, useCan, useItemInfo } from "./common";
+import { ImportCostsPanel } from "./ImportCosts";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Ship className="h-4 w-4" />;
@@ -253,7 +254,7 @@ function ShipmentDialog({ id, onClose, onSaved }: { id: string | null; onClose: 
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${used.length})` }, { key: "containers", label: `Containers (${conts.length})` },
               ...(id ? [{ key: "tracking", label: "Tracking" }, { key: "receipts", label: `Receipts (${doc.data?.receipts.length ?? 0})` },
-                ...(c.costs ? [{ key: "landed", label: `Landed cost (${doc.data?.landed.length ?? 0})` }] : []),
+                ...(c.costs ? [{ key: "costs", label: "Import costs" }, { key: "landed", label: `Landed cost (${doc.data?.landed.length ?? 0})` }] : []),
                 { key: "files", label: filesLabel(files.data?.length) }, { key: "history", label: "History" }] : [])]} />
             {tab === "lines" && (
               <>
@@ -362,6 +363,7 @@ function ShipmentDialog({ id, onClose, onSaved }: { id: string | null; onClose: 
                 })}
               </div>
             )}
+            {tab === "costs" && id && <ImportCostsPanel shipmentId={id} canRecord={st !== "CANCELLED"} />}
             {tab === "files" && id && <AttachmentsPanel entityType="shipments" entityId={id} />}
             {tab === "history" && id && <AuditTimeline table="shipments" id={id} />}
           </>

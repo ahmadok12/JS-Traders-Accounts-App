@@ -177,6 +177,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const reverse = useAction(() => rpc("reverse_supplier_bill", { p_id: id, p_reason: reason }), "Bill reversed", () => { setAsk(null); setReason(""); });
   const cancel = useAction(() => rpc("cancel_supplier_bill", { p_id: id }), "Draft cancelled", () => { setAsk(null); onClose(); });
   const unalloc = useAction((aid: string) => rpc("remove_supplier_allocation", { p_id: aid }), "Payment unlinked from this bill");
+  const linkShip = useAction((v: string | null) => rpc("set_bill_shipment", { p_bill_id: id, p_shipment_id: v }), (v) => (v ? "Linked to the shipment" : "Shipment link removed"));
   const outstanding = q.data?.v?.outstanding_pkr ?? 0;
   const sup = h?.supplier as { name: string; code: string; city: string | null } | undefined;
   const print = () => {
@@ -211,6 +212,10 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
               <Field label="Bill date"><Input type="date" disabled={!editable} value={head.bill_date} onChange={(e) => setHead((s) => ({ ...s, bill_date: e.target.value }))} /></Field>
               <Field label="Due date"><Input type="date" disabled={!editable} value={head.due_date} onChange={(e) => setHead((s) => ({ ...s, due_date: e.target.value }))} /></Field>
               <Field label="Currency"><CurrencyInput currency={head.currency} rate={head.fx_rate} disabled={!editable} onCurrency={(v) => setHead((s) => ({ ...s, currency: v }))} onRate={(v) => setHead((s) => ({ ...s, fx_rate: v }))} /></Field>
+              <Field label="For shipment" hint="Import charges (lines on Landed Cost Clearing) wait for this shipment's landed cost">
+                <LookupPicker value={(h.shipment_id as string) ?? null} disabled={!c.manage || st === "REVERSED" || st === "CANCELLED"} placeholder="(not an import cost)" spec={{ table: "shipments", label: "doc_no", secondary: "bl_no" }}
+                  onChange={(v) => linkShip.mutate(v)} />
+              </Field>
             </FormGrid>
             <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
               {(disc > 0 || editable) && <div className="rounded-card border border-line px-3 py-2"><div className="text-2xs font-semibold uppercase tracking-wide text-ink-muted">Discount ({head.currency})</div>
