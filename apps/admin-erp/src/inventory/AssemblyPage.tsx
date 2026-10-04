@@ -15,6 +15,7 @@ import { SearchBox, StatusFilter, useUrlState } from "./DocPage";
 import { STATUS_TONE } from "./docConfigs";
 import { MovementsTable } from "./MovementsTable";
 import { ProductPicker, VariantPicker, WarehousePicker, useProductMeta, useStockFigures } from "./pickers";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 type Kind = "ASSEMBLY" | "DISASSEMBLY";
@@ -164,6 +165,7 @@ function OrderView({ id, data, loading, error, onEdit, onClose }: { id: string; 
   const { can } = useAccess();
   const qc = useQueryClient();
   const [tab, setTab] = React.useState("components");
+  const files = useAttachments("assembly_orders", id);
   const [confirm, setConfirm] = React.useState<null | "post" | "cancel" | "reverse">(null);
   const [reason, setReason] = React.useState("");
   const status = String(data?.status ?? "DRAFT");
@@ -231,7 +233,7 @@ function OrderView({ id, data, loading, error, onEdit, onClose }: { id: string; 
               tabs={[
                 { key: "components", label: `Components (${comps.length})` },
                 ...(status === "POSTED" || status === "REVERSED" ? [{ key: "moves", label: "Stock movements" }] : []),
-                ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
+                { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
               ]}
             />
             {tab === "components" && (
@@ -260,6 +262,7 @@ function OrderView({ id, data, loading, error, onEdit, onClose }: { id: string; 
             )}
             {tab === "moves" && <MovementsTable sourceId={id} />}
             {tab === "history" && <AuditTimeline table="assembly_orders" id={id} />}
+            {tab === "files" && <AttachmentsPanel entityType="assembly_orders" entityId={id} />}
           </>
         ) : null}
       </ErpDialog>

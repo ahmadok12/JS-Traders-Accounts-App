@@ -30,6 +30,7 @@ import { MovementsTable } from "./MovementsTable";
 import { P } from "@jst/permissions";
 import { ReceiptCheckPanel } from "../picking/WarehouseJobs";
 import { RollCutsEditor, RollLengthsEditor, newRoll, sumCuts, sumRolls, type CutMode, type Cuts, type RollEntry } from "./rolls";
+import { AttachmentsPanel, filesLabel, useAttachments, type AttachmentEntity } from "../attachments/Attachments";
 
 type Row = Record<string, unknown>;
 interface Line {
@@ -148,6 +149,7 @@ function ViewDoc({
   const qc = useQueryClient();
   const [confirm, setConfirm] = React.useState<null | "post" | "cancel" | "reverse">(null);
   const [reason, setReason] = React.useState("");
+  const files = useAttachments(cfg.table as AttachmentEntity, id);
 
   const action = useMutation({
     mutationFn: async (kind: "post" | "cancel" | "reverse") => {
@@ -232,12 +234,13 @@ function ViewDoc({
               tabs={[
                 { key: "lines", label: `Items (${data!.lines.length})` },
                 ...(status === "POSTED" || status === "REVERSED" ? [{ key: "moves", label: "Stock movements" }] : []),
-                ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
+                { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
               ]}
             />
             {tab === "lines" && <LinesTable cfg={cfg} lines={data!.lines} docId={id} posted={status === "POSTED" || status === "REVERSED"} />}
             {tab === "moves" && <MovementsTable sourceId={id} />}
             {tab === "history" && <AuditTimeline table={cfg.table} id={id} />}
+            {tab === "files" && <AttachmentsPanel entityType={cfg.table as AttachmentEntity} entityId={id} />}
           </>
         ) : null}
       </ErpDialog>

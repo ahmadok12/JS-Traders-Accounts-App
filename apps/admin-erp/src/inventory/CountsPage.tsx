@@ -17,6 +17,7 @@ import { SearchBox, StatusFilter, useUrlState } from "./DocPage";
 import { STATUS_TONE } from "./docConfigs";
 import { useStorageLocations } from "../lib/settings";
 import { LocationPicker, ProductPicker, VariantPicker, WarehousePicker } from "./pickers";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -151,6 +152,7 @@ function CountDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const { can } = useAccess();
   const qc = useQueryClient();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("stock_counts", id);
   const [edits, setEdits] = React.useState<Record<string, { counted_qty?: string; variance_note?: string; remove?: boolean }>>({});
   const [confirm, setConfirm] = React.useState<null | "post" | "close" | "cancel">(null);
   const locOn = useStorageLocations().enabled;
@@ -290,8 +292,8 @@ function CountDialog({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-field">
               <div className="h-full bg-success" style={{ width: `${lines.length ? (posted / lines.length) * 100 : 0}%` }} />
             </div>
-            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
-            {tab === "history" ? <AuditTimeline table="stock_counts" id={id} /> : (
+            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
+            {tab === "files" ? <AttachmentsPanel entityType="stock_counts" entityId={id} /> : tab === "history" ? <AuditTimeline table="stock_counts" id={id} /> : (
               <>
                 {!showSystem && open && <p className="mb-2 text-xs text-ink-muted">Blind count: system quantities are hidden so the count reflects what is physically there.</p>}
                 <div className="overflow-auto rounded-card border border-line">

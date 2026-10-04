@@ -16,6 +16,7 @@ import { money, today } from "../accounting/common";
 import { n, qtyFmt, useLastPrice } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
 import { printDocument } from "./print";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 const Q_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -260,6 +261,7 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("quotations", id);
   const [ask, setAsk] = React.useState<null | "REJECTED" | "CANCELLED">(null);
   const [reason, setReason] = React.useState("");
   const h = doc.data?.header;
@@ -317,8 +319,9 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
               {h.terms ? <KeyValue label="Terms" className="col-span-2 md:col-span-5">{String(h.terms)}</KeyValue> : null}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-5">{String(h.notes)}</KeyValue> : null}
             </dl>
-            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
+            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
             {tab === "history" && <AuditTimeline table="quotations" id={id} />}
+            {tab === "files" && <AttachmentsPanel entityType="quotations" entityId={id} />}
             {tab === "lines" && (
               <div className="overflow-auto rounded-card border border-line">
                 <table className="w-full text-sm">

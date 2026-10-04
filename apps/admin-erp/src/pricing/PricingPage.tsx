@@ -12,6 +12,7 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { CustomerPicker, ProductPicker } from "../inventory/pickers";
 import { money } from "../accounting/common";
 import { n, qtyFmt } from "../sales/common";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 export const PRICE_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -242,6 +243,7 @@ export function PriceTaskDialog({ id, onClose }: { id: string; onClose: () => vo
   const t = usePriceTask(id);
   const people = usePricingPeople();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("price_tasks", id);
   const [price, setPrice] = React.useState<Record<string, string>>({});
   const [note, setNote] = React.useState<Record<string, string>>({});
   const [appr, setAppr] = React.useState<Record<string, string>>({});
@@ -319,7 +321,7 @@ export function PriceTaskDialog({ id, onClose }: { id: string; onClose: () => vo
               <div className="mb-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"><b>Sent back:</b> {String(h.return_reason)}</div>
             ) : null}
             {status === "SUBMITTED" && !canReview && <div className="mb-3 rounded-card border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">Submitted {formatDateTime(h.submitted_at as string)} — waiting for the accountant.</div>}
-            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "history", label: `History (${events.length})` }]} />
+            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "files", label: filesLabel(files.data?.length) }, { key: "history", label: `History (${events.length})` }]} />
             {tab === "lines" && (
               <div className="overflow-x-auto rounded-card border border-line">
                 <table className="w-full text-sm">
@@ -367,6 +369,7 @@ export function PriceTaskDialog({ id, onClose }: { id: string; onClose: () => vo
                 </table>
               </div>
             )}
+            {tab === "files" && <AttachmentsPanel entityType="price_tasks" entityId={id} />}
             {tab === "history" && <TaskHistory events={events} lines={lines} names={names.data ?? {}} />}
           </>
         )}

@@ -3,10 +3,11 @@ import ReactDOM from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
-import { AccessProvider, initSupabase } from "@jst/data-access";
+import { AccessProvider, initSupabase, useAccess } from "@jst/data-access";
 import { AppShell } from "./layout/AppShell";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { P } from "@jst/permissions";
 import { EntityPage } from "./entity/EntityPage";
 import { ALL_ENTITIES } from "./entities/config";
 import { INV_DOCS } from "./inventory/docConfigs";
@@ -37,6 +38,12 @@ const GdnPage = React.lazy(() => import("./sales/GdnPage").then((m) => ({ defaul
 const QuotationsPage = React.lazy(() => import("./sales/QuotationsPage").then((m) => ({ default: m.QuotationsPage })));
 const PickingPage = React.lazy(() => import("./picking/PickingPage").then((m) => ({ default: m.PickingPage })));
 const StaffPage = React.lazy(() => import("./picking/StaffPage").then((m) => ({ default: m.StaffPage })));
+/** Warehouse managers (no accounting / prices) land on their Warehouse Desk; everyone else on the dashboard. */
+function HomePage() {
+  const { can } = useAccess();
+  if (can(P.pickingManage) && !can(P.journalsView) && !can(P.salesViewPrices)) return lazy(<WarehouseDeskPage />);
+  return <DashboardPage />;
+}
 const PricingPage = React.lazy(() => import("./pricing/PricingPage").then((m) => ({ default: m.PricingPage })));
 const WarehouseDeskPage = React.lazy(() => import("./picking/WarehouseDesk").then((m) => ({ default: m.WarehouseDeskPage })));
 const StaffApp = React.lazy(() => import("./picking/StaffApp").then((m) => ({ default: m.StaffApp })));
@@ -63,7 +70,7 @@ const router = createBrowserRouter([
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <DashboardPage /> },
+      { index: true, element: <HomePage /> },
       ...entityRoutes,
       { path: "stock", element: lazy(<StockOnHandPage />) },
       { path: "stock-ledger", element: lazy(<StockLedgerPage />) },

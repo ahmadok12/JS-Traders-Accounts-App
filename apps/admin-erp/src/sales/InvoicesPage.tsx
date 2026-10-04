@@ -17,6 +17,7 @@ import { BankPicker, money, num, today } from "../accounting/common";
 import { fetchGdnLinePrices, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
 import { autoFill, useOpenReceipts } from "./allocations";
 import { printDocument } from "./print";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { DRAFT: "warning", POSTED: "info", CANCELLED: "neutral", REVERSED: "danger" };
@@ -465,6 +466,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   const status = String(h.status);
   const cust = h.customer as { name: string; code: string; city: string | null };
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("sales_invoices", id);
   const [dlg, setDlg] = React.useState<null | "pay" | "alloc" | "reverse" | "correct">(null);
   const [reason, setReason] = React.useState("");
   const [release, setRelease] = React.useState(false);
@@ -545,9 +547,10 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
         <Tabs value={tab} onChange={setTab} tabs={[
           { key: "lines", label: `Items (${data.lines.length})` },
           { key: "pay", label: `Payments (${active.length})` },
-          ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
+          { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
         ]} />
         {tab === "history" && <AuditTimeline table="sales_invoices" id={id} />}
+        {tab === "files" && <AttachmentsPanel entityType="sales_invoices" entityId={id} />}
         {tab === "lines" && (
           <div className="overflow-auto rounded-card border border-line">
             <table className="w-full text-sm">

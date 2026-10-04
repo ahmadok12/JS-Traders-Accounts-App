@@ -15,6 +15,7 @@ import { SO_TONE, qtyFmt, soLabel, useSoLinePrices } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
 import { PricingStrip } from "../pricing/PricingPage";
 import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPicking";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -139,6 +140,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("sales_orders", id);
   const [confirm, setConfirm] = React.useState<null | "approve" | "cancel" | "close">(null);
   const [reason, setReason] = React.useState("");
   const [sendOpen, setSendOpen] = React.useState(false);
@@ -204,9 +206,10 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
               { key: "lines", label: `Items (${lines.length})` },
               ...(can(P.pickingManage) ? [{ key: "picking", label: `Picking (${tasks.data?.length ?? 0})` }] : []),
               { key: "gdns", label: `Dispatches (${doc.data!.gdns.filter((g) => g.status !== "CANCELLED").length})` },
-              ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
+              { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
             ]} />
             {tab === "history" && <AuditTimeline table="sales_orders" id={id} />}
+            {tab === "files" && <AttachmentsPanel entityType="sales_orders" entityId={id} />}
             {tab === "picking" && <SoPickingTab tasks={tasks.data ?? []} onOpen={(tid) => navigate(`/picking?view=${tid}`)} />}
             {tab === "gdns" && (
               <div className="flex flex-wrap gap-2">

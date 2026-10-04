@@ -8,6 +8,7 @@ import { formatDate } from "@jst/utilities";
 import { n, qtyFmt } from "../sales/common";
 import { ProductPicker, VariantPicker, useProductMeta } from "../inventory/pickers";
 import { useReceiptCheck } from "./WarehouseJobs";
+import { AttachmentsPanel } from "../attachments/Attachments";
 
 export interface MyJob { type: "COUNT" | "RECEIPT"; id: string; doc_no: string; warehouse: string; date: string; done: number; total: number; submitted: boolean; note: string | null }
 
@@ -207,6 +208,10 @@ export function ReceiptScreen({ id, onDone }: { id: string; onDone: () => void }
           <div className="mt-1 text-sm text-ink-muted">{h.warehouse?.name}{h.supplier && <> · from {h.supplier.name}</>}{h.supplier_reference && <> · {h.supplier_reference}</>}</div>
           {h.notes && <p className="mt-2 rounded-control bg-info/10 px-2 py-1.5 text-sm text-info">{h.notes}</p>}
           <p className="mt-2 text-xs text-ink-muted">Check each item as it is unloaded. If something is short or damaged, enter what arrived in good condition and say what is wrong.</p>
+        </div>
+        <div className="rounded-card border border-line bg-surface p-3">
+          <div className="mb-2 text-sm font-semibold">Photos — delivery slip, damaged items</div>
+          <AttachmentsPanel entityType="goods_receipts" entityId={id} readOnly={!open} compact />
         </div>
         {chk.data.lines.map((l) => <ReceiveLineCard key={l.id} line={l} editable={open} />)}
       </main>

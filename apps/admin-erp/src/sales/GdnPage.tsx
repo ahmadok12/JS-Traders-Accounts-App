@@ -16,6 +16,7 @@ import { money, today } from "../accounting/common";
 import { fetchGdnLinePrices, n, qtyFmt } from "./common";
 import { printDocument } from "./print";
 import { PricingStrip } from "../pricing/PricingPage";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 export const GDN_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { DRAFT: "warning", POSTED: "success", CANCELLED: "neutral", REVERSED: "danger" };
@@ -363,6 +364,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("gdns", id);
   const [confirm, setConfirm] = React.useState<null | "post" | "cancel" | "reverse" | "correct" | "blocked">(null);
   const [reason, setReason] = React.useState("");
   const h = doc.data?.header;
@@ -440,9 +442,10 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${lines.length})` },
               ...(status !== "DRAFT" && status !== "CANCELLED" ? [{ key: "moves", label: "Stock movements" }] : []),
-              ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
+              { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
             ]} />
             {tab === "history" && <AuditTimeline table="gdns" id={id} />}
+            {tab === "files" && <AttachmentsPanel entityType="gdns" entityId={id} />}
             {tab === "moves" && <MovementsTable sourceId={id} />}
             {tab === "lines" && (
               <div className="overflow-auto rounded-card border border-line">

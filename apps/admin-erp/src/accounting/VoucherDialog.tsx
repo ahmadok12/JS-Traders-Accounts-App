@@ -11,6 +11,7 @@ import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
 import { STATUS_TONE } from "../inventory/docConfigs";
 import { ReceiptAllocationPanel } from "../sales/allocations";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import {
   AccountPicker, Amount, BankPicker, ENTRY_LABEL, PartyPicker, money, num, today, useAccountNames, useBanks, usePartyNames, useSystemAccounts,
   type EntryType, type PartyType,
@@ -63,6 +64,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
   const { can } = useAccess();
   const qc = useQueryClient();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("journal_entries", id);
   const [confirm, setConfirm] = React.useState<null | "post" | "cancel" | "reverse">(null);
   const [reason, setReason] = React.useState("");
   const [revDate, setRevDate] = React.useState("");
@@ -117,7 +119,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
               {data.reversal_reason ? <KeyValue label="Reversal reason" className="col-span-2">{String(data.reversal_reason)}</KeyValue> : null}
               {data.memo ? <KeyValue label="Narration" className="col-span-2 md:col-span-4">{String(data.memo)}</KeyValue> : null}
             </dl>
-            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: "Accounting lines" }, ...(allocatable ? [{ key: "alloc", label: "Invoices paid" }] : []), ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
+            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: "Accounting lines" }, ...(allocatable ? [{ key: "alloc", label: "Invoices paid" }] : []), { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
             {tab === "alloc" && allocatable && <ReceiptAllocationPanel entryId={id} customerId={String(data.party_id)} />}
             {tab === "lines" && (
               <div className="overflow-auto rounded-card border border-line">
@@ -142,6 +144,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
               </div>
             )}
             {tab === "history" && <AuditTimeline table="journal_entries" id={id} />}
+            {tab === "files" && <AttachmentsPanel entityType="journal_entries" entityId={id} />}
           </>
         ) : null}
       </ErpDialog>

@@ -16,6 +16,7 @@ import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "./DocPage";
 import { STATUS_TONE } from "./docConfigs";
 import { Availability, CustomerPicker, ProductPicker, VariantPicker, WarehousePicker, useProductMeta } from "./pickers";
+import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -217,6 +218,7 @@ function ReservedOrderDialog({ id, onClose }: { id: string; onClose: () => void 
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = React.useState("lines");
+  const files = useAttachments("reservation_orders", id);
   const [confirm, setConfirm] = React.useState<null | "convert" | "releaseAll" | { line: ResRow }>(null);
   const [reason, setReason] = React.useState("");
   const [convCustomer, setConvCustomer] = React.useState<string | null>(null);
@@ -304,8 +306,8 @@ function ReservedOrderDialog({ id, onClose }: { id: string; onClose: () => void 
               {so ? <KeyValue label="Sales order"><span className="font-mono text-xs">{so.doc_no}</span> <Badge tone={STATUS_TONE[so.status] ?? "neutral"}>{humanize(so.status)}</Badge></KeyValue> : <KeyValue label="Active lines">{activeLines.length}</KeyValue>}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-5">{String(h.notes)}</KeyValue> : null}
             </dl>
-            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
-            {tab === "history" ? <AuditTimeline table="reservation_orders" id={id} /> : (
+            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
+            {tab === "files" ? <AttachmentsPanel entityType="reservation_orders" entityId={id} /> : tab === "history" ? <AuditTimeline table="reservation_orders" id={id} /> : (
               <div className="overflow-auto rounded-card border border-line">
                 <table className="w-full text-sm">
                   <thead><tr className="bg-subtle text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
