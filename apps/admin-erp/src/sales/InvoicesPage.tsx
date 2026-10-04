@@ -434,6 +434,12 @@ function DraftRow({ line, customerId, price, desc, amount, disabled, onPrice, on
   const locked = line.approved_price != null;
   const mayOverride = can(P.pricingApprove);
   const overridden = locked && price.trim() !== "" && Number(price.replace(/,/g, "")) !== line.approved_price;
+  // empty (pending) price on a draft: fill in the last price charged to this customer — shown so it can be checked
+  const [autoFilled, setAutoFilled] = React.useState(false);
+  React.useEffect(() => {
+    if (last.data && !locked && !disabled && price.trim() === "") { onPrice(String(Number(last.data.unit_price))); setAutoFilled(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last.data]);
   const td = "border-b border-line/70 px-3 py-2 align-top";
   return (
     <tr>
@@ -448,6 +454,7 @@ function DraftRow({ line, customerId, price, desc, amount, disabled, onPrice, on
           onChange={(e) => onPrice(e.target.value)} />
         {locked && !overridden && <div className="mt-0.5 inline-flex items-center gap-1 text-2xs text-success" title="Price agreed on the order / approved on a price task"><Lock className="h-3 w-3" />Approved price</div>}
         {overridden && <div className="mt-0.5 text-2xs text-warning">Approved {money(line.approved_price)} — change is recorded</div>}
+        {autoFilled && last.data && Number(last.data.unit_price) === Number(price.replace(/,/g, "") || NaN) && <div className="mt-0.5 text-2xs text-info">last price · {last.data.doc_no}</div>}
         {last.data && !locked && Number(last.data.unit_price) !== Number(price || NaN) && !disabled && (
           <button type="button" className="mt-0.5 text-2xs text-info hover:underline" onClick={() => onPrice(String(Number(last.data!.unit_price)))}>Last {money(last.data.unit_price)} ({last.data.doc_no})</button>
         )}

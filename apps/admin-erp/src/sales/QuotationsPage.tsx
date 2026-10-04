@@ -231,6 +231,11 @@ function QFormLine({ idx, line, customerId, err, onChange, onRemove }: {
 }) {
   const meta = useProductMeta(line.product_id);
   const last = useLastPrice(customerId, line.product_id, line.variant_id);
+  // fill in the last price charged to this customer as soon as the item is chosen (only when the price is still empty)
+  React.useEffect(() => {
+    if (last.data && line.unit_price.trim() === "") onChange({ unit_price: String(Number(last.data.unit_price)) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last.data]);
   const td = "border-b border-line/70 px-2 py-1.5 align-top";
   return (
     <tr className="group bg-white hover:bg-violet-50/30">
@@ -248,7 +253,7 @@ function QFormLine({ idx, line, customerId, err, onChange, onRemove }: {
       </td>
       <td className={td}>
         <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0.00" aria-label="Unit price" value={line.unit_price} invalid={!!err(`${line.key}.price`)} onChange={(e) => onChange({ unit_price: e.target.value })} />
-        {last.data && <button type="button" className="mt-0.5 block w-full text-right text-2xs text-info hover:underline" onClick={() => onChange({ unit_price: String(Number(last.data!.unit_price)) })}>last {money(last.data.unit_price)}</button>}
+        {last.data && <button type="button" className="mt-0.5 block w-full text-right text-2xs text-info hover:underline" onClick={() => onChange({ unit_price: String(Number(last.data!.unit_price)) })}>last {money(last.data.unit_price)}{last.data.doc_no ? ` · ${last.data.doc_no}` : ""}</button>}
       </td>
       <td className={cn(td, "pt-2.5 text-right tabular-nums")}>{n(line.quantity) > 0 && line.unit_price.trim() !== "" ? money(n(line.quantity) * n(line.unit_price)) : <span className="text-ink-faint">—</span>}</td>
       <td className={cn(td, "pt-1.5 text-center")}>{onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" className="opacity-50 group-hover:opacity-100" onClick={onRemove}><Trash2 className="h-3.5 w-3.5" /></Button>}</td>
