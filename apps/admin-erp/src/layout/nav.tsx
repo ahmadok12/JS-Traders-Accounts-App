@@ -1,4 +1,5 @@
 import {
+  Calculator,
   Gauge,
   Banknote,
   BookOpen,
@@ -82,7 +83,9 @@ export const NAV: NavGroup[] = [
     label: "Purchasing",
     items: [
       { to: "/suppliers", label: "Suppliers", icon: Truck, perms: [P.suppliersView] },
-      { to: "/purchase-orders", label: "POs & Bills", icon: ClipboardList, soon: "Stage 7" },
+      { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList, perms: [P.purchasingView] },
+      { to: "/purchase-costs", label: "Purchase Costs", icon: Calculator, perms: [P.purchasingCosts] },
+      { to: "/supplier-bills", label: "Supplier Bills", icon: Receipt, perms: [P.purchasingCosts] },
       { to: "/shipments", label: "Shipments", icon: Ship, soon: "Stage 8" },
     ],
   },

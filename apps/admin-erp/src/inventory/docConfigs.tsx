@@ -45,7 +45,7 @@ export const INV_DOCS: Record<DocType, InvDocConfig> = {
     route: "goods-receipts",
     title: "Goods Receipts",
     singular: "Goods Receipt",
-    description: "Stock received into a warehouse. Quantities only — purchase cost stays PENDING until entered by an authorised user.",
+    description: "Stock received into a warehouse — against a purchase order or on its own. Quantities only; the purchase cost is entered later (Purchase Costs) or set by the supplier bill.",
     icon: <PackagePlus className={I} />,
     table: "goods_receipts",
     linesTable: "goods_receipt_lines",
@@ -55,8 +55,8 @@ export const INV_DOCS: Record<DocType, InvDocConfig> = {
     listSelect:
       "id, doc_no, doc_date, status, cost_status, supplier_reference, warehouse:warehouses(code, name), supplier:suppliers(name), lines:goods_receipt_lines(count)",
     recordSelect:
-      "id, company_id, doc_no, doc_date, status, cost_status, warehouse_id, supplier_id, supplier_reference, notes, posted_at, posted_by, reversed_at, reversal_reason, created_at, created_by, warehouse:warehouses(code, name), supplier:suppliers(name)",
-    linesSelect: `id, line_no, product_id, variant_id, location_id, quantity, notes, ${lineProduct}, location:warehouse_locations(code, name)`,
+      "id, company_id, doc_no, doc_date, status, cost_status, purchase_order_id, warehouse_id, supplier_id, supplier_reference, notes, posted_at, posted_by, reversed_at, reversal_reason, created_at, created_by, warehouse:warehouses(code, name), supplier:suppliers(name)",
+    linesSelect: `id, line_no, product_id, variant_id, location_id, quantity, billed_qty, notes, ${lineProduct}, location:warehouse_locations(code, name)`,
     kind: "receipt",
     searchColumns: ["doc_no", "supplier_reference"],
   },

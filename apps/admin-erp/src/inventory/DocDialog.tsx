@@ -29,6 +29,7 @@ import { Availability, LocationPicker, ProductPicker, SupplierPicker, VariantPic
 import { MovementsTable } from "./MovementsTable";
 import { P } from "@jst/permissions";
 import { ReceiptCheckPanel } from "../picking/WarehouseJobs";
+import { ReceiptPurchasePanel } from "../purchasing/CostsPage";
 import { RollCutsEditor, RollLengthsEditor, newRoll, sumCuts, sumRolls, type CutMode, type Cuts, type RollEntry } from "./rolls";
 import { AttachmentsPanel, filesLabel, useAttachments, type AttachmentEntity } from "../attachments/Attachments";
 
@@ -227,6 +228,7 @@ function ViewDoc({
               {h.reversal_reason ? <KeyValue label="Reversal reason" className="col-span-2">{String(h.reversal_reason)}</KeyValue> : null}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-4">{String(h.notes)}</KeyValue> : null}
             </dl>
+            {cfg.kind === "receipt" && data && (can(P.purchasingView) || can(P.purchasingCosts)) && <ReceiptPurchasePanel receipt={data.header as Row & { id: string }} lines={data.lines as (Row & { id: string })[]} />}
             {cfg.kind === "receipt" && can(P.pickingManage) && <ReceiptCheckPanel receiptId={id} />}
             <Tabs
               value={tab}

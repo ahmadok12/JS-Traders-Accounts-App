@@ -13,16 +13,16 @@ import { useMyNotifications, type StaffNotification } from "./realtime";
 export function ManagerAlerts() {
   const { session, can } = useAccess();
   const navigate = useNavigate();
-  const enabled = can(P.pickingManage) || can(P.pricingEnter) || can(P.pricingApprove);
+  const enabled = can(P.pickingManage) || can(P.pricingEnter) || can(P.pricingApprove) || can(P.purchasingCosts);
   React.useEffect(() => { if (enabled) unlockOnFirstGesture(); }, [enabled]);
 
   const show = React.useCallback((nt: StaffNotification, ack: (ids?: string[]) => Promise<void>) => {
     chime();
-    const target = nt.task_id ? `/picking?view=${nt.task_id}` : nt.job_type === "COUNT" ? `/stock-counts?view=${nt.job_id}` : nt.job_type === "RECEIPT" ? `/goods-receipts?view=${nt.job_id}` : nt.job_type === "PRICE" ? `/pricing?view=${nt.job_id}` : null;
+    const target = nt.task_id ? `/picking?view=${nt.task_id}` : nt.job_type === "COUNT" ? `/stock-counts?view=${nt.job_id}` : nt.job_type === "RECEIPT" ? `/goods-receipts?view=${nt.job_id}` : nt.job_type === "PRICE" ? `/pricing?view=${nt.job_id}` : nt.job_type === "COST" ? `/purchase-costs?view=${nt.job_id}` : null;
     const open = () => { void ack([nt.id]); if (target) navigate(target); };
-    toast[nt.kind === "SHORTAGE" || nt.kind === "PRICE_RETURNED" ? "warning" : nt.kind.startsWith("PRICE") ? "info" : "success"](nt.title, {
+    toast[nt.kind === "SHORTAGE" || nt.kind === "PRICE_RETURNED" || nt.kind === "COST_RETURNED" ? "warning" : nt.kind.startsWith("PRICE") || nt.kind.startsWith("COST") ? "info" : "success"](nt.title, {
       id: nt.id, description: nt.body ?? undefined,
-      duration: ["SHORTAGE", "COUNT_SUBMITTED", "RECEIPT_SUBMITTED", "PRICE_ASSIGNED", "PRICE_SUBMITTED", "PRICE_RETURNED"].includes(nt.kind) ? Infinity : 10_000,
+      duration: ["SHORTAGE", "COUNT_SUBMITTED", "RECEIPT_SUBMITTED", "PRICE_ASSIGNED", "PRICE_SUBMITTED", "PRICE_RETURNED", "COST_ASSIGNED", "COST_SUBMITTED", "COST_RETURNED"].includes(nt.kind) ? Infinity : 10_000,
       action: target ? { label: "Open", onClick: open } : undefined,
       onDismiss: () => void ack([nt.id]), onAutoClose: () => void ack([nt.id]),
     });
