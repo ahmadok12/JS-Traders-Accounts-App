@@ -53,6 +53,10 @@ export const P = {
   pickingPerform: "picking.perform",
   pricingEnter: "pricing.enter",
   pricingApprove: "pricing.approve",
+  payrollView: "payroll.view",
+  payrollManage: "payroll.manage",
+  payrollApprove: "payroll.approve",
+  labourSupervise: "labour.supervise",
 } as const;
 
 export type PermissionCode = (typeof P)[keyof typeof P];

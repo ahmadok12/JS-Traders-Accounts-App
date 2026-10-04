@@ -130,7 +130,8 @@ export const NAV: NavGroup[] = [
     label: "People",
     items: [
       { to: "/employees", label: "Employees", icon: UserSquare2, perms: [P.employeesView] },
-      { to: "/payroll", label: "Payroll", icon: FileText, soon: "Stage 6.5" },
+      { to: "/hr", label: "HR & Pay", icon: UserSquare2, perms: [P.payrollView] },
+      { to: "/payroll", label: "Payroll", icon: FileText, perms: [P.payrollView] },
     ],
   },
   {

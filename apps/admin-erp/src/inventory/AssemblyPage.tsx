@@ -15,6 +15,7 @@ import { SearchBox, StatusFilter, useUrlState } from "./DocPage";
 import { STATUS_TONE } from "./docConfigs";
 import { MovementsTable } from "./MovementsTable";
 import { ProductPicker, VariantPicker, WarehousePicker, useProductMeta, useStockFigures } from "./pickers";
+import { AssemblyLabourPanel } from "../hr/AssemblyLabour";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
 type Row = Record<string, unknown> & { id: string };
@@ -232,6 +233,7 @@ function OrderView({ id, data, loading, error, onEdit, onClose }: { id: string; 
               onChange={setTab}
               tabs={[
                 { key: "components", label: `Components (${comps.length})` },
+                ...(can(P.labourSupervise) || can(P.payrollView) ? [{ key: "labour", label: "Labour" }] : []),
                 ...(status === "POSTED" || status === "REVERSED" ? [{ key: "moves", label: "Stock movements" }] : []),
                 { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
               ]}
@@ -262,6 +264,7 @@ function OrderView({ id, data, loading, error, onEdit, onClose }: { id: string; 
             )}
             {tab === "moves" && <MovementsTable sourceId={id} />}
             {tab === "history" && <AuditTimeline table="assembly_orders" id={id} />}
+            {tab === "labour" && <AssemblyLabourPanel orderId={id} status={status} quantity={Number(data.quantity)} />}
             {tab === "files" && <AttachmentsPanel entityType="assembly_orders" entityId={id} />}
           </>
         ) : null}
