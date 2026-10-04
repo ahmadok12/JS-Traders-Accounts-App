@@ -14,7 +14,10 @@ import { qtyFmt } from "../sales/common";
 import { printDocument } from "../sales/print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { CurrencyInput, rpc, useAction, useCan } from "./common";
-import { PickImportCostsDialog, RecordImportCostDialog, type ImportCost } from "./ImportCosts";
+import { PickImportCostsDialog, RecordImportCostDialog, type ExpenseEntry, type ImportCost } from "./ImportCosts";
+
+type JRow = { entry_date: string; description: string | null; entry: { entry_no: string } | null; account: { name: string } | null };
+const jlineLabel = (r: JRow | null) => (r ? `${formatDate(r.entry_date)} · ${r.entry?.entry_no ?? ""} · ${r.account?.name ?? ""}` : undefined);
 
 type RecRow = { reference: string | null; cost_date: string; rbill: { doc_no: string } | null; entry: { entry_no: string } | null; rsup: { name: string } | null; rbank: { name: string } | null };
 const recordedLabel = (r: RecRow | null) => (r ? `${formatDate(r.cost_date)} · ${r.rbill?.doc_no ?? r.entry?.entry_no ?? ""} · ${r.rsup?.name ?? r.rbank?.name ?? ""}` : undefined);
@@ -35,9 +38,9 @@ const compLabel = (c: string) => COMPONENTS.find(([k]) => k === c)?.[1] ?? c;
 interface Cand { receipt_line_id: string; receipt_id: string; receipt_no: string; doc_date: string; product_name: string; variant_name: string | null; uom: string | null; quantity: number; unit_cost_pkr: number | null; landed_pkr: number; weight_kg: number; cbm: number }
 interface Charge { key: string; component: string; description: string; payee_type: string; supplier_id: string | null; bank_account_id: string | null; reference: string; currency: string; fx_rate: string;
   amount: string; treatment: string; expense_account_id: string | null; method: string; manual: Record<string, string>; settles_charge_id: string | null;
-  /** a cost recorded earlier (bill / payment on Landed Cost Clearing) */ import_cost_id: string | null; recorded?: string }
+  /** a cost recorded earlier (bill / payment on Landed Cost Clearing) */ import_cost_id: string | null; /** an expense entry already booked */ journal_line_id: string | null; recorded?: string }
 const newCharge = (component = "FREIGHT"): Charge => ({ key: crypto.randomUUID(), component, description: "", payee_type: "SUPPLIER", supplier_id: null, bank_account_id: null, reference: "",
-  currency: "PKR", fx_rate: "1", amount: "", treatment: "CAPITALIZE", expense_account_id: null, method: component === "FREIGHT" ? "WEIGHT" : "VALUE", manual: {}, settles_charge_id: null, import_cost_id: null });
+  currency: "PKR", fx_rate: "1", amount: "", treatment: "CAPITALIZE", expense_account_id: null, method: component === "FREIGHT" ? "WEIGHT" : "VALUE", manual: {}, settles_charge_id: null, import_cost_id: null, journal_line_id: null });
 const pkr = (c: Charge) => Math.round((num(c.amount) || 0) * (c.currency === "PKR" ? 1 : num(c.fx_rate) || 0) * 100) / 100;
 
 /** the same split the server makes (it is the one that counts) */
@@ -124,7 +127,7 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
     queryFn: async () => {
       const [h, ch, t] = await Promise.all([
         sb().from("landed_costs").select("*, shipment:shipments(doc_no, bl_no)").eq("id", id!).single(),
-        sb().from("landed_cost_charges").select("*, supplier:suppliers(name), bank:bank_accounts(name), bill:supplier_bills(id, doc_no), recorded:import_costs!landed_cost_charges_import_cost_id_fkey(reference, cost_date, rbill:supplier_bills(doc_no), entry:journal_entries(entry_no), rsup:suppliers(name), rbank:bank_accounts(name))").eq("landed_cost_id", id!).eq("is_active", true).order("line_no"),
+        sb().from("landed_cost_charges").select("*, supplier:suppliers(name), bank:bank_accounts(name), bill:supplier_bills(id, doc_no), recorded:import_costs!landed_cost_charges_import_cost_id_fkey(reference, cost_date, rbill:supplier_bills(doc_no), entry:journal_entries(entry_no), rsup:suppliers(name), rbank:bank_accounts(name)), jline:journal_lines(entry_date, description, entry:journal_entries(entry_no), account:chart_of_accounts(name))").eq("landed_cost_id", id!).eq("is_active", true).order("line_no"),
         sb().from("landed_cost_targets").select("receipt_line_id, receipt:goods_receipt_lines(receipt_id)").eq("landed_cost_id", id!).eq("is_active", true),
       ]);
       if (h.error) throw h.error;
@@ -146,8 +149,10 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
   const [tab, setTab] = React.useState("charges");
   const [ask, setAsk] = React.useState<null | "post" | "reverse" | "cancel">(null);
   const [pick, setPick] = React.useState(false);
-  const addRecorded = (rows: ImportCost[]) => {
-    setCharges((x) => [...x.filter((y) => y.amount.trim() !== "" || y.import_cost_id), ...rows.map((r) => ({ ...newCharge(r.component), description: r.description ?? "", payee_type: "BILLED",
+  const addRecorded = (rows: ImportCost[], ex: ExpenseEntry[]) => {
+    setCharges((x) => [...x.filter((y) => y.amount.trim() !== "" || y.import_cost_id || y.journal_line_id), ...ex.map((r) => ({ ...newCharge(/freight/i.test(r.account_name) ? "FREIGHT" : "OTHER"),
+      description: r.description ?? r.account_name, payee_type: "BILLED", reference: r.reference ?? "", amount: String(Number(r.amount)), journal_line_id: r.journal_line_id, method: "VALUE",
+      recorded: `${formatDate(r.entry_date)} · ${r.entry_no} · ${r.account_name}${r.party_name ?? r.paid_from ? ` · ${r.party_name ?? r.paid_from}` : ""}` })), ...rows.map((r) => ({ ...newCharge(r.component), description: r.description ?? "", payee_type: "BILLED",
       reference: r.reference ?? "", amount: String(Number(r.amount_pkr)), import_cost_id: r.id,
       recorded: `${formatDate(r.cost_date)} · ${r.bill?.doc_no ?? r.entry?.entry_no ?? ""} · ${r.supplier?.name ?? r.bank?.name ?? ""}${r.currency !== "PKR" ? ` · ${r.currency} ${money(r.amount)}` : ""}` }))]);
     setPick(false);
@@ -163,7 +168,7 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
     setCharges(doc.data.charges.length ? doc.data.charges.map((k) => ({ key: k.id, component: String(k.component), description: (k.description as string) ?? "", payee_type: String(k.payee_type),
       supplier_id: (k.supplier_id as string) ?? null, bank_account_id: (k.bank_account_id as string) ?? null, reference: (k.reference as string) ?? "", currency: String(k.currency), fx_rate: String(k.fx_rate),
       amount: String(Number(k.amount)), treatment: String(k.treatment), expense_account_id: (k.expense_account_id as string) ?? null, method: String(k.method),
-      manual: Object.fromEntries(Object.entries((k.manual as Record<string, unknown>) ?? {}).map(([a, b]) => [a, String(b)])), settles_charge_id: (k.settles_charge_id as string) ?? null, import_cost_id: (k.import_cost_id as string) ?? null, recorded: recordedLabel(k.recorded as RecRow | null) })) : [newCharge()]);
+      manual: Object.fromEntries(Object.entries((k.manual as Record<string, unknown>) ?? {}).map(([a, b]) => [a, String(b)])), settles_charge_id: (k.settles_charge_id as string) ?? null, import_cost_id: (k.import_cost_id as string) ?? null, journal_line_id: (k.journal_line_id as string) ?? null, recorded: recordedLabel(k.recorded as RecRow | null) ?? jlineLabel(k.jline as JRow | null) })) : [newCharge()]);
   }, [doc.data]);
 
   const cands = useQuery({
@@ -201,7 +206,7 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
     p_charges: charges.filter((ch) => ch.amount.trim() !== "").map((ch) => ({ component: ch.component, description: ch.description || null, payee_type: ch.payee_type,
       supplier_id: ch.supplier_id, bank_account_id: ch.bank_account_id, reference: ch.reference || null, currency: ch.payee_type === "BANK" ? "PKR" : ch.currency, fx_rate: ch.payee_type === "BANK" ? 1 : num(ch.fx_rate) || 0,
       amount: num(ch.amount), treatment: ch.treatment, expense_account_id: ch.treatment === "EXPENSE" ? ch.expense_account_id ?? freightAcc.data ?? null : null,
-      method: ch.method, manual: Object.fromEntries(Object.entries(ch.manual).filter(([, v]) => v.trim() !== "").map(([k, v]) => [k, num(v)])), settles_charge_id: ch.settles_charge_id, import_cost_id: ch.import_cost_id })),
+      method: ch.method, manual: Object.fromEntries(Object.entries(ch.manual).filter(([, v]) => v.trim() !== "").map(([k, v]) => [k, num(v)])), settles_charge_id: ch.settles_charge_id, import_cost_id: ch.import_cost_id, journal_line_id: ch.journal_line_id })),
   });
   const save = useAction(async () => {
     const nid = await rpc<string>("save_landed_cost", { p_id: id, ...payload(), p_idempotency_key: id ? null : idem.current });
@@ -263,7 +268,7 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
                 ))}
                 {editable && (
                   <div className="flex flex-wrap gap-1.5">
-                    <Button size="sm" variant="primary" icon={<Download className="h-3.5 w-3.5" />} onClick={() => setPick(true)}>Pick recorded costs</Button>
+                    <Button size="sm" variant="primary" icon={<Download className="h-3.5 w-3.5" />} onClick={() => setPick(true)}>Pick costs</Button>
                     {COMPONENTS.map(([k, l]) => <Button key={k} size="sm" variant="ghost" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setCharges((x) => [...x, newCharge(k)])}>{l}</Button>)}
                   </div>
                 )}
@@ -319,7 +324,7 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
         message="The goods' cost goes back, the accounting entry and the supplier bills it made are reversed (bills that were already paid must be unlinked from their payments first).">
         <Field label="Reason" className="mt-3"><Input value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
       </ConfirmDialog>
-      {pick && <PickImportCostsDialog shipmentId={ship} exclude={charges.map((x) => x.import_cost_id).filter(Boolean) as string[]} onClose={() => setPick(false)} onPick={addRecorded} />}
+      {pick && <PickImportCostsDialog shipmentId={ship} exclude={charges.map((x) => x.import_cost_id).filter(Boolean) as string[]} excludeLines={charges.map((x) => x.journal_line_id).filter(Boolean) as string[]} onClose={() => setPick(false)} onPick={addRecorded} />}
       <ConfirmDialog open={ask === "cancel"} title="Cancel this draft?" tone="destructive" confirmLabel="Cancel draft" loading={cancel.isPending} onCancel={() => setAsk(null)} onConfirm={() => cancel.mutate(undefined)} message="Nothing has been posted from it." />
     </>
   );
@@ -341,21 +346,21 @@ function ChargeCard({ ch, n, editable, lines, estimates, error, bill, onChange, 
         {bill && <Button size="sm" variant="ghost" icon={<FileText className="h-3.5 w-3.5" />} onClick={() => navigate(`/supplier-bills?view=${bill.id}`)}>{bill.doc_no}</Button>}
         {editable && onRemove && <Button size="icon-sm" variant="destructive-ghost" aria-label="Remove charge" onClick={onRemove}><Trash2 className="h-3.5 w-3.5" /></Button>}
       </div>
-      {ch.import_cost_id && <div className="mb-2 flex items-center gap-2 rounded-control bg-emerald-50 px-2 py-1 text-xs text-emerald-800"><Badge tone="success">Recorded cost</Badge>{ch.recorded}</div>}
+      {(ch.import_cost_id || ch.journal_line_id) && <div className="mb-2 flex items-center gap-2 rounded-control bg-emerald-50 px-2 py-1 text-xs text-emerald-800"><Badge tone="success">{ch.journal_line_id ? "Booked expense" : "Recorded cost"}</Badge>{ch.recorded}</div>}
       <FormGrid cols={4}>
-        {!ch.import_cost_id && <Field label="Paid how">
+        {!(ch.import_cost_id || ch.journal_line_id) && <Field label="Paid how">
           <select className={sel} disabled={!editable} value={ch.payee_type} onChange={(e) => onChange({ payee_type: e.target.value, ...(e.target.value === "ESTIMATE" ? { settles_charge_id: null } : {}) })}>
             {PAYEES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
         </Field>}
         {ch.payee_type === "SUPPLIER" && <Field label="Forwarder / agent" required><LookupPicker value={ch.supplier_id} onChange={(v) => onChange({ supplier_id: v })} disabled={!editable} clearable={false} placeholder="Who billed it…" spec={{ table: "suppliers", label: "name", secondary: "code", filters: { is_active: true } }} /></Field>}
         {ch.payee_type === "BANK" && <Field label="Paid from" required><BankPicker value={ch.bank_account_id} onChange={(v) => onChange({ bank_account_id: v })} disabled={!editable} /></Field>}
-        {!ch.import_cost_id && (ch.payee_type === "BILLED" || ch.payee_type === "ESTIMATE") && <div className="hidden sm:block" />}
-        <Field label={ch.payee_type === "BANK" ? "Cheque / reference" : "Bill / GD / reference no."}><Input disabled={!editable || !!ch.import_cost_id} value={ch.reference} onChange={(e) => onChange({ reference: e.target.value })} /></Field>
+        {!(ch.import_cost_id || ch.journal_line_id) && (ch.payee_type === "BILLED" || ch.payee_type === "ESTIMATE") && <div className="hidden sm:block" />}
+        <Field label={ch.payee_type === "BANK" ? "Cheque / reference" : "Bill / GD / reference no."}><Input disabled={!editable || !!(ch.import_cost_id || ch.journal_line_id)} value={ch.reference} onChange={(e) => onChange({ reference: e.target.value })} /></Field>
         <Field label="Amount" required hint={ch.currency !== "PKR" && ch.payee_type !== "BANK" ? `= PKR ${money(pkr(ch))}` : undefined}>
           <div className="flex gap-1.5">
-            <Input className="text-right tabular-nums" inputMode="decimal" disabled={!editable || !!ch.import_cost_id} value={ch.amount} onChange={(e) => onChange({ amount: e.target.value })} />
-            {ch.payee_type !== "BANK" && !ch.import_cost_id && <CurrencyInput currency={ch.currency} rate={ch.fx_rate} disabled={!editable} onCurrency={(v) => onChange({ currency: v })} onRate={(v) => onChange({ fx_rate: v })} />}
+            <Input className="text-right tabular-nums" inputMode="decimal" disabled={!editable || !!(ch.import_cost_id || ch.journal_line_id)} value={ch.amount} onChange={(e) => onChange({ amount: e.target.value })} />
+            {ch.payee_type !== "BANK" && !(ch.import_cost_id || ch.journal_line_id) && <CurrencyInput currency={ch.currency} rate={ch.fx_rate} disabled={!editable} onCurrency={(v) => onChange({ currency: v })} onRate={(v) => onChange({ fx_rate: v })} />}
           </div>
         </Field>
         {ch.payee_type !== "ESTIMATE" && myEstimates.length > 0 && (

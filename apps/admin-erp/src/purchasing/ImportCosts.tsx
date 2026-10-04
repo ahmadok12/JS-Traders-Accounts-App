@@ -6,7 +6,7 @@ import { Badge, Button, ConfirmDialog, ErpDialog, Field, FormGrid, Input, cn } f
 import { sb, useAccess } from "@jst/data-access";
 import { formatDate } from "@jst/utilities";
 import { LookupPicker } from "../inventory/pickers";
-import { BankPicker, money, num, today } from "../accounting/common";
+import { AccountPicker, BankPicker, money, num, today } from "../accounting/common";
 import { CurrencyInput, rpc, useAction, useCan } from "./common";
 
 export const COST_TYPES = [["FREIGHT", "Freight"], ["INSURANCE", "Insurance"], ["CUSTOMS", "Customs duty & taxes"], ["CLEARING", "Clearing agent"], ["PORT", "Port / terminal / D.O."], ["BANK", "Bank / LC charges"], ["OTHER", "Other"]] as const;
@@ -133,8 +133,17 @@ export function ImportCostsPanel({ shipmentId, canRecord }: { shipmentId: string
   );
 }
 
-/** choose recorded costs to put on a landed cost */
-export function PickImportCostsDialog({ shipmentId, exclude, onClose, onPick }: { shipmentId: string | null; exclude: string[]; onClose: () => void; onPick: (c: ImportCost[]) => void }) {
+export interface ExpenseEntry { journal_line_id: string; entry_id: string; entry_no: string; entry_date: string; entry_type: string; source_type: string | null; reference: string | null;
+  description: string | null; account_id: string; account_name: string; party_name: string | null; paid_from: string | null; amount: number }
+const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+
+/** choose costs to put on a landed cost: recorded import costs, or expenses already booked (land freight, labour, loading …) */
+export function PickImportCostsDialog({ shipmentId, exclude, excludeLines, onClose, onPick }: {
+  shipmentId: string | null; exclude: string[]; excludeLines: string[]; onClose: () => void; onPick: (c: ImportCost[], e: ExpenseEntry[]) => void;
+}) {
+  const { companyId } = useAccess();
+  const [tab, setTab] = React.useState<"recorded" | "expenses">("recorded");
+  // recorded import costs (Landed Cost Clearing)
   const costs = useImportCosts(shipmentId, { onlyOpen: true, withUnlinked: true });
   const all = (costs.data ?? []).filter((r) => !exclude.includes(r.id));
   const who = (r: ImportCost) => r.supplier?.name ?? r.bank?.name ?? "—";
@@ -143,36 +152,95 @@ export function PickImportCostsDialog({ shipmentId, exclude, onClose, onPick }: 
   const rows = all.filter((r) => !party || who(r) === party);
   const [sel2, setSel] = React.useState<string[] | null>(null);
   const chosen = sel2 ?? all.filter((r) => r.shipment_id && r.shipment_id === shipmentId).map((r) => r.id);
-  const total = rows.filter((r) => chosen.includes(r.id)).reduce((a, r) => a + Number(r.amount_pkr), 0);
+  // expenses already booked
+  const freightAcc = useQuery({ queryKey: ["sys-account", "FREIGHT", companyId], queryFn: async () => (await sb().from("chart_of_accounts").select("id").eq("company_id", companyId!).eq("system_key", "FREIGHT").maybeSingle()).data?.id as string | undefined });
+  const [acc, setAcc] = React.useState<string | null>(null);
+  const account = acc ?? freightAcc.data ?? null;
+  const [from, setFrom] = React.useState(daysAgo(90));
+  const [to, setTo] = React.useState(today());
+  const [epParty, setEpParty] = React.useState("");
+  const exp = useQuery({ queryKey: ["lc-expense-entries", companyId, account, from, to], enabled: tab === "expenses",
+    queryFn: async () => (await rpc<ExpenseEntry[]>("lc_expense_entries", { p_company: companyId, p_account_id: account, p_from: from || null, p_to: to || null })) ?? [] });
+  const eAll = (exp.data ?? []).filter((r) => !excludeLines.includes(r.journal_line_id));
+  const eWho = (r: ExpenseEntry) => r.party_name ?? r.paid_from ?? "—";
+  const eParties = Array.from(new Set(eAll.map(eWho)));
+  const eRows = eAll.filter((r) => !epParty || eWho(r) === epParty);
+  const [eSel, setESel] = React.useState<ExpenseEntry[]>([]);
+  const eIds = eSel.map((x) => x.journal_line_id);
+  const toggleE = (r: ExpenseEntry) => setESel((x) => (eIds.includes(r.journal_line_id) ? x.filter((y) => y.journal_line_id !== r.journal_line_id) : [...x, r]));
+
+  const total = all.filter((r) => chosen.includes(r.id)).reduce((a, r) => a + Number(r.amount_pkr), 0) + eSel.reduce((a, r) => a + Number(r.amount), 0);
+  const count = chosen.length + eSel.length;
+  const tabBtn = (k: "recorded" | "expenses", label: string, n: number) => (
+    <button type="button" onClick={() => setTab(k)} className={cn("rounded-control px-3 py-1.5 text-sm", tab === k ? "bg-white font-medium shadow-sm" : "text-ink-muted")}>{label}{n > 0 && <span className="ml-1 rounded-full bg-primary/10 px-1.5 text-2xs text-primary">{n}</span>}</button>
+  );
   return (
-    <ErpDialog open onRequestClose={onClose} size="lg" icon={<FileText className="h-4 w-4" />} title="Pick recorded costs"
-      footer={<><div className="flex-1 text-sm text-ink-muted">{chosen.length} chosen · PKR <b className="tabular-nums text-ink">{money(total)}</b></div><Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" disabled={!chosen.length} onClick={() => onPick(rows.filter((r) => chosen.includes(r.id)))}>Add to landed cost</Button></>}>
-      {parties.length > 1 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Billed by / paid from</span>
-          <select className="h-control rounded-control border border-line bg-surface px-2 text-sm" value={party}
-            onChange={(e) => { const v = e.target.value; setParty(v); if (v) setSel(Array.from(new Set([...chosen.filter((id) => who(all.find((r) => r.id === id)!) !== v), ...all.filter((r) => who(r) === v).map((r) => r.id)]))); }}>
-            <option value="">Everyone ({all.length})</option>
-            {parties.map(([name, x]) => <option key={name} value={name}>{name} — {x.n} unused · PKR {money(x.amt)}</option>)}
-          </select>
-          {party && <span className="text-xs text-ink-muted">all their unused costs are ticked — untick any you don't want</span>}
+    <ErpDialog open onRequestClose={onClose} size="xl" icon={<FileText className="h-4 w-4" />} title="Pick costs"
+      footer={<><div className="flex-1 text-sm text-ink-muted">{count} chosen · PKR <b className="tabular-nums text-ink">{money(total)}</b></div><Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!count} onClick={() => onPick(all.filter((r) => chosen.includes(r.id)), eSel)}>Add to landed cost</Button></>}>
+      <div className="mb-3 inline-flex rounded-control border border-line bg-subtle p-0.5">
+        {tabBtn("recorded", "Recorded import costs", chosen.length)}{tabBtn("expenses", "Expenses already booked", eSel.length)}
+      </div>
+      {tab === "recorded" && (<>
+        {parties.length > 1 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Billed by / paid from</span>
+            <select className="h-control rounded-control border border-line bg-surface px-2 text-sm" value={party}
+              onChange={(e) => { const v = e.target.value; setParty(v); if (v) setSel(Array.from(new Set([...chosen.filter((id) => who(all.find((r) => r.id === id)!) !== v), ...all.filter((r) => who(r) === v).map((r) => r.id)]))); }}>
+              <option value="">Everyone ({all.length})</option>
+              {parties.map(([name, x]) => <option key={name} value={name}>{name} — {x.n} unused · PKR {money(x.amt)}</option>)}
+            </select>
+            {party && <span className="text-xs text-ink-muted">all their unused costs are ticked — untick any you don't want</span>}
+          </div>
+        )}
+        {costs.isLoading ? <p className="text-sm text-ink-muted">Loading…</p> : rows.length === 0 ? <p className="text-sm text-ink-muted">No recorded import costs waiting{shipmentId ? " for this shipment" : ""}. Bills and payments booked straight to an expense account are under “Expenses already booked”.</p> : (
+          <table className="w-full text-sm">
+            <thead><tr><th className={cn(th, "w-8")} /><th className={th}>Cost</th><th className={th}>Shipment</th><th className={th}>Billed by / paid from</th><th className={cn(th, "text-right")}>PKR</th></tr></thead>
+            <tbody>{rows.map((r) => (
+              <tr key={r.id} className="cursor-pointer hover:bg-subtle/50" onClick={() => setSel(chosen.includes(r.id) ? chosen.filter((x) => x !== r.id) : [...chosen, r.id])}>
+                <td className={td}><input type="checkbox" readOnly checked={chosen.includes(r.id)} /></td>
+                <td className={td}><div className="font-medium">{costTypeLabel(r.component)}</div><div className="text-2xs text-ink-muted">{formatDate(r.cost_date)} · {r.description}{r.bill ? ` · ${r.bill.doc_no}` : r.entry ? ` · ${r.entry.entry_no}` : ""}</div></td>
+                <td className={td}>{r.shipment?.doc_no ?? <span className="text-xs text-warning">not linked</span>}</td>
+                <td className={td}>{who(r)}</td>
+                <td className={cn(td, "text-right tabular-nums")}>{money(r.amount_pkr)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
+      </>)}
+      {tab === "expenses" && (<>
+        <div className="mb-3 grid gap-2 sm:grid-cols-4">
+          <Field label="Expense account" className="sm:col-span-2"><AccountPicker value={account} onChange={(v) => { setAcc(v); setEpParty(""); }} accountType="EXPENSE" placeholder="Freight, labour, loading…" /></Field>
+          <Field label="From"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+          <Field label="To"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
         </div>
-      )}
-      {costs.isLoading ? <p className="text-sm text-ink-muted">Loading…</p> : rows.length === 0 ? <p className="text-sm text-ink-muted">No recorded costs waiting{shipmentId ? " for this shipment" : ""}. Use “Record cost” on the shipment when a forwarder or agent bill comes in.</p> : (
-        <table className="w-full text-sm">
-          <thead><tr><th className={cn(th, "w-8")} /><th className={th}>Cost</th><th className={th}>Shipment</th><th className={th}>Billed by / paid from</th><th className={cn(th, "text-right")}>PKR</th></tr></thead>
-          <tbody>{rows.map((r) => (
-            <tr key={r.id} className="cursor-pointer hover:bg-subtle/50" onClick={() => setSel(chosen.includes(r.id) ? chosen.filter((x) => x !== r.id) : [...chosen, r.id])}>
-              <td className={td}><input type="checkbox" readOnly checked={chosen.includes(r.id)} /></td>
-              <td className={td}><div className="font-medium">{costTypeLabel(r.component)}</div><div className="text-2xs text-ink-muted">{formatDate(r.cost_date)} · {r.description}{r.bill ? ` · ${r.bill.doc_no}` : r.entry ? ` · ${r.entry.entry_no}` : ""}</div></td>
-              <td className={td}>{r.shipment?.doc_no ?? <span className="text-xs text-warning">not linked</span>}</td>
-              <td className={td}>{r.supplier?.name ?? r.bank?.name}</td>
-              <td className={cn(td, "text-right tabular-nums")}>{money(r.amount_pkr)}</td>
-            </tr>
-          ))}</tbody>
-        </table>
-      )}
+        {eParties.length > 1 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Paid to / from</span>
+            <select className="h-control rounded-control border border-line bg-surface px-2 text-sm" value={epParty} onChange={(e) => setEpParty(e.target.value)}>
+              <option value="">Everyone ({eAll.length})</option>{eParties.map((p2) => <option key={p2} value={p2}>{p2}</option>)}
+            </select>
+            {eRows.length > 0 && <Button size="sm" variant="ghost" onClick={() => setESel((x) => [...x.filter((y) => !eRows.some((r) => r.journal_line_id === y.journal_line_id)), ...eRows])}>Tick all shown</Button>}
+          </div>
+        )}
+        {exp.isLoading ? <p className="text-sm text-ink-muted">Loading…</p> : eRows.length === 0 ? <p className="text-sm text-ink-muted">No unused entries on this account in these dates.</p> : (
+          <div className="max-h-[50vh] overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white"><tr><th className={cn(th, "w-8")} /><th className={cn(th, "w-24")}>Date</th><th className={th}>Entry</th><th className={th}>Paid to / from</th><th className={cn(th, "text-right")}>PKR</th></tr></thead>
+              <tbody>{eRows.map((r) => (
+                <tr key={r.journal_line_id} className="cursor-pointer hover:bg-subtle/50" onClick={() => toggleE(r)}>
+                  <td className={td}><input type="checkbox" readOnly checked={eIds.includes(r.journal_line_id)} /></td>
+                  <td className={td}>{formatDate(r.entry_date)}</td>
+                  <td className={td}><div className="font-medium">{r.description ?? r.account_name}</div><div className="text-2xs text-ink-muted">{r.entry_no}{r.reference ? ` · ${r.reference}` : ""} · {r.account_name}</div></td>
+                  <td className={td}>{eWho(r)}</td>
+                  <td className={cn(td, "text-right tabular-nums")}>{money(r.amount)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-ink-muted">Posting moves the chosen amounts out of the expense account and into the goods' cost. Each entry can only be used once.</p>
+      </>)}
     </ErpDialog>
   );
 }
