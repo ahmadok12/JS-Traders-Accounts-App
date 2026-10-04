@@ -10,7 +10,7 @@ import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { LookupPicker, ProductPicker, VariantPicker, WarehousePicker } from "../inventory/pickers";
 import { money, num, today } from "../accounting/common";
-import { qtyFmt } from "../sales/common";
+import { DiscountField, qtyFmt } from "../sales/common";
 import { printDocument } from "../sales/print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { CurrencyInput, PO_TONE, poLabel, rpc, useAction, useCan, useItemInfo } from "./common";
@@ -76,7 +76,7 @@ export function PurchaseOrdersPage() {
 }
 
 interface PoLine { id?: string; product_id: string | null; variant_id: string | null; quantity: string; unit_price: string; received_qty: number; notes: string }
-interface PoHead { supplier_id: string | null; order_date: string; expected_date: string; warehouse_id: string | null; currency: string; fx_rate: string; supplier_reference: string; notes: string }
+interface PoHead { supplier_id: string | null; order_date: string; expected_date: string; warehouse_id: string | null; currency: string; fx_rate: string; supplier_reference: string; notes: string; discount_amount: string }
 
 function usePo(id: string | null) {
   const c = useCan();
@@ -107,7 +107,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
   const h = po.data?.h;
   const st = String(h?.status ?? "DRAFT");
   const editable = c.manage && (!id || st === "DRAFT");
-  const [head, setHead] = React.useState<PoHead>({ supplier_id: null, order_date: today(), expected_date: "", warehouse_id: null, currency: "PKR", fx_rate: "1", supplier_reference: "", notes: "" });
+  const [head, setHead] = React.useState<PoHead>({ supplier_id: null, order_date: today(), expected_date: "", warehouse_id: null, currency: "PKR", fx_rate: "1", supplier_reference: "", notes: "", discount_amount: "" });
   const [lines, setLines] = React.useState<PoLine[]>([{ product_id: null, variant_id: null, quantity: "", unit_price: "", received_qty: 0, notes: "" }]);
   const [tab, setTab] = React.useState("lines");
   const [ask, setAsk] = React.useState<null | "cancel" | "close" | "receive">(null);
@@ -116,16 +116,17 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
     if (!po.data) return;
     const x = po.data.h;
     setHead({ supplier_id: x.supplier_id as string, order_date: x.order_date as string, expected_date: (x.expected_date as string) ?? "", warehouse_id: (x.warehouse_id as string) ?? null,
-      currency: x.currency as string, fx_rate: String(x.fx_rate), supplier_reference: (x.supplier_reference as string) ?? "", notes: (x.notes as string) ?? "" });
+      currency: x.currency as string, fx_rate: String(x.fx_rate), supplier_reference: (x.supplier_reference as string) ?? "", notes: (x.notes as string) ?? "", discount_amount: Number(x.discount_amount) ? String(Number(x.discount_amount)) : "" });
     setLines(po.data.lines.map((l) => ({ id: l.id, product_id: l.product_id as string, variant_id: (l.variant_id as string) ?? null, quantity: String(Number(l.quantity)),
       unit_price: l.unit_price == null ? "" : String(Number(l.unit_price)), received_qty: Number(l.received_qty), notes: (l.notes as string) ?? "" })));
   }, [po.data]);
   const info = useItemInfo(lines.map((l) => l.product_id), lines.map((l) => l.variant_id));
   const total = lines.reduce((s, l) => s + (num(l.quantity) || 0) * (num(l.unit_price) || 0), 0);
   const missing = lines.filter((l) => l.product_id && !l.unit_price.trim()).length;
+  const disc = num(head.discount_amount) || 0;
 
   const save = useAction(async (andApprove: boolean) => {
-    const nid = await rpc<string>("save_purchase_order", { p_id: id, p_header: { company_id: companyId, ...head, fx_rate: num(head.fx_rate) || 1 },
+    const nid = await rpc<string>("save_purchase_order", { p_id: id, p_header: { company_id: companyId, ...head, fx_rate: num(head.fx_rate) || 1, discount_amount: disc },
       p_lines: lines.filter((l) => l.product_id).map((l) => ({ id: l.id ?? null, product_id: l.product_id, variant_id: l.variant_id, quantity: num(l.quantity), unit_price: l.unit_price.trim() ? num(l.unit_price) : null, notes: l.notes })) });
     if (andApprove) await rpc("set_purchase_order_status", { p_id: nid, p_action: "APPROVE" });
     return nid;
@@ -145,7 +146,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
         const name = `${it?.name ?? ""}${l.variant_id ? ` · ${info.data?.variants.get(l.variant_id) ?? ""}` : ""}`;
         return c.costs ? [String(i + 1), name, `${l.quantity} ${it?.uom ?? ""}`, money(num(l.unit_price)), money(num(l.quantity) * num(l.unit_price))] : [String(i + 1), name, `${l.quantity} ${it?.uom ?? ""}`];
       }),
-      totals: c.costs ? [["Total " + String(h.currency), money(total)]] : [], notes: h.notes as string | null, signatures: ["Prepared by", "Approved by"],
+      totals: c.costs ? [...(disc ? [["Subtotal", money(total)], ["Discount", `-${money(disc)}`]] as [string, string][] : []), ["Total " + String(h.currency), money(total - disc)]] : [], notes: h.notes as string | null, signatures: ["Prepared by", "Approved by"],
     });
   };
   const doSave = (approve: boolean) => save.mutate(approve, { onSuccess: (nid) => onSaved(nid as string) });
@@ -177,7 +178,8 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
               <Field label="Deliver to"><WarehousePicker value={head.warehouse_id} onChange={(v) => setHead((s) => ({ ...s, warehouse_id: v }))} disabled={!editable} /></Field>
               {c.costs && <Field label="Currency"><CurrencyInput currency={head.currency} rate={head.fx_rate} disabled={!editable} onCurrency={(v) => setHead((s) => ({ ...s, currency: v }))} onRate={(v) => setHead((s) => ({ ...s, fx_rate: v }))} /></Field>}
               <Field label="Supplier's ref. / PI no."><Input disabled={!editable} value={head.supplier_reference} onChange={(e) => setHead((s) => ({ ...s, supplier_reference: e.target.value }))} /></Field>
-              {c.costs && <Field label="Order value"><div className="flex h-control items-center font-semibold tabular-nums">{head.currency} {money(total)}{head.currency !== "PKR" && <span className="ml-2 text-xs font-normal text-ink-muted">≈ PKR {money(total * (num(head.fx_rate) || 0))}</span>}</div></Field>}
+              {c.costs && <Field label={`Discount (${head.currency})`}><DiscountField base={total} value={head.discount_amount} disabled={!editable} onChange={(v) => setHead((s) => ({ ...s, discount_amount: v }))} /></Field>}
+              {c.costs && <Field label="Order value" hint={disc ? `${money(total)} less ${money(disc)} discount` : undefined}><div className="flex h-control items-center font-semibold tabular-nums">{head.currency} {money(total - disc)}{head.currency !== "PKR" && <span className="ml-2 text-xs font-normal text-ink-muted">≈ PKR {money((total - disc) * (num(head.fx_rate) || 0))}</span>}</div></Field>}
             </FormGrid>
             <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.filter((l) => l.product_id).length})` },
               ...(id ? [{ key: "receipts", label: `Receipts (${po.data?.receipts.length ?? 0})` }, { key: "files", label: filesLabel(files.data?.length) }, { key: "history", label: "History" }] : [])]} />

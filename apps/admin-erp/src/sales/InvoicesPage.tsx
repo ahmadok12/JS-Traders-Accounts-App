@@ -14,7 +14,7 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "../inventory/pickers";
 import { FEATURES, useFeature } from "../lib/settings";
 import { BankPicker, money, num, today } from "../accounting/common";
-import { fetchGdnLinePrices, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
+import { DiscountField, fetchGdnLinePrices, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
 import { autoFill, useOpenReceipts } from "./allocations";
 import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
@@ -409,7 +409,7 @@ function InvoiceDraft({ data, onClose }: { data: InvData; onClose: () => void })
           <dl className="space-y-1.5 self-start rounded-card bg-subtle p-3 text-sm">
             <div className="flex justify-between"><dt className="text-ink-muted">Subtotal</dt><dd className="tabular-nums">{money(subtotal)}</dd></div>
             <div className="flex items-center justify-between gap-3"><dt className="text-ink-muted">Discount</dt>
-              <dd><Input inputMode="decimal" className="h-control-sm w-[140px] text-right tabular-nums" placeholder="0" value={f.discount} disabled={!editable} onChange={(e) => setF((s) => ({ ...s, discount: e.target.value }))} /></dd></div>
+              <dd><DiscountField base={subtotal} value={f.discount} disabled={!editable} onChange={(v) => setF((s) => ({ ...s, discount: v }))} /></dd></div>
             <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><dt>Total</dt><dd className="tabular-nums">{money(total)}</dd></div>
             {pending > 0 && <p className="text-xs text-warning">{pending} item{pending > 1 ? "s" : ""} still have a pending price.</p>}
             {rcv.on && num(rcv.amount) > 0 && <div className="flex justify-between text-ink-muted"><dt>Balance after payment</dt><dd className="tabular-nums">{money(total - num(rcv.amount))}</dd></div>}
@@ -816,7 +816,7 @@ function QuickInvoiceDialog({ onClose, onPosted }: { onClose: () => void; onPost
           <dl className="space-y-1.5 self-start rounded-card bg-subtle p-3 text-sm">
             <div className="flex justify-between"><dt className="text-ink-muted">Subtotal</dt><dd className="tabular-nums">{money(subtotal)}</dd></div>
             <div className="flex items-center justify-between gap-3"><dt className="text-ink-muted">Discount</dt>
-              <dd><Input inputMode="decimal" className="h-control-sm w-[140px] text-right tabular-nums" placeholder="0" value={discount} onChange={(e) => setDiscount(e.target.value)} /></dd></div>
+              <dd><DiscountField base={subtotal} value={discount} onChange={setDiscount} /></dd></div>
             <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><dt>Total</dt><dd className="tabular-nums">{money(total)}</dd></div>
             {rcv.on && n(rcv.amount) > 0 && <div className="flex justify-between text-ink-muted"><dt>Balance after payment</dt><dd className="tabular-nums">{money(total - n(rcv.amount))}</dd></div>}
             {err("total") && <p className="text-xs text-danger">{err("total")}</p>}

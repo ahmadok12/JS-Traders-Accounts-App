@@ -8,7 +8,7 @@ import { P } from "@jst/permissions";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "../inventory/pickers";
 import { money } from "../accounting/common";
-import { n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
+import { DiscountField, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
 import { PickerChips, staffOf, usePickingStaff } from "../picking/common";
 
 type Row = Record<string, unknown>;
@@ -30,6 +30,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     order_date: (initial?.header.order_date as string) ?? new Date().toISOString().slice(0, 10),
     customer_reference: (initial?.header.customer_reference as string) ?? "",
     notes: (initial?.header.notes as string) ?? "",
+    discount: Number(initial?.header.discount_amount ?? 0) ? String(Number(initial?.header.discount_amount)) : "",
     lines: initial?.lines.length
       ? initial.lines.map((l) => ({
           key: l.id ?? crypto.randomUUID(), id: l.id, want: l.want, product_id: l.product_id, variant_id: l.variant_id, unit_price: l.unit_price == null ? "" : String(Number(l.unit_price)), notes: l.notes ?? "",
@@ -65,6 +66,16 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const total = used.reduce((a, l) => a + (l.unit_price.trim() === "" ? 0 : lineTotal(l) * n(l.unit_price)), 0);
   const pending = used.filter((l) => l.product_id && l.unit_price.trim() === "").length;
+  const disc = n(f.discount) || 0;
+  if (canPrices && f.discount.trim() !== "" && !(n(f.discount) >= 0)) errors.discount = "Invalid discount";
+  else if (canPrices && disc > total + 0.001) errors.discount = "Discount is more than the order value";
+  const initDisc = n(init.discount) || 0;
+  /** the discount is saved separately (needs price access) */
+  const saveDiscount = async (sid: string) => {
+    if (!canPrices || (disc === initDisc && sid === id)) return;
+    const r = await sb().rpc("set_sales_order_discount", { p_id: sid, p_amount: disc });
+    if (r.error) throw Object.assign(r.error, { savedId: sid });
+  };
 
   const save = useMutation({
     mutationFn: async (approve: boolean) => {
@@ -78,6 +89,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       if (revise) {
         const r = await sb().rpc("revise_sales_order", { p_id: id, ...payload });
         if (r.error) throw r.error;
+        await saveDiscount(id!);
         if (approve && sending) {
           const t = await sb().rpc("start_so_picking", { p_so_id: id, p_plan: plan, p_notes: f.notes || null });
           if (t.error) throw Object.assign(t.error, { savedId: id });
@@ -96,6 +108,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       });
       if (error) throw error;
       const nid = data as string;
+      await saveDiscount(nid);
       if (quotationId) {
         const q = await sb().rpc("link_quotation_order", { p_quotation_id: quotationId, p_so_id: nid });
         if (q.error) throw Object.assign(q.error, { savedId: nid });
@@ -143,7 +156,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
           <>
             {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
             <div className="flex-1 text-right">
-              {canPrices && <span className="text-sm text-ink-muted">Order total <b className="ml-1 text-lg tabular-nums text-ink">{money(total)}</b>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} price{pending > 1 ? "s" : ""} pending</span>}</span>}
+              {canPrices && <span className="mr-4 inline-flex items-start gap-2 text-sm text-ink-muted"><span className="pt-1.5">Discount</span><DiscountField base={total} value={f.discount} onChange={(v) => setF((s) => ({ ...s, discount: v }))} />{err("discount") && <span className="pt-1.5 text-xs text-danger">{err("discount")}</span>}</span>}
+              {canPrices && <span className="text-sm text-ink-muted">Order total <b className="ml-1 text-lg tabular-nums text-ink">{money(total - disc)}</b>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} price{pending > 1 ? "s" : ""} pending</span>}</span>}
             </div>
             <Button onClick={() => guard(onCancel)}>Cancel</Button>
             <Button icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending && save.variables === false} disabled={save.isPending} onClick={() => submit(false)}>{revise ? "Save changes" : "Save draft"}</Button>

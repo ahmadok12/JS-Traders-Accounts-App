@@ -1,4 +1,6 @@
+import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Input, cn } from "@jst/ui";
 import { sb, useAccess } from "@jst/data-access";
 import { formatNumber } from "@jst/utilities";
 
@@ -98,4 +100,35 @@ export async function fetchGdnLinePrices(gdnIds: string[]) {
   const { data, error } = await sb().rpc("gdn_line_prices", { p_gdn_ids: gdnIds });
   if (error) throw error;
   return new Map(((data ?? []) as { line_id: string; unit_price: number | null }[]).map((r) => [r.line_id, r.unit_price == null ? null : Number(r.unit_price)]));
+}
+
+/**
+ * Discount box used on every sales and purchase document: type an amount, or switch to % and it
+ * works out the amount from the document's value (and keeps it in step while lines change).
+ * The amount is what gets saved.
+ */
+export function DiscountField({ value, onChange, base, disabled, className }: { value: string; onChange: (v: string) => void; base: number; disabled?: boolean; className?: string }) {
+  const [pct, setPct] = React.useState<string | null>(null);
+  const fromPct = (p: string) => { const a = Math.round(base * (n(p) || 0)) / 100; return a ? String(a) : ""; };
+  React.useEffect(() => {
+    if (pct == null) return;
+    const a = fromPct(pct);
+    if (a !== value) onChange(a);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, pct]);
+  const amt = n(value) || 0;
+  const shownPct = base > 0 && amt > 0 ? Math.round((amt / base) * 10000) / 100 : 0;
+  return (
+    <div className={cn("inline-flex flex-col items-end", className)}>
+      <div className="flex items-center gap-1">
+        <Input inputMode="decimal" aria-label={pct == null ? "Discount amount" : "Discount percent"} className="h-control-sm w-[110px] text-right tabular-nums" placeholder="0" disabled={disabled}
+          value={pct ?? value} onChange={(e) => (pct == null ? onChange(e.target.value) : setPct(e.target.value))} />
+        <button type="button" disabled={disabled} title={pct == null ? "Enter as a percentage" : "Enter as an amount"}
+          className="h-control-sm w-9 rounded-control border border-line bg-white text-xs font-semibold text-ink-muted hover:bg-subtle disabled:opacity-50"
+          onClick={() => (pct == null ? setPct(shownPct ? String(shownPct) : "") : setPct(null))}>{pct == null ? "Rs" : "%"}</button>
+      </div>
+      {pct != null && amt > 0 && <span className="mt-0.5 text-2xs tabular-nums text-ink-muted">= {formatNumber(amt, 2)}</span>}
+      {pct == null && shownPct > 0 && <span className="mt-0.5 text-2xs tabular-nums text-ink-muted">{shownPct}%</span>}
+    </div>
+  );
 }

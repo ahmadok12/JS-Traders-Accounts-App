@@ -1,18 +1,20 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Banknote, CheckCircle2, FileText, Link2, Plus, Printer, Receipt, RotateCcw, Save, ShieldAlert, Trash2, X } from "lucide-react";
+import { Ban, Banknote, CheckCircle2, FileText, Link2, Plus, Printer, Receipt, RotateCcw, Save, ShieldAlert, Trash2, X, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { Badge, Button, Card, Checkbox, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, FormGrid, Input, PageHeader, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { formatDate } from "@jst/utilities";
 import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
-import { LookupPicker } from "../inventory/pickers";
+import { LookupPicker, ProductPicker, VariantPicker, WarehousePicker, useProductMeta } from "../inventory/pickers";
 import { AccountPicker, BankPicker, money, num, today } from "../accounting/common";
 import { printDocument } from "../sales/print";
+import { DiscountField } from "../sales/common";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
-import { BILL_TONE, CurrencyInput, rpc, useAction, useCan, useItemInfo } from "./common";
+import { BILL_TONE, CurrencyInput, rpc, useAction, useCan, useItemInfo, useSupplierName } from "./common";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Receipt className="h-4 w-4" />;
@@ -32,9 +34,10 @@ export function BillsPage() {
   const page = Number(params.get("page") ?? "1") || 1;
   const view = params.get("view");
   const [picking, setPicking] = React.useState(false);
+  const [quick, setQuick] = React.useState(params.get("quick") === "1");
   const flt = FILTERS[f];
   const list = useEntityList<Row>({
-    table: "supplier_bills_v", select: "id, doc_no, bill_date, due_date, supplier_name, supplier_invoice_no, currency, total_amount, total_pkr, paid_pkr, outstanding_pkr, payment_status, status",
+    table: "supplier_bills_v", select: "id, doc_no, bill_date, due_date, supplier_name, supplier_invoice_no, currency, total_amount, total_pkr, paid_pkr, outstanding_pkr, payment_status, status, discount_amount, is_quick",
     companyId, search: q, searchColumns: ["doc_no", "supplier_invoice_no", "supplier_name"], filters: { status: flt.status },
     orderBy: { column: "bill_date", ascending: false }, page, pageSize: 50, enabled: c.costs,
   });
@@ -45,7 +48,10 @@ export function BillsPage() {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader title="Supplier Bills" icon={icon}
         description="The supplier's invoice. Made from goods receipts (it clears “goods received not billed” and fixes any cost difference) or for expenses. Posting puts the amount on the supplier's account; tick Pay Supplier Now to pay it at once."
-        actions={c.manage && <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPicking(true)}>New bill</Button>} />
+        actions={<>
+          {c.approve && c.receive && <Button icon={<Zap className="h-4 w-4" />} title="Goods arrived with the supplier's invoice — receive and bill in one step" onClick={() => setQuick(true)}>Quick bill</Button>}
+          {c.manage && <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => setPicking(true)}>New bill</Button>}
+        </>} />
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
           <SearchBox value={q} onChange={(v) => update({ q: v || null, page: null })} placeholder="Search bill / supplier / invoice no…" />
@@ -55,7 +61,7 @@ export function BillsPage() {
         {list.error ? <p className="p-4 text-sm text-danger">{friendlyError(list.error)}</p> : (
           <DataTable loading={list.isLoading} rows={rows} onView={(r) => update({ view: r.id })} page={page} pageSize={50} total={list.data?.total ?? null} onPageChange={(p) => update({ page: String(p) })}
             columns={[
-              { key: "d", header: "Bill", width: "120px", cell: (r) => <span className="font-mono text-xs font-medium">{String(r.doc_no)}</span> },
+              { key: "d", header: "Bill", width: "120px", cell: (r) => <span className="font-mono text-xs font-medium">{String(r.doc_no)}{r.is_quick ? <span className="ml-1 font-sans text-2xs text-ink-muted">quick</span> : null}</span> },
               { key: "dt", header: "Date", width: "100px", cell: (r) => formatDate(r.bill_date as string) },
               { key: "s", header: "Supplier", cell: (r) => <span>{String(r.supplier_name)}{r.supplier_invoice_no ? <span className="text-xs text-ink-muted"> · {String(r.supplier_invoice_no)}</span> : null}</span> },
               { key: "t", header: "Amount", width: "150px", align: "right", cell: (r) => <span className="tabular-nums">{r.currency !== "PKR" && <span className="text-2xs text-ink-muted">{String(r.currency)} {money(r.total_amount as number)} = </span>}{money(r.total_pkr as number)}</span> },
@@ -67,6 +73,7 @@ export function BillsPage() {
         )}
       </Card>
       {picking && <NewBillDialog onClose={() => setPicking(false)} onCreated={(id) => { setPicking(false); update({ view: id }); }} />}
+      {quick && <QuickBillDialog onClose={() => { setQuick(false); if (params.get("quick")) update({ quick: null }); }} onPosted={(id) => { setQuick(false); update({ quick: null, view: id }); }} />}
       {view && <BillDialog id={view} onClose={() => update({ view: null })} />}
     </div>
   );
@@ -138,7 +145,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const st = String(h?.status ?? "DRAFT");
   const draft = st === "DRAFT";
   const editable = draft && c.manage;
-  const [head, setHead] = React.useState({ bill_date: today(), due_date: "", supplier_invoice_no: "", currency: "PKR", fx_rate: "1", notes: "" });
+  const [head, setHead] = React.useState({ bill_date: today(), due_date: "", supplier_invoice_no: "", currency: "PKR", fx_rate: "1", notes: "", discount_amount: "" });
   const [lines, setLines] = React.useState<BLine[]>([]);
   const [payNow, setPayNow] = React.useState(false);
   const [pay, setPay] = React.useState({ bank: null as string | null, amount: "", date: today(), reference: "" });
@@ -148,7 +155,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   React.useEffect(() => {
     if (!q.data) return;
     const x = q.data.h;
-    setHead({ bill_date: x.bill_date as string, due_date: (x.due_date as string) ?? "", supplier_invoice_no: (x.supplier_invoice_no as string) ?? "", currency: x.currency as string, fx_rate: String(x.fx_rate), notes: (x.notes as string) ?? "" });
+    setHead({ bill_date: x.bill_date as string, due_date: (x.due_date as string) ?? "", supplier_invoice_no: (x.supplier_invoice_no as string) ?? "", currency: x.currency as string, fx_rate: String(x.fx_rate), notes: (x.notes as string) ?? "", discount_amount: Number(x.discount_amount) ? String(Number(x.discount_amount)) : "" });
     const src = (x.status === "DRAFT" ? (x.lines_draft as Row[]) : q.data.lines) ?? [];
     setLines(src.map((l) => ({ kind: l.kind as "ITEM" | "EXPENSE", receipt_line_id: (l.receipt_line_id as string) ?? null, receipt_no: (l.receipt_no as string) ?? "", product_id: (l.product_id as string) ?? null,
       variant_id: (l.variant_id as string) ?? null, account_id: (l.account_id as string) ?? null, description: (l.description as string) ?? "",
@@ -156,13 +163,15 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   }, [q.data]);
   const info = useItemInfo(lines.map((l) => l.product_id), lines.map((l) => l.variant_id));
   const fx = num(head.fx_rate) || 1;
-  const total = lines.reduce((s, l) => s + Math.round((num(l.quantity) || 0) * (num(l.unit_price) || 0) * 100) / 100, 0);
+  const gross = lines.reduce((s, l) => s + Math.round((num(l.quantity) || 0) * (num(l.unit_price) || 0) * 100) / 100, 0);
+  const disc = num(head.discount_amount) || 0;
+  const total = gross - disc;
   const missing = lines.filter((l) => !l.unit_price.trim()).length;
   const setLine = (i: number, p: Partial<BLine>) => setLines((s) => s.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const payload = () => lines.map((l) => ({ kind: l.kind, receipt_line_id: l.receipt_line_id, account_id: l.account_id, description: l.description || null, quantity: num(l.quantity), unit_price: l.unit_price.trim() ? num(l.unit_price) : null }));
-  const save = useAction(() => rpc("save_supplier_bill", { p_id: id, p_header: { company_id: companyId, supplier_id: h?.supplier_id, ...head, fx_rate: fx }, p_lines: payload() }), "Saved");
+  const save = useAction(() => rpc("save_supplier_bill", { p_id: id, p_header: { company_id: companyId, supplier_id: h?.supplier_id, ...head, fx_rate: fx, discount_amount: disc }, p_lines: payload() }), "Saved");
   const post = useAction(async () => {
-    await rpc("save_supplier_bill", { p_id: id, p_header: { company_id: companyId, supplier_id: h?.supplier_id, ...head, fx_rate: fx }, p_lines: payload() });
+    await rpc("save_supplier_bill", { p_id: id, p_header: { company_id: companyId, supplier_id: h?.supplier_id, ...head, fx_rate: fx, discount_amount: disc }, p_lines: payload() });
     await rpc("post_supplier_bill", { p_id: id, p_pay: payNow ? { bank_account_id: pay.bank, amount: num(pay.amount), date: pay.date, reference: pay.reference || null } : null });
   }, payNow ? "Bill posted and paid" : "Bill posted — the amount is on the supplier's account", () => setAsk(null));
   const reverse = useAction(() => rpc("reverse_supplier_bill", { p_id: id, p_reason: reason }), "Bill reversed", () => { setAsk(null); setReason(""); });
@@ -176,12 +185,12 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
       meta: [["Supplier", sup?.name ?? ""], ["Bill date", formatDate(h.bill_date as string)], ["Supplier invoice", String(h.supplier_invoice_no ?? "")], ["Currency", `${h.currency}${h.currency !== "PKR" ? ` @ ${h.fx_rate}` : ""}`]],
       columns: [{ label: "#" }, { label: "Item / expense" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
       rows: lines.map((l, i) => [String(i + 1), l.kind === "ITEM" ? `${info.data?.products.get(l.product_id ?? "")?.name ?? ""}${l.receipt_no ? ` (${l.receipt_no})` : ""}` : l.description, l.quantity, money(num(l.unit_price)), money(num(l.quantity) * num(l.unit_price))]),
-      totals: [["Total " + String(h.currency), money(total)], ...(h.currency !== "PKR" ? [["PKR", money(total * fx)] as [string, string]] : [])], signatures: ["Checked by", "Approved by"] });
+      totals: [...(disc ? [["Subtotal", money(gross)], ["Discount", `-${money(disc)}`]] as [string, string][] : []), ["Total " + String(h.currency), money(total)], ...(h.currency !== "PKR" ? [["PKR", money(total * fx)] as [string, string]] : [])], signatures: ["Checked by", "Approved by"] });
   };
   return (
     <>
       <ErpDialog open onRequestClose={onClose} size="full" accent="bill" icon={icon} title={h ? String(h.doc_no) : "Bill"} subtitle={sup ? `${sup.name}${sup.city ? ` · ${sup.city}` : ""}` : undefined}
-        status={h ? (st === "POSTED" ? <Badge tone={PAY_TONE[q.data?.v?.payment_status ?? "UNPAID"]}>{String(q.data?.v?.payment_status ?? "").replace("_", " ").toLowerCase()}</Badge> : <Badge tone={BILL_TONE[st]}>{st.toLowerCase()}</Badge>) : null}
+        status={h ? <>{h.is_quick ? <Badge tone="neutral" className="mr-1">Quick</Badge> : null}{st === "POSTED" ? <Badge tone={PAY_TONE[q.data?.v?.payment_status ?? "UNPAID"]}>{String(q.data?.v?.payment_status ?? "").replace("_", " ").toLowerCase()}</Badge> : <Badge tone={BILL_TONE[st]}>{st.toLowerCase()}</Badge>}</> : null}
         footer={h && <>
           {draft && c.manage && <Button variant="destructive-ghost" icon={<Ban className="h-3.5 w-3.5" />} onClick={() => setAsk("cancel")}>Cancel draft</Button>}
           {st === "POSTED" && c.approve && <Button variant="destructive-ghost" icon={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => setAsk("reverse")}>Reverse</Button>}
@@ -204,7 +213,10 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
               <Field label="Currency"><CurrencyInput currency={head.currency} rate={head.fx_rate} disabled={!editable} onCurrency={(v) => setHead((s) => ({ ...s, currency: v }))} onRate={(v) => setHead((s) => ({ ...s, fx_rate: v }))} /></Field>
             </FormGrid>
             <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Tile k={`Total ${head.currency}`} v={money(total)} />
+              {(disc > 0 || editable) && <div className="rounded-card border border-line px-3 py-2"><div className="text-2xs font-semibold uppercase tracking-wide text-ink-muted">Discount ({head.currency})</div>
+                {editable ? <DiscountField className="mt-1" base={gross} value={head.discount_amount} onChange={(v) => setHead((s) => ({ ...s, discount_amount: v }))} />
+                  : <div className="text-lg font-semibold tabular-nums">{money(disc)}</div>}</div>}
+              <Tile k={`Total ${head.currency}${disc ? " (after discount)" : ""}`} v={money(total)} />
               {head.currency !== "PKR" && <Tile k="Total PKR" v={money(total * fx)} />}
               {st === "POSTED" && <Tile k="Paid" v={money(q.data?.v?.paid_pkr)} />}
               {st === "POSTED" && <Tile k="Outstanding" v={money(outstanding)} hot={outstanding > 0} />}
@@ -346,3 +358,193 @@ function ApplyPaymentDialog({ bill, outstanding, onClose }: { bill: Row; outstan
   );
 }
 
+
+/* ---------------------------------------------------------------- quick bill (goods arrive with the invoice) */
+interface QBLine { key: string; kind: "ITEM" | "EXPENSE"; product_id: string | null; variant_id: string | null; warehouse_id: string | null; account_id: string | null; qty: string; price: string; desc: string }
+const newQB = (kind: "ITEM" | "EXPENSE", wh: string | null = null): QBLine => ({ key: crypto.randomUUID(), kind, product_id: null, variant_id: null, warehouse_id: wh, account_id: null, qty: kind === "EXPENSE" ? "1" : "", price: "", desc: "" });
+
+export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; onPosted: (id: string) => void }) {
+  const { companyId, can } = useAccess();
+  const idem = React.useRef(crypto.randomUUID());
+  const [sup, setSup] = React.useState<string | null>(null);
+  const supInfo = useSupplierName(sup);
+  const [head, setHead] = React.useState({ supplier_invoice_no: "", bill_date: today(), due_date: "", currency: "PKR", fx_rate: "1", notes: "", discount: "" });
+  const [lines, setLines] = React.useState<QBLine[]>([newQB("ITEM")]);
+  const [payNow, setPayNow] = React.useState(false);
+  const [pay, setPay] = React.useState({ bank: null as string | null, amount: "", date: today(), reference: "" });
+  const [showErrors, setShowErrors] = React.useState(false);
+  const [confirm, setConfirm] = React.useState(false);
+  React.useEffect(() => {
+    const cur = supInfo.data?.default_currency;
+    if (cur) setHead((s) => ({ ...s, currency: cur, fx_rate: cur === "PKR" ? "1" : s.fx_rate }));
+  }, [supInfo.data?.default_currency]);
+  const setLine = (key: string, p: Partial<QBLine>) => setLines((s) => s.map((l) => (l.key === key ? { ...l, ...p } : l)));
+  const used = lines.filter((l) => (l.kind === "ITEM" ? !!l.product_id : !!l.account_id) || num(l.qty) > 0 || l.price.trim() !== "");
+  const gross = used.reduce((s, l) => s + Math.round((num(l.qty) || 0) * (num(l.price) || 0) * 100) / 100, 0);
+  const disc = num(head.discount) || 0;
+  const total = gross - disc;
+  const fx = head.currency === "PKR" ? 1 : num(head.fx_rate) || 0;
+  const errors: Record<string, string> = {};
+  if (!sup) errors.sup = "Choose the supplier";
+  if (!used.length) errors.lines = "Add at least one line";
+  if (head.currency !== "PKR" && !(fx > 0)) errors.fx = "Enter the exchange rate";
+  for (const l of used) {
+    if (l.kind === "ITEM" && !l.product_id) errors[`${l.key}.p`] = "Choose the item";
+    if (l.kind === "ITEM" && !l.warehouse_id) errors[`${l.key}.w`] = "Choose the warehouse";
+    if (l.kind === "EXPENSE" && !l.account_id) errors[`${l.key}.a`] = "Choose the expense account";
+    if (!(num(l.qty) > 0)) errors[`${l.key}.q`] = "Enter the quantity";
+    if (l.price.trim() === "" || !(num(l.price) >= 0)) errors[`${l.key}.price`] = "Enter the price";
+  }
+  if (disc > gross + 0.001) errors.disc = "Discount is more than the bill";
+  else if (used.length && total <= 0) errors.disc = "The bill total must be more than 0";
+  if (payNow && (!pay.bank || !(num(pay.amount) > 0))) errors.pay = "Choose the account and the amount paid";
+  const err = (k: string) => (showErrors ? errors[k] : undefined);
+  const canPay = can("journals.create");
+
+  const post = useAction(() => rpc<string>("quick_supplier_bill", {
+    p_header: { company_id: companyId, supplier_id: sup, supplier_invoice_no: head.supplier_invoice_no, bill_date: head.bill_date, due_date: head.due_date || null,
+      currency: head.currency, fx_rate: fx || 1, discount_amount: disc, notes: head.notes },
+    p_lines: used.map((l) => ({ kind: l.kind, product_id: l.product_id, variant_id: l.variant_id, warehouse_id: l.warehouse_id, account_id: l.account_id,
+      quantity: num(l.qty), unit_price: num(l.price), description: l.desc || null })),
+    p_pay: payNow ? { bank_account_id: pay.bank, amount: num(pay.amount), date: pay.date, reference: pay.reference || null } : null,
+    p_idempotency_key: idem.current,
+  }), payNow ? "Goods received, bill posted and paid" : "Goods received and bill posted");
+  const tryPost = () => {
+    setShowErrors(true);
+    const k = Object.keys(errors);
+    if (k.length) { toast.error(errors[k.find((x) => !x.includes(".")) ?? k[0]] ?? "Please fix the highlighted fields"); return; }
+    setConfirm(true);
+  };
+  const whCount = new Set(used.filter((l) => l.kind === "ITEM").map((l) => l.warehouse_id)).size;
+  const lastWh = [...lines].reverse().find((l) => l.kind === "ITEM" && l.warehouse_id)?.warehouse_id ?? null;
+
+  return (
+    <>
+      <ErpDialog open onRequestClose={onClose} size="full" accent="bill" icon={<Zap className="h-4 w-4" />} title="Quick supplier bill" subtitle="Receive the goods and post the bill in one step"
+        footer={<>
+          <div className="flex-1 text-right text-sm">Total <b className="tabular-nums">{head.currency} {money(total)}</b>{head.currency !== "PKR" && fx > 0 && <span className="ml-1 text-xs text-ink-muted">≈ PKR {money(total * fx)}</span>}</div>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={post.isPending} onClick={tryPost}>{payNow ? "Receive, post & pay" : "Receive & post"}</Button>
+        </>}>
+        <FormGrid cols={4} className="mb-3">
+          <Field label="Supplier" required error={err("sup")} className="sm:col-span-2">
+            <LookupPicker value={sup} onChange={setSup} clearable={false} placeholder="Supplier…" spec={{ table: "suppliers", label: "name", secondary: "code", filters: { is_active: true } }} />
+          </Field>
+          <Field label="Supplier's invoice no."><Input value={head.supplier_invoice_no} onChange={(e) => setHead((s) => ({ ...s, supplier_invoice_no: e.target.value }))} /></Field>
+          <Field label="Bill date" required><Input type="date" value={head.bill_date} onChange={(e) => setHead((s) => ({ ...s, bill_date: e.target.value }))} /></Field>
+          <Field label="Due date"><Input type="date" value={head.due_date} onChange={(e) => setHead((s) => ({ ...s, due_date: e.target.value }))} /></Field>
+          <Field label="Currency" error={err("fx")}><CurrencyInput currency={head.currency} rate={head.fx_rate} onCurrency={(v) => { setHead((s) => ({ ...s, currency: v })); if (v !== "PKR") setPayNow(false); }} onRate={(v) => setHead((s) => ({ ...s, fx_rate: v }))} /></Field>
+          <Field label="Notes" className="sm:col-span-2"><Input value={head.notes} onChange={(e) => setHead((s) => ({ ...s, notes: e.target.value }))} /></Field>
+        </FormGrid>
+        {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
+        <div className="overflow-x-auto rounded-card border border-line">
+          <table className="w-full min-w-[960px] border-collapse text-sm">
+            <thead className="bg-subtle"><tr>
+              <th className={cn(th, "w-8 text-center")}>#</th><th className={th}>Item / expense</th><th className={cn(th, "w-[200px]")}>Into warehouse</th>
+              <th className={cn(th, "w-[110px] text-right")}>Qty</th><th className={cn(th, "w-[140px] text-right")}>Price ({head.currency})</th><th className={cn(th, "w-[130px] text-right")}>Amount</th><th className={cn(th, "w-10")} />
+            </tr></thead>
+            <tbody>{lines.map((l, i) => (
+              <QuickBillLine key={l.key} idx={i} line={l} supplierId={sup} currency={head.currency} err={err} onChange={(p) => setLine(l.key, p)}
+                onRemove={lines.length > 1 ? () => setLines((s) => s.filter((x) => x.key !== l.key)) : undefined} />
+            ))}</tbody>
+          </table>
+          <div className="flex flex-wrap items-center gap-2 border-t border-line px-2 py-2">
+            <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setLines((s) => [...s, newQB("ITEM", lastWh)])}>Add item</Button>
+            <Button size="sm" variant="ghost" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setLines((s) => [...s, newQB("EXPENSE")])}>Add expense line</Button>
+            <span className="text-xs text-ink-muted">freight, loading etc. on the same invoice</span>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div>
+            {canPay && (
+              <div className={cn("rounded-card border p-3", payNow ? "border-primary" : "border-line")}>
+                <Checkbox checked={payNow} disabled={head.currency !== "PKR"} onChange={(v) => { setPayNow(v); if (v && !pay.amount && total > 0) setPay((s) => ({ ...s, amount: String(total) })); }}
+                  label="Pay Supplier Now" description={head.currency !== "PKR" ? "For PKR bills — foreign-currency payments come with multi-currency settlement." : "Records the payment with the bill. Paying more than the bill keeps the extra as an advance to the supplier."} />
+                {payNow && (
+                  <FormGrid cols={2} className="mt-2">
+                    <Field label="Paid from" required className="sm:col-span-2"><BankPicker value={pay.bank} onChange={(v) => setPay((s) => ({ ...s, bank: v }))} /></Field>
+                    <Field label="Amount" required><Input className="text-right tabular-nums" inputMode="decimal" value={pay.amount} onChange={(e) => setPay((s) => ({ ...s, amount: e.target.value }))} /></Field>
+                    <Field label="Date"><Input type="date" value={pay.date} onChange={(e) => setPay((s) => ({ ...s, date: e.target.value }))} /></Field>
+                    <Field label="Reference / cheque no." className="sm:col-span-2"><Input value={pay.reference} onChange={(e) => setPay((s) => ({ ...s, reference: e.target.value }))} /></Field>
+                    {num(pay.amount) > total && <p className="text-xs text-warning sm:col-span-2">PKR {money(num(pay.amount) - total)} more than the bill — kept as an advance to this supplier.</p>}
+                  </FormGrid>
+                )}
+                {err("pay") && <p className="mt-1 text-xs text-danger">{err("pay")}</p>}
+              </div>
+            )}
+            <p className="mt-2 text-xs text-ink-muted">Posting makes a goods receipt for each warehouse (stock goes in now), then posts the bill — its prices, less the discount, become the stock cost.</p>
+          </div>
+          <dl className="space-y-1.5 self-start rounded-card bg-subtle p-3 text-sm">
+            <div className="flex justify-between"><dt className="text-ink-muted">Subtotal</dt><dd className="tabular-nums">{money(gross)}</dd></div>
+            <div className="flex items-center justify-between gap-3"><dt className="text-ink-muted">Discount</dt>
+              <dd><DiscountField base={gross} value={head.discount} onChange={(v) => setHead((s) => ({ ...s, discount: v }))} /></dd></div>
+            <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><dt>Total {head.currency}</dt><dd className="tabular-nums">{money(total)}</dd></div>
+            {head.currency !== "PKR" && fx > 0 && <div className="flex justify-between text-ink-muted"><dt>In PKR</dt><dd className="tabular-nums">{money(total * fx)}</dd></div>}
+            {payNow && num(pay.amount) > 0 && <div className="flex justify-between text-ink-muted"><dt>Balance after payment</dt><dd className="tabular-nums">{money(Math.max(0, total - num(pay.amount)))}</dd></div>}
+            {err("disc") && <p className="text-xs text-danger">{err("disc")}</p>}
+          </dl>
+        </div>
+      </ErpDialog>
+      <ConfirmDialog open={confirm} title="Receive goods and post the bill?" loading={post.isPending} confirmLabel={payNow ? "Receive, post & pay" : "Receive & post"}
+        onCancel={() => setConfirm(false)}
+        onConfirm={() => post.mutate(undefined, { onSuccess: (id) => { setConfirm(false); onPosted(id as string); }, onError: () => { setConfirm(false); idem.current = crypto.randomUUID(); } })}
+        message={`${whCount ? `Stock goes into ${whCount} warehouse${whCount > 1 ? "s" : ""} now. ` : ""}PKR ${money(total * (fx || 1))} goes on ${supInfo.data?.name ?? "the supplier"}'s account.${payNow ? ` PKR ${money(num(pay.amount))} is paid now.` : ""} Use Reverse on the bill to correct it later.`} />
+    </>
+  );
+}
+
+function QuickBillLine({ idx, line, supplierId, currency, err, onChange, onRemove }: {
+  idx: number; line: QBLine; supplierId: string | null; currency: string; err: (k: string) => string | undefined; onChange: (p: Partial<QBLine>) => void; onRemove?: () => void;
+}) {
+  const { companyId } = useAccess();
+  const meta = useProductMeta(line.product_id);
+  const needsVariant = !!meta.data?.has_variants;
+  // last price paid to this supplier for this item (same currency) — filled in as a suggestion
+  const last = useQuery({
+    queryKey: ["last-purchase-price", supplierId, line.product_id, line.variant_id, currency],
+    enabled: line.kind === "ITEM" && !!supplierId && !!line.product_id && (!needsVariant || !!line.variant_id),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const rows = (await rpc<{ price_date: string; variant_id: string | null; currency: string; unit_price: number; source_doc: string | null }[]>("purchase_price_history",
+        { p_company_id: companyId, p_supplier_id: supplierId, p_product_id: line.product_id, p_limit: 20 })) ?? [];
+      return rows.find((r) => (r.variant_id ?? null) === (line.variant_id ?? null) && r.currency === currency) ?? null;
+    },
+  });
+  React.useEffect(() => {
+    if (last.data && line.price === "") onChange({ price: String(Number(last.data.unit_price)) });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [last.data]);
+  const tdc = "border-t border-line/70 px-2 py-1.5 align-top";
+  return (
+    <tr className="group bg-white">
+      <td className={cn(tdc, "pt-3 text-center text-2xs text-ink-faint")}>{idx + 1}</td>
+      <td className={tdc}>
+        {line.kind === "ITEM" ? (
+          <div className="flex gap-1.5">
+            <div className="min-w-0 flex-1"><ProductPicker value={line.product_id} showStock={false} invalid={!!err(`${line.key}.p`)} onChange={(v) => onChange({ product_id: v, variant_id: null, price: "" })} /></div>
+            {needsVariant && <div className="w-[42%] shrink-0"><VariantPicker productId={line.product_id} value={line.variant_id} showStock={false} onChange={(v) => onChange({ variant_id: v, price: "" })} /></div>}
+          </div>
+        ) : (
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            <AccountPicker value={line.account_id} onChange={(v) => onChange({ account_id: v })} placeholder="Expense account…" />
+            <Input value={line.desc} placeholder="What for (e.g. freight)" onChange={(e) => onChange({ desc: e.target.value })} />
+          </div>
+        )}
+        {(err(`${line.key}.p`) || err(`${line.key}.a`)) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.p`) ?? err(`${line.key}.a`)}</p>}
+        {line.kind === "ITEM" && <input className="mt-1 w-full bg-transparent text-xs text-ink-muted outline-none placeholder:text-ink-faint" placeholder="Note (optional)" value={line.desc} onChange={(e) => onChange({ desc: e.target.value })} />}
+      </td>
+      <td className={tdc}>{line.kind === "ITEM" ? <><WarehousePicker value={line.warehouse_id} invalid={!!err(`${line.key}.w`)} onChange={(v) => onChange({ warehouse_id: v })} />
+        {err(`${line.key}.w`) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.w`)}</p>}</> : <span className="block pt-2 text-xs text-ink-faint">expense — no stock</span>}</td>
+      <td className={tdc}>
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0" aria-label="Quantity" value={line.qty} invalid={!!err(`${line.key}.q`)} onChange={(e) => onChange({ qty: e.target.value })} />
+        {line.kind === "ITEM" && meta.data?.uom && <div className="mt-0.5 text-right text-2xs text-ink-muted">{meta.data.uom}</div>}
+      </td>
+      <td className={tdc}>
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="0.00" aria-label="Price" value={line.price} invalid={!!err(`${line.key}.price`)} onChange={(e) => onChange({ price: e.target.value })} />
+        {last.data && <div className="mt-0.5 text-right text-2xs text-ink-muted" title={last.data.source_doc ?? undefined}>last {money(last.data.unit_price)} · {formatDate(last.data.price_date)}</div>}
+      </td>
+      <td className={cn(tdc, "pt-2.5 text-right tabular-nums")}>{num(line.qty) > 0 && line.price.trim() !== "" ? money(num(line.qty) * num(line.price)) : <span className="text-ink-faint">—</span>}</td>
+      <td className={cn(tdc, "pt-1.5 text-center")}>{onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove line" className="opacity-50 group-hover:opacity-100" onClick={onRemove}><X className="h-3.5 w-3.5" /></Button>}</td>
+    </tr>
+  );
+}

@@ -108,7 +108,7 @@ function useSo(id: string | null) {
     enabled: !!id,
     queryFn: async () => {
       const [h, l, g] = await Promise.all([
-        sb().from("sales_orders").select("id, doc_no, order_date, status, customer_id, customer_reference, notes, approved_at, cancelled_at, cancel_reason, closed_at, close_reason, source_reservation_order_id, customer:customers(name, code, city), source:reservation_orders!sales_orders_source_reservation_order_id_fkey(doc_no), quote:quotations!sales_orders_source_quotation_id_fkey(id, doc_no)").eq("id", id!).single(),
+        sb().from("sales_orders").select("id, doc_no, order_date, status, customer_id, customer_reference, notes, discount_amount, approved_at, cancelled_at, cancel_reason, closed_at, close_reason, source_reservation_order_id, customer:customers(name, code, city), source:reservation_orders!sales_orders_source_reservation_order_id_fkey(doc_no), quote:quotations!sales_orders_source_quotation_id_fkey(id, doc_no)").eq("id", id!).single(),
         sb().from("sales_order_lines").select("id, line_no, quantity, delivered_qty, notes, product_id, variant_id, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), allocations:sales_order_line_warehouse_allocations(id, warehouse_id, quantity, reserved_quantity, delivered_quantity, status, warehouse:warehouses(code, name))").eq("sales_order_id", id!).eq("is_active", true).order("line_no"),
         sb().from("gdns").select("id, doc_no, gdn_date, status").eq("sales_order_id", id!).order("created_at"),
       ]);
@@ -194,7 +194,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
               <KeyValue label="Customer">{cust?.name}</KeyValue>
               <KeyValue label="Order date">{formatDate(h.order_date as string)}</KeyValue>
               <KeyValue label="Customer ref.">{(h.customer_reference as string) || null}</KeyValue>
-              {canPrices ? <KeyValue label="Value"><span className="font-semibold tabular-nums">{money(total)}</span>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} pending</span>}</KeyValue>
+              {canPrices ? <KeyValue label="Value"><span className="font-semibold tabular-nums">{money(total - Number(h.discount_amount ?? 0))}</span>{Number(h.discount_amount) > 0 && <span className="ml-1 text-xs text-ink-muted">after {money(h.discount_amount as number)} discount</span>}{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} pending</span>}</KeyValue>
                 : <KeyValue label="From quotation">{quote?.doc_no ?? null}</KeyValue>}
               {h.approved_at ? <KeyValue label="Approved">{formatDateTime(h.approved_at as string)}</KeyValue> : <KeyValue label="From reservation">{src?.doc_no ?? null}</KeyValue>}
               {h.cancel_reason ? <KeyValue label="Cancel reason" className="col-span-2">{String(h.cancel_reason)}</KeyValue> : null}

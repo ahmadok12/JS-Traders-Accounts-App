@@ -13,7 +13,7 @@ import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "../inventory/pickers";
 import { money, today } from "../accounting/common";
-import { n, qtyFmt, useLastPrice } from "./common";
+import { DiscountField, n, qtyFmt, useLastPrice } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
 import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
@@ -216,7 +216,7 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
           <dl className="space-y-1.5 self-start rounded-card bg-subtle p-3 text-sm">
             <div className="flex justify-between"><dt className="text-ink-muted">Subtotal</dt><dd className="tabular-nums">{money(subtotal)}</dd></div>
             <div className="flex items-center justify-between gap-3"><dt className="text-ink-muted">Discount</dt>
-              <dd><Input inputMode="decimal" className="h-control-sm w-[140px] text-right tabular-nums" placeholder="0" value={f.discount} onChange={(e) => setF((s) => ({ ...s, discount: e.target.value }))} /></dd></div>
+              <dd><DiscountField base={subtotal} value={f.discount} onChange={(v) => setF((s) => ({ ...s, discount: v }))} /></dd></div>
             <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><dt>Total</dt><dd className="tabular-nums">{money(total)}</dd></div>
           </dl>
         </div>
