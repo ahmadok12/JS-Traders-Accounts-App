@@ -136,14 +136,29 @@ export function ImportCostsPanel({ shipmentId, canRecord }: { shipmentId: string
 /** choose recorded costs to put on a landed cost */
 export function PickImportCostsDialog({ shipmentId, exclude, onClose, onPick }: { shipmentId: string | null; exclude: string[]; onClose: () => void; onPick: (c: ImportCost[]) => void }) {
   const costs = useImportCosts(shipmentId, { onlyOpen: true, withUnlinked: true });
-  const rows = (costs.data ?? []).filter((r) => !exclude.includes(r.id));
+  const all = (costs.data ?? []).filter((r) => !exclude.includes(r.id));
+  const who = (r: ImportCost) => r.supplier?.name ?? r.bank?.name ?? "—";
+  const parties = Array.from(all.reduce((m, r) => m.set(who(r), { n: (m.get(who(r))?.n ?? 0) + 1, amt: (m.get(who(r))?.amt ?? 0) + Number(r.amount_pkr) }), new Map<string, { n: number; amt: number }>()));
+  const [party, setParty] = React.useState("");
+  const rows = all.filter((r) => !party || who(r) === party);
   const [sel2, setSel] = React.useState<string[] | null>(null);
-  const chosen = sel2 ?? rows.filter((r) => r.shipment_id && r.shipment_id === shipmentId).map((r) => r.id);
+  const chosen = sel2 ?? all.filter((r) => r.shipment_id && r.shipment_id === shipmentId).map((r) => r.id);
   const total = rows.filter((r) => chosen.includes(r.id)).reduce((a, r) => a + Number(r.amount_pkr), 0);
   return (
     <ErpDialog open onRequestClose={onClose} size="lg" icon={<FileText className="h-4 w-4" />} title="Pick recorded costs"
       footer={<><div className="flex-1 text-sm text-ink-muted">{chosen.length} chosen · PKR <b className="tabular-nums text-ink">{money(total)}</b></div><Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" disabled={!chosen.length} onClick={() => onPick(rows.filter((r) => chosen.includes(r.id)))}>Add to landed cost</Button></>}>
+      {parties.length > 1 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Billed by / paid from</span>
+          <select className="h-control rounded-control border border-line bg-surface px-2 text-sm" value={party}
+            onChange={(e) => { const v = e.target.value; setParty(v); if (v) setSel(Array.from(new Set([...chosen.filter((id) => who(all.find((r) => r.id === id)!) !== v), ...all.filter((r) => who(r) === v).map((r) => r.id)]))); }}>
+            <option value="">Everyone ({all.length})</option>
+            {parties.map(([name, x]) => <option key={name} value={name}>{name} — {x.n} unused · PKR {money(x.amt)}</option>)}
+          </select>
+          {party && <span className="text-xs text-ink-muted">all their unused costs are ticked — untick any you don't want</span>}
+        </div>
+      )}
       {costs.isLoading ? <p className="text-sm text-ink-muted">Loading…</p> : rows.length === 0 ? <p className="text-sm text-ink-muted">No recorded costs waiting{shipmentId ? " for this shipment" : ""}. Use “Record cost” on the shipment when a forwarder or agent bill comes in.</p> : (
         <table className="w-full text-sm">
           <thead><tr><th className={cn(th, "w-8")} /><th className={th}>Cost</th><th className={th}>Shipment</th><th className={th}>Billed by / paid from</th><th className={cn(th, "text-right")}>PKR</th></tr></thead>
