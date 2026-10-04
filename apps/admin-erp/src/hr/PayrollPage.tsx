@@ -88,7 +88,7 @@ function useRun(id: string) {
       const [h, l, p] = await Promise.all([
         sb().from("payroll_runs").select("*").eq("id", id).single(),
         sb().from("payroll_lines").select("*").eq("run_id", id).eq("is_active", true),
-        sb().from("payroll_payments").select("id, payment_date, amount, bank_account_id, journal_entry_id, created_at, bank:bank_accounts(name)").eq("run_id", id).order("created_at"),
+        sb().from("payroll_payments").select("id, payment_date, amount, bank_account_id, journal_entry_id, created_at, employee_id, reference, status, reversal_reason, lines, bank:bank_accounts(name)").eq("run_id", id).order("created_at"),
       ]);
       if (h.error) throw h.error;
       if (l.error) throw l.error;
@@ -110,8 +110,7 @@ function RunDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const [rec, setRec] = React.useState<Record<string, string>>({});
   const [ask, setAsk] = React.useState<null | "approve" | "post" | "reverse" | "cancel" | "pay" | "unapprove">(null);
   const [reason, setReason] = React.useState("");
-  const [bank, setBank] = React.useState<string | null>(null);
-  const [payDate, setPayDate] = React.useState(today());
+  const [undoPay, setUndoPay] = React.useState<Row | null>(null);
   const [paySel, setPaySel] = React.useState<string[]>([]);
   React.useEffect(() => { setRec(Object.fromEntries((run.data?.lines ?? []).map((l) => [l.id, String(Number(l.advance_recovery))]))); }, [run.data]);
   const done = () => { setAsk(null); setReason(""); };
@@ -119,8 +118,7 @@ function RunDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const setLine = useHrAction((l: Line) => rpc("set_payroll_line", { p_line_id: l.id, p_advance_recovery: num(rec[l.id] ?? "0") }), "Recovery updated");
   const approve = useHrAction((yes: boolean) => rpc("approve_payroll_run", { p_run_id: id, p_approve: yes }), (y) => (y ? "Approved" : "Back to draft"), done);
   const post = useHrAction(() => rpc("post_payroll_run", { p_run_id: id }), "Posted to the accounts — salaries are now owed to employees", done);
-  const pay = useHrAction(() => rpc("pay_payroll_run", { p_run_id: id, p_bank_account_id: bank, p_date: payDate,
-    p_lines: paySel.length ? paySel.map((x) => ({ line_id: x })) : null }), "Salaries paid", () => { done(); setPaySel([]); });
+  const undo = useHrAction(() => rpc("reverse_salary_payment", { p_payment_id: undoPay!.id, p_reason: reason }), "Payment reversed — the salary is due again", () => { setUndoPay(null); setReason(""); });
   const reverse = useHrAction(() => rpc("reverse_payroll_run", { p_run_id: id, p_reason: reason }), "Payroll reversed", done);
   const cancel = useHrAction(() => rpc("cancel_payroll_run", { p_run_id: id }), "Payroll cancelled", () => { done(); onClose(); });
 
@@ -238,11 +236,21 @@ function RunDialog({ id, onClose }: { id: string; onClose: () => void }) {
             {(run.data?.payments ?? []).length > 0 && (
               <div className="mt-3 rounded-card border border-line p-3 text-sm">
                 <div className="mb-1 text-2xs font-semibold uppercase text-ink-muted">Payments</div>
-                {(run.data?.payments ?? []).map((p) => (
-                  <div key={p.id as string} className="flex gap-3"><span>{formatDate(p.payment_date as string)}</span><span className="text-ink-muted">{(p.bank as unknown as { name: string } | null)?.name}</span>
-                    <span className="ml-auto font-medium tabular-nums">{money(p.amount as number)}</span>
-                    <button className="text-xs text-primary hover:underline" onClick={() => navigate(`/vouchers?view=${p.journal_entry_id}`)}>voucher</button></div>
-                ))}
+                {(run.data?.payments ?? []).map((p) => {
+                  const rev = p.status === "REVERSED";
+                  const who = p.employee_id ? names.data?.get(p.employee_id as string) : `${((p.lines as unknown[]) ?? []).length} employees together`;
+                  return (
+                    <div key={p.id as string} className={cn("flex flex-wrap items-center gap-x-3 gap-y-0.5 border-t border-line/60 py-1.5 first:border-t-0", rev && "text-ink-faint line-through")}>
+                      <span className="w-24 text-xs">{formatDate(p.payment_date as string)}</span>
+                      <span className="font-medium">{who}</span>
+                      <span className="text-xs text-ink-muted">{(p.bank as unknown as { name: string } | null)?.name}{p.reference ? ` · ref ${p.reference}` : ""}</span>
+                      {rev && <span className="text-2xs no-underline">reversed: {p.reversal_reason as string}</span>}
+                      <span className="ml-auto font-medium tabular-nums">{money(p.amount as number)}</span>
+                      <button className="text-xs text-primary hover:underline" onClick={() => navigate(`/vouchers?view=${p.journal_entry_id}`)}>voucher</button>
+                      {!rev && can(P.payrollManage) && <button className="text-xs text-danger hover:underline" onClick={() => setUndoPay(p as Row)}>reverse</button>}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>
@@ -254,13 +262,12 @@ function RunDialog({ id, onClose }: { id: string; onClose: () => void }) {
         message="It can then be recalculated and changed." />
       <ConfirmDialog open={ask === "post"} title="Post to the accounts?" confirmLabel="Post" loading={post.isPending} onCancel={() => setAsk(null)} onConfirm={() => post.mutate(undefined)}
         message="Salaries & Wages and Assembly Labour are charged; net pay becomes owed to each employee (Employee Payable) and recovered advances reduce Employee Advances. Bonuses, labour and leave in this payroll are marked as paid." />
-      <ConfirmDialog open={ask === "pay"} title={paySel.length ? `Pay ${paySel.length} selected employee(s)` : `Pay everyone (${unpaid.length})`} confirmLabel="Pay" loading={pay.isPending}
-        onCancel={() => setAsk(null)} onConfirm={() => pay.mutate(undefined)}
-        message={`PKR ${money((paySel.length ? lines.filter((l) => paySel.includes(l.id)) : unpaid).reduce((s, l) => s + Number(l.net_pay) - Number(l.paid_amount), 0))} is paid out of the chosen account. One payment voucher is made.`}>
-        <FormGrid cols={2} className="mt-3">
-          <Field label="Paid from" required><BankPicker value={bank} onChange={setBank} /></Field>
-          <Field label="Date"><Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} /></Field>
-        </FormGrid>
+      {ask === "pay" && <PayDialog runId={id} month={monthLabel(h?.period_month as string)} lines={unpaid} names={names.data} preselect={paySel}
+        onClose={() => setAsk(null)} onDone={() => { setAsk(null); setPaySel([]); }} />}
+      <ConfirmDialog open={!!undoPay} title="Reverse this salary payment?" tone="destructive" confirmLabel="Reverse payment" loading={undo.isPending}
+        onCancel={() => { setUndoPay(null); setReason(""); }} onConfirm={() => undo.mutate(undefined)}
+        message={`PKR ${money(undoPay?.amount as number)} — its voucher is reversed and the salary shows as unpaid again (e.g. a transfer that bounced or a wrong amount).`}>
+        <Field label="Reason" required className="mt-3"><Input value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
       </ConfirmDialog>
       <ConfirmDialog open={ask === "reverse"} title="Reverse this payroll?" tone="destructive" confirmLabel="Reverse" loading={reverse.isPending} onCancel={() => setAsk(null)} onConfirm={() => reverse.mutate(undefined)}
         message="The accounting entry is reversed, advance recoveries are undone and bonuses / labour / leave go back to waiting. Salaries already paid must be reversed first.">
@@ -269,5 +276,92 @@ function RunDialog({ id, onClose }: { id: string; onClose: () => void }) {
       <ConfirmDialog open={ask === "cancel"} title="Cancel this payroll?" tone="destructive" confirmLabel="Cancel payroll" loading={cancel.isPending} onCancel={() => setAsk(null)} onConfirm={() => cancel.mutate(undefined)}
         message="Nothing has been posted. Everything it picked up becomes available for a new payroll of this month." />
     </>
+  );
+}
+
+interface PayDetail { employee_id: string; payment_method: string; bank_name: string | null; account_title: string | null; account_number: string | null; iban: string | null }
+
+/**
+ * Paying salaries: each employee separately (one voucher each — e.g. a transfer to their own bank account, with its transfer reference)
+ * or several employees together (one voucher — e.g. a cash envelope run or one bulk bank payment). Amounts can be partial.
+ */
+function PayDialog({ runId, month, lines, names, preselect, onClose, onDone }: {
+  runId: string; month: string; lines: Line[]; names?: Map<string, string>; preselect: string[]; onClose: () => void; onDone: () => void;
+}) {
+  const details = useQuery({
+    queryKey: ["payroll", "pay-details", lines.map((l) => l.employee_id).join(",")],
+    queryFn: async () => {
+      const { data } = await sb().from("employee_payment_details").select("employee_id, payment_method, bank_name, account_title, account_number, iban").in("employee_id", lines.map((l) => l.employee_id));
+      return new Map(((data ?? []) as PayDetail[]).map((d) => [d.employee_id, d]));
+    },
+  });
+  const [sel, setSel] = React.useState<string[]>(preselect.length ? preselect : lines.map((l) => l.id));
+  const [amt, setAmt] = React.useState<Record<string, string>>(Object.fromEntries(lines.map((l) => [l.id, String(Number(l.net_pay) - Number(l.paid_amount))])));
+  const [ref, setRef] = React.useState<Record<string, string>>({});
+  const [separate, setSeparate] = React.useState<boolean | null>(null);
+  const [bank, setBank] = React.useState<string | null>(null);
+  const [date, setDate] = React.useState(today());
+  const [common, setCommon] = React.useState("");
+  // default: separately when everyone chosen is paid by bank transfer
+  React.useEffect(() => {
+    if (separate !== null || !details.data) return;
+    const chosen = lines.filter((l) => sel.includes(l.id));
+    setSeparate(chosen.length > 0 && chosen.every((l) => details.data!.get(l.employee_id)?.payment_method === "BANK"));
+  }, [details.data, separate, sel, lines]);
+  const chosen = lines.filter((l) => sel.includes(l.id));
+  const total = chosen.reduce((s, l) => s + (num(amt[l.id] ?? "0") || 0), 0);
+  const go = useHrAction(() => rpc("pay_payroll_salaries", {
+    p_run_id: runId, p_bank_account_id: bank, p_date: date, p_separate: !!separate, p_reference: common || null,
+    p_lines: chosen.map((l) => ({ line_id: l.id, amount: String(num(amt[l.id] ?? "0")), reference: ref[l.id] || null })),
+  }), (/* */) => (separate ? `${chosen.length} payment voucher(s) made` : "One payment voucher made"), onDone);
+  const card = (on: boolean, title: string, text: string, v: boolean) => (
+    <button type="button" onClick={() => setSeparate(v)}
+      className={cn("flex-1 rounded-card border-2 p-3 text-left transition", on ? "border-primary bg-primary/5" : "border-line hover:border-line-strong")}>
+      <div className="text-sm font-semibold">{title}</div><div className="text-xs text-ink-muted">{text}</div>
+    </button>
+  );
+  return (
+    <ErpDialog open onRequestClose={onClose} size="xl" icon={<Banknote className="h-4 w-4" />} title={`Pay salaries — ${month}`}
+      footer={<><span className="text-sm text-ink-muted">{chosen.length} employee(s) · <b className="tabular-nums text-ink">PKR {money(total)}</b></span><div className="flex-1" />
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" icon={<Banknote className="h-3.5 w-3.5" />} disabled={!bank || !chosen.length || total <= 0} loading={go.isPending} onClick={() => go.mutate(undefined)}>
+          {separate ? `Pay separately (${chosen.length} vouchers)` : "Pay together (1 voucher)"}</Button></>}>
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+        {card(separate === true, "Each employee separately", "One payment per employee — e.g. transfer to their own bank account. Enter each transfer's reference.", true)}
+        {card(separate === false, "Several together", "One payment for the group — e.g. cash handed out, or one bulk bank payment.", false)}
+      </div>
+      <FormGrid cols={3} className="mb-3">
+        <Field label="Paid from (our account)" required><BankPicker value={bank} onChange={setBank} placeholder="Cash / bank…" /></Field>
+        <Field label="Date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+        <Field label={separate ? "Reference (if one for all)" : "Reference / cheque no."}><Input value={common} onChange={(e) => setCommon(e.target.value)} /></Field>
+      </FormGrid>
+      <div className="overflow-x-auto rounded-card border border-line">
+        <table className="w-full text-sm">
+          <thead className="bg-subtle"><tr>
+            <th className={cn(th, "w-8")}><input type="checkbox" checked={sel.length === lines.length} onChange={(e) => setSel(e.target.checked ? lines.map((l) => l.id) : [])} /></th>
+            <th className={th}>Employee</th><th className={th}>Pay to</th><th className={cn(th, "text-right")}>Still owed</th><th className={cn(th, "w-36 text-right")}>Pay now</th>
+            {separate && <th className={cn(th, "w-44")}>Transfer ref.</th>}
+          </tr></thead>
+          <tbody>{lines.map((l) => {
+            const d = details.data?.get(l.employee_id);
+            const on = sel.includes(l.id);
+            const owed = Number(l.net_pay) - Number(l.paid_amount);
+            return (
+              <tr key={l.id} className={cn(!on && "text-ink-faint")}>
+                <td className={td}><input type="checkbox" checked={on} onChange={(e) => setSel((s) => (e.target.checked ? [...s, l.id] : s.filter((x) => x !== l.id)))} /></td>
+                <td className={cn(td, "font-medium")}>{names?.get(l.employee_id) ?? "…"}</td>
+                <td className={cn(td, "text-xs")}>{d?.payment_method === "BANK"
+                  ? <span>{d.bank_name ?? "Bank"} · {d.account_title ? `${d.account_title} · ` : ""}<span className="font-mono">{d.iban || d.account_number || "no account no."}</span></span>
+                  : <span className="text-ink-muted">Cash</span>}</td>
+                <td className={cn(td, "text-right tabular-nums")}>{money(owed)}</td>
+                <td className={td}><Input className="h-control-sm text-right tabular-nums" inputMode="decimal" disabled={!on} value={amt[l.id] ?? ""} onChange={(e) => setAmt((s) => ({ ...s, [l.id]: e.target.value }))} /></td>
+                {separate && <td className={td}><Input className="h-control-sm" disabled={!on} value={ref[l.id] ?? ""} placeholder="IBFT / cheque no." onChange={(e) => setRef((s) => ({ ...s, [l.id]: e.target.value }))} /></td>}
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-xs text-ink-muted">Pay less than owed to pay in parts — the rest stays due. A payment made by mistake (or a bounced transfer) can be reversed from the Payments list.</p>
+    </ErpDialog>
   );
 }
