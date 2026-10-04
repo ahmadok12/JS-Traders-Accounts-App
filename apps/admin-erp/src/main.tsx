@@ -118,7 +118,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <AccessProvider>
         <RouterProvider router={router} />
-        <Toaster position="bottom-right" toastOptions={{ className: "text-sm" }} />
+        <Toaster position="top-center" offset={10} visibleToasts={3} duration={3000} closeButton toastOptions={{ className: "text-sm" }} />
       </AccessProvider>
     </QueryClientProvider>
   </React.StrictMode>,
