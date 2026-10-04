@@ -7,26 +7,26 @@ import { chime, systemNotify, unlockOnFirstGesture } from "./alarm";
 import { useMyNotifications, type StaffNotification } from "./realtime";
 
 /**
- * Office side: shortages and finished picking pop up with a chime on any ERP screen.
+ * Office side: shortages, finished picking and price tasks pop up with a chime on any ERP screen.
  * Shortage alerts stay on screen until opened or dismissed.
  */
 export function ManagerAlerts() {
   const { session, can } = useAccess();
   const navigate = useNavigate();
-  const enabled = can(P.pickingManage);
+  const enabled = can(P.pickingManage) || can(P.pricingEnter) || can(P.pricingApprove);
   React.useEffect(() => { if (enabled) unlockOnFirstGesture(); }, [enabled]);
 
   const show = React.useCallback((nt: StaffNotification, ack: (ids?: string[]) => Promise<void>) => {
     chime();
-    const target = nt.task_id ? `/picking?view=${nt.task_id}` : nt.job_type === "COUNT" ? `/stock-counts?view=${nt.job_id}` : nt.job_type === "RECEIPT" ? `/goods-receipts?view=${nt.job_id}` : null;
+    const target = nt.task_id ? `/picking?view=${nt.task_id}` : nt.job_type === "COUNT" ? `/stock-counts?view=${nt.job_id}` : nt.job_type === "RECEIPT" ? `/goods-receipts?view=${nt.job_id}` : nt.job_type === "PRICE" ? `/pricing?view=${nt.job_id}` : null;
     const open = () => { void ack([nt.id]); if (target) navigate(target); };
-    toast[nt.kind === "SHORTAGE" ? "warning" : "success"](nt.title, {
+    toast[nt.kind === "SHORTAGE" || nt.kind === "PRICE_RETURNED" ? "warning" : nt.kind.startsWith("PRICE") ? "info" : "success"](nt.title, {
       id: nt.id, description: nt.body ?? undefined,
-      duration: ["SHORTAGE", "COUNT_SUBMITTED", "RECEIPT_SUBMITTED"].includes(nt.kind) ? Infinity : 10_000,
+      duration: ["SHORTAGE", "COUNT_SUBMITTED", "RECEIPT_SUBMITTED", "PRICE_ASSIGNED", "PRICE_SUBMITTED", "PRICE_RETURNED"].includes(nt.kind) ? Infinity : 10_000,
       action: target ? { label: "Open", onClick: open } : undefined,
       onDismiss: () => void ack([nt.id]), onAutoClose: () => void ack([nt.id]),
     });
-    if (document.visibilityState !== "visible") void systemNotify(nt.title, nt.body ?? "", { tag: nt.id, url: target ?? "/picking" });
+    if (document.visibilityState !== "visible") void systemNotify(nt.title, nt.body ?? "", { tag: nt.id, url: target ?? "/" });
   }, [navigate]);
 
   const ackRef = React.useRef<(ids?: string[]) => Promise<void>>(async () => undefined);

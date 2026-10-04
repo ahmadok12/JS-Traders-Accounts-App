@@ -74,6 +74,7 @@ export const NAV: NavGroup[] = [
       { to: "/picking", label: "Picking", icon: ListChecks, perms: [P.pickingManage] },
       { to: "/warehouse-staff", label: "Warehouse Staff", icon: UsersRound, perms: [P.pickingManage] },
       { to: "/gdn", label: "Dispatch (GDN)", icon: Truck, perms: [P.salesView, P.inventoryView] },
+      { to: "/pricing", label: "Pricing", icon: Tag, perms: [P.salesViewPrices, P.pricingEnter] },
       { to: "/invoices", label: "Sales Invoices", icon: Receipt, perms: [P.salesViewPrices, P.journalsView] },
     ],
   },

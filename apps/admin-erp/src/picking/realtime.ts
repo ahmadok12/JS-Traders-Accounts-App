@@ -46,7 +46,7 @@ export function usePickingRealtime(enabled = true) {
 
 export interface StaffNotification {
   id: string; kind: string; urgent: boolean; title: string; body: string | null; task_id: string | null; created_at: string; read_at: string | null;
-  job_type?: "COUNT" | "RECEIPT" | null; job_id?: string | null;
+  job_type?: "COUNT" | "RECEIPT" | "PRICE" | null; job_id?: string | null;
 }
 
 /**

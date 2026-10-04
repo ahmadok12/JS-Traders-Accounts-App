@@ -51,6 +51,8 @@ export const P = {
   salesViewPrices: "sales.view_prices",
   pickingManage: "picking.manage",
   pickingPerform: "picking.perform",
+  pricingEnter: "pricing.enter",
+  pricingApprove: "pricing.approve",
 } as const;
 
 export type PermissionCode = (typeof P)[keyof typeof P];

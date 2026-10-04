@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, Banknote, BookOpen, CheckCircle2, ExternalLink, FileText, Link2, Pencil, Plus, Printer, RotateCcw, Save, ShieldAlert, X, Zap } from "lucide-react";
+import { Ban, Banknote, BookOpen, CheckCircle2, ExternalLink, FileText, Link2, Lock, Pencil, Plus, Printer, RotateCcw, Save, ShieldAlert, X, Zap } from "lucide-react";
 import { Badge, Button, Card, Checkbox, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, FormGrid, Input, KeyValue, PageHeader, SearchableSelect, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -190,9 +190,9 @@ function CreateInvoiceDialog({ presetGdn, onClose, onCreated }: { presetGdn: str
 /* ---------------------------------------------------------------- invoice */
 interface InvLine {
   key: string; line_no: number; product_id: string; variant_id: string | null; name: string; sku: string; uom: string; variant: string | null;
-  quantity: number; unit_price: number | null; description: string | null; gdnLineIds: string[];
+  quantity: number; unit_price: number | null; description: string | null; gdnLineIds: string[]; approved_price?: number | null;
 }
-interface DraftLine { product_id: string; variant_id: string | null; quantity: number; unit_price: number | null; description: string | null; sources: { gdn_line_id: string; qty: number }[] }
+interface DraftLine { product_id: string; variant_id: string | null; quantity: number; unit_price: number | null; approved_price?: number | string | null; description: string | null; sources: { gdn_line_id: string; qty: number }[] }
 
 function useInvoice(id: string) {
   return useQuery({
@@ -226,6 +226,7 @@ function useInvoice(id: string) {
           key: String(i), line_no: i + 1, product_id: d.product_id, variant_id: d.variant_id, name: pm.get(d.product_id)?.name ?? "…", sku: pm.get(d.product_id)?.sku ?? "",
           uom: pm.get(d.product_id)?.uom?.code ?? "", variant: d.variant_id ? vm.get(d.variant_id) ?? null : null,
           quantity: Number(d.quantity), unit_price: d.unit_price == null ? null : Number(d.unit_price), description: d.description, gdnLineIds: (d.sources ?? []).map((s) => s.gdn_line_id),
+          approved_price: d.approved_price == null ? null : Number(d.approved_price),
         }));
       } else {
         lines = (l.data as unknown as PL[]).map((x) => ({
@@ -428,6 +429,10 @@ function DraftRow({ line, customerId, price, desc, amount, disabled, onPrice, on
   line: InvLine; customerId: string; price: string; desc: string; amount: number | null; disabled: boolean; onPrice: (v: string) => void; onDesc: (v: string) => void;
 }) {
   const last = useLastPrice(customerId, line.product_id, line.variant_id);
+  const { can } = useAccess();
+  const locked = line.approved_price != null;
+  const mayOverride = can(P.pricingApprove);
+  const overridden = locked && price.trim() !== "" && Number(price.replace(/,/g, "")) !== line.approved_price;
   const td = "border-b border-line/70 px-3 py-2 align-top";
   return (
     <tr>
@@ -438,9 +443,11 @@ function DraftRow({ line, customerId, price, desc, amount, disabled, onPrice, on
       </td>
       <td className={cn(td, "text-right tabular-nums")}>{qtyFmt(line.quantity)} <span className="text-2xs text-ink-faint">{line.uom}</span></td>
       <td className={cn(td, "text-right")}>
-        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="Pending" aria-label={`Price of ${line.name}`} value={price} invalid={price.trim() === ""} disabled={disabled}
+        <Input inputMode="decimal" className="h-control-sm text-right tabular-nums" placeholder="Pending" aria-label={`Price of ${line.name}`} value={price} invalid={price.trim() === ""} disabled={disabled || (locked && !mayOverride)}
           onChange={(e) => onPrice(e.target.value)} />
-        {last.data && Number(last.data.unit_price) !== Number(price || NaN) && !disabled && (
+        {locked && !overridden && <div className="mt-0.5 inline-flex items-center gap-1 text-2xs text-success" title="Price agreed on the order / approved on a price task"><Lock className="h-3 w-3" />Approved price</div>}
+        {overridden && <div className="mt-0.5 text-2xs text-warning">Approved {money(line.approved_price)} — change is recorded</div>}
+        {last.data && !locked && Number(last.data.unit_price) !== Number(price || NaN) && !disabled && (
           <button type="button" className="mt-0.5 text-2xs text-info hover:underline" onClick={() => onPrice(String(Number(last.data!.unit_price)))}>Last {money(last.data.unit_price)} ({last.data.doc_no})</button>
         )}
       </td>

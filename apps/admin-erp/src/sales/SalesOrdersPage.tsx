@@ -13,6 +13,7 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { money } from "../accounting/common";
 import { SO_TONE, qtyFmt, soLabel, useSoLinePrices } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
+import { PricingStrip } from "../pricing/PricingPage";
 import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPicking";
 
 type Row = Record<string, unknown> & { id: string };
@@ -198,6 +199,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
               {h.close_reason ? <KeyValue label="Close reason" className="col-span-2">{String(h.close_reason)}</KeyValue> : null}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-5">{String(h.notes)}</KeyValue> : null}
             </dl>
+            {id && status !== "CANCELLED" && <PricingStrip sourceType="SO" sourceId={id} docNo={String(h.doc_no)} customerName={cust?.name} />}
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${lines.length})` },
               ...(can(P.pickingManage) ? [{ key: "picking", label: `Picking (${tasks.data?.length ?? 0})` }] : []),
