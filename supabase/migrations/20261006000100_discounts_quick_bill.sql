@@ -58,10 +58,10 @@ begin
   -- the orders' discount, in proportion to the part of each order billed now
   update public.sales_invoices set discount_amount = coalesce((
     select round(sum(so.discount_amount * part.v / nullif(full_v.v, 0)), 2)
-    from (select g.sales_order_id so_id, sum(round(x.q * gl.unit_price, 2)) v
+    from (select gd.sales_order_id so_id, sum(round(x.q * gl.unit_price, 2)) v
           from (select (s->>'gdn_line_id')::uuid gl_id, (s->>'qty')::numeric q from jsonb_array_elements(v_lines) e, jsonb_array_elements(e->'sources') s) x
-          join public.gdn_lines gl on gl.id = x.gl_id join public.gdns g on g.id = gl.gdn_id
-          where gl.unit_price is not null group by g.sales_order_id) part
+          join public.gdn_lines gl on gl.id = x.gl_id join public.gdns gd on gd.id = gl.gdn_id
+          where gl.unit_price is not null group by gd.sales_order_id) part
     join public.sales_orders so on so.id = part.so_id and so.discount_amount > 0
     join lateral (select sum(round(l.quantity * l.unit_price, 2)) v from public.sales_order_lines l where l.sales_order_id = so.id and l.is_active and l.unit_price is not null) full_v on true
   ), 0) where id = v_id;
@@ -284,7 +284,7 @@ begin
           from public.goods_receipt_po_links k join public.goods_receipt_lines gl on gl.id = k.receipt_line_id join public.purchase_order_lines pl on pl.id = k.po_line_id
           where gl.receipt_id = any(p_receipt_ids) and not k.reversed and gl.billed_qty = 0 and pl.unit_price is not null group by pl.purchase_order_id) part
     join public.purchase_orders po on po.id = part.po_id and po.discount_amount > 0 and po.currency = v_cur
-    join lateral (select sum(round(l.quantity * l.unit_price, 2)) v from public.purchase_order_lines l where l.purchase_order_id = po.id and l.is_active and l.unit_price is not null) full_v on true;
+    join lateral (select sum(round(pol.quantity * pol.unit_price, 2)) v from public.purchase_order_lines pol where pol.purchase_order_id = po.id and pol.is_active and pol.unit_price is not null) full_v on true;
   return public.save_supplier_bill(null, jsonb_build_object('company_id', p_company_id, 'supplier_id', v_sup, 'bill_date', coalesce(p_bill_date, current_date),
     'currency', v_cur, 'fx_rate', v_fx, 'discount_amount', v_disc), v_lines, null);
 end $$;

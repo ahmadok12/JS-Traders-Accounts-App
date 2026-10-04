@@ -507,6 +507,10 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   });
   const outstanding = Number(data.pay.outstanding);
   const canInv = can(P.salesInvoice);
+  const cogs = useQuery({
+    queryKey: ["invoice-cogs", id, status], enabled: can(P.inventoryValuation) && status === "POSTED",
+    queryFn: async () => { const { data: r, error } = await sb().rpc("invoice_cogs", { p_invoice_id: id }); if (error) throw error; return ((r ?? []) as { cogs: number }[]).reduce((a, x) => a + Number(x.cogs), 0); },
+  });
   const overdue = isOverdue({ due_date: h.due_date, outstanding });
 
   const print = () => {
@@ -582,6 +586,13 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
                 <tr><td colSpan={4} className="px-3 pt-2 text-right text-ink-muted">Subtotal</td><td className="px-3 pt-2 text-right tabular-nums">{money(h.subtotal as number)}</td></tr>
                 {Number(h.discount_amount) > 0 && <tr><td colSpan={4} className="px-3 text-right text-ink-muted">Discount</td><td className="px-3 text-right tabular-nums">-{money(h.discount_amount as number)}</td></tr>}
                 <tr><td colSpan={4} className="px-3 pb-2 text-right font-semibold">Total</td><td className="px-3 pb-2 text-right font-semibold tabular-nums">{money(h.total_amount as number)}</td></tr>
+                {cogs.data != null && (
+                  <tr className="border-t border-line/70 bg-subtle/50 text-xs text-ink-muted">
+                    <td colSpan={4} className="px-3 py-1.5 text-right">Cost of goods {money(cogs.data)} · gross margin</td>
+                    <td className={cn("px-3 py-1.5 text-right font-medium tabular-nums", Number(h.total_amount) - cogs.data < 0 ? "text-danger" : "text-success")}>
+                      {money(Number(h.total_amount) - cogs.data)}{Number(h.total_amount) > 0 && <span className="ml-1 font-normal text-ink-muted">({Math.round(((Number(h.total_amount) - cogs.data) / Number(h.total_amount)) * 1000) / 10}%)</span>}</td>
+                  </tr>
+                )}
               </tfoot>
             </table>
           </div>

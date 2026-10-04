@@ -42,6 +42,7 @@ import {
   FileSignature,
   ListChecks,
   Smartphone,
+  Coins,
 } from "lucide-react";
 import type * as React from "react";
 import { P } from "@jst/permissions";
@@ -86,7 +87,8 @@ export const NAV: NavGroup[] = [
       { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList, perms: [P.purchasingView] },
       { to: "/purchase-costs", label: "Purchase Costs", icon: Calculator, perms: [P.purchasingCosts] },
       { to: "/supplier-bills", label: "Supplier Bills", icon: Receipt, perms: [P.purchasingCosts] },
-      { to: "/shipments", label: "Shipments", icon: Ship, soon: "Stage 8" },
+      { to: "/shipments", label: "Shipments", icon: Ship, perms: [P.purchasingView] },
+      { to: "/landed-costs", label: "Landed Cost", icon: Calculator, perms: [P.purchasingCosts] },
     ],
   },
   {
@@ -100,6 +102,7 @@ export const NAV: NavGroup[] = [
       { to: "/assembly", label: "Assembly", icon: Wrench, perms: [P.inventoryView] },
       { to: "/rolls", label: "Rolls", icon: Cylinder, perms: [P.inventoryView] },
       { to: "/stock-ledger", label: "Stock Movements", icon: History, perms: [P.inventoryView] },
+      { to: "/stock-valuation", label: "Stock Value", icon: Coins, perms: [P.inventoryValuation] },
       { to: "/m", label: "Phone app (picking)", icon: Smartphone, perms: [P.pickingPerform] },
     ],
   },

@@ -61,6 +61,7 @@ export const P = {
   purchasingManage: "purchasing.manage",
   purchasingApprove: "purchasing.approve",
   purchasingCosts: "purchasing.costs",
+  inventoryValuation: "inventory.valuation",
 } as const;
 
 export type PermissionCode = (typeof P)[keyof typeof P];

@@ -49,6 +49,9 @@ const PayrollPage = React.lazy(() => import("./hr/PayrollPage").then((m) => ({ d
 const PurchaseOrdersPage = React.lazy(() => import("./purchasing/PurchaseOrdersPage").then((m) => ({ default: m.PurchaseOrdersPage })));
 const CostsPage = React.lazy(() => import("./purchasing/CostsPage").then((m) => ({ default: m.CostsPage })));
 const BillsPage = React.lazy(() => import("./purchasing/BillsPage").then((m) => ({ default: m.BillsPage })));
+const ShipmentsPage = React.lazy(() => import("./purchasing/ShipmentsPage").then((m) => ({ default: m.ShipmentsPage })));
+const LandedCostsPage = React.lazy(() => import("./purchasing/LandedCostsPage").then((m) => ({ default: m.LandedCostsPage })));
+const StockValuationPage = React.lazy(() => import("./inventory/StockValuationPage").then((m) => ({ default: m.StockValuationPage })));
 const PricingPage = React.lazy(() => import("./pricing/PricingPage").then((m) => ({ default: m.PricingPage })));
 const WarehouseDeskPage = React.lazy(() => import("./picking/WarehouseDesk").then((m) => ({ default: m.WarehouseDeskPage })));
 const StaffApp = React.lazy(() => import("./picking/StaffApp").then((m) => ({ default: m.StaffApp })));
@@ -101,6 +104,9 @@ const router = createBrowserRouter([
       { path: "purchase-orders", element: lazy(<PurchaseOrdersPage />) },
       { path: "purchase-costs", element: lazy(<CostsPage />) },
       { path: "supplier-bills", element: lazy(<BillsPage />) },
+      { path: "shipments", element: lazy(<ShipmentsPage />) },
+      { path: "landed-costs", element: lazy(<LandedCostsPage />) },
+      { path: "stock-valuation", element: lazy(<StockValuationPage />) },
       { path: "payroll", element: lazy(<PayrollPage />) },
       { path: "invoices", element: lazy(<InvoicesPage />) },
       ...Object.values(INV_DOCS).map((c) => ({ path: c.route, element: lazy(<DocPage key={c.type} cfg={c} />) })),
