@@ -10,6 +10,7 @@ import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "..
 import { money } from "../accounting/common";
 import { DiscountField, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
 import { PickerChips, staffOf, usePickingStaff } from "../picking/common";
+import { ReportShortcuts } from "../reports/Shortcuts";
 
 type Row = Record<string, unknown>;
 interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number }
@@ -150,6 +151,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     <>
       <ErpDialog
         open onRequestClose={() => guard(onClose)} size="full" accent="order" icon={<ShoppingCart className="h-4 w-4" />}
+        headerActions={<ReportShortcuts voucher="SALES_ORDER" context={{ CUSTOMER: f.customer_id }} />}
         title={id ? `Edit ${String(initial?.header.doc_no ?? "")}` : "New Sales Order"} status={revise ? <Badge tone="info">Approved order</Badge> : <Badge tone="warning">Awaiting approval</Badge>}
         subtitle={`${used.length} item${used.length === 1 ? "" : "s"} · ${qtyFmt(qtyTotal)} units`}
         footer={

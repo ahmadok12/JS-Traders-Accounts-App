@@ -12,6 +12,7 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { BankPicker, PartyPicker, money, num, today } from "../accounting/common";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { rpc, useAction } from "../purchasing/common";
+import { ReportShortcuts } from "../reports/Shortcuts";
 
 type Row = Record<string, unknown> & { id: string };
 type Dir = "RECEIVED" | "ISSUED";
@@ -206,7 +207,7 @@ export function PdcDialog({ id, onClose }: { id: string; onClose: () => void }) 
   const primary: Act | undefined = actions.find((a) => a === "CLEAR" || a === "DEPOSIT" || a === "REPRESENT");
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon} title={h ? `Cheque ${h.cheque_no}` : "Cheque"} subtitle={h ? `${h.doc_no} · ${received ? "from" : "to"} ${h.party_name}` : undefined}
+      <ErpDialog open onRequestClose={onClose} size="xl" icon={icon} headerActions={h ? <ReportShortcuts voucher="PDC" context={{ PARTY: { type: h.party_type as "CUSTOMER" | "SUPPLIER", id: String(h.party_id) } }} /> : null} title={h ? `Cheque ${h.cheque_no}` : "Cheque"} subtitle={h ? `${h.doc_no} · ${received ? "from" : "to"} ${h.party_name}` : undefined}
         status={h ? <Badge tone={h.is_due ? "warning" : PDC_TONE[st]}>{statusLabel(h)}</Badge> : null}
         footer={h && <>
           {actions.filter((a) => a !== primary).map((a) => <Button key={a} variant={a === "BOUNCE" || a === "RETURN" || a === "CANCEL" ? "destructive-ghost" : "ghost"} icon={ICON[a]} onClick={() => setAct(a)}>{ACT_LABEL[a]}</Button>)}

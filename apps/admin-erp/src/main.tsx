@@ -58,6 +58,8 @@ const ConversionsPage = React.lazy(() => import("./fx/ConversionsPage").then((m)
 const FxReportsPage = React.lazy(() => import("./fx/FxReportsPage").then((m) => ({ default: m.FxReportsPage })));
 const PdcPage = React.lazy(() => import("./banking/PdcPage").then((m) => ({ default: m.PdcPage })));
 const BankRecPage = React.lazy(() => import("./banking/BankRecPage").then((m) => ({ default: m.BankRecPage })));
+const ReportsCenterPage = React.lazy(() => import("./reports/ReportsCenter").then((m) => ({ default: m.ReportsCenterPage })));
+const ShortcutSettingsPage = React.lazy(() => import("./reports/Shortcuts").then((m) => ({ default: m.ShortcutSettingsPage })));
 const PricingPage = React.lazy(() => import("./pricing/PricingPage").then((m) => ({ default: m.PricingPage })));
 const WarehouseDeskPage = React.lazy(() => import("./picking/WarehouseDesk").then((m) => ({ default: m.WarehouseDeskPage })));
 const StaffApp = React.lazy(() => import("./picking/StaffApp").then((m) => ({ default: m.StaffApp })));
@@ -118,6 +120,9 @@ const router = createBrowserRouter([
       { path: "fx", element: lazy(<FxReportsPage />) },
       { path: "pdc", element: lazy(<PdcPage />) },
       { path: "bank-reconciliation", element: lazy(<BankRecPage />) },
+      { path: "reports", element: lazy(<ReportsCenterPage />) },
+      { path: "reports/:code", element: lazy(<ReportsCenterPage />) },
+      { path: "report-shortcuts", element: lazy(<ShortcutSettingsPage />) },
       { path: "stock-valuation", element: lazy(<StockValuationPage />) },
       { path: "payroll", element: lazy(<PayrollPage />) },
       { path: "invoices", element: lazy(<InvoicesPage />) },

@@ -18,6 +18,7 @@ import { DiscountField, fetchGdnLinePrices, n, qtyFmt, useItemAvailability, useL
 import { autoFill, useOpenReceipts } from "./allocations";
 import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { ReportShortcuts } from "../reports/Shortcuts";
 
 type Row = Record<string, unknown> & { id: string };
 const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { DRAFT: "warning", POSTED: "info", CANCELLED: "neutral", REVERSED: "danger" };
@@ -354,6 +355,7 @@ function InvoiceDraft({ data, onClose }: { data: InvData; onClose: () => void })
   return (
     <>
       <ErpDialog open onRequestClose={() => guard(onClose)} size="full" accent="invoice" icon={icon} title={String(h.doc_no)} subtitle={`${cust.name}${cust.city ? ` · ${cust.city}` : ""}`}
+        headerActions={<ReportShortcuts voucher="SALES_INVOICE" context={{ CUSTOMER: h.customer_id as string }} />}
         status={<Badge tone="warning">Draft</Badge>}
         footer={
           <>
@@ -531,6 +533,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   return (
     <>
       <ErpDialog open onRequestClose={onClose} size="full" accent="invoice" icon={icon} title={String(h.doc_no)} subtitle={`${cust.name}${cust.city ? ` · ${cust.city}` : ""}`}
+        headerActions={<ReportShortcuts voucher="SALES_INVOICE" context={{ CUSTOMER: h.customer_id as string }} />}
         status={<>{h.is_quick ? <Badge tone="neutral" className="mr-1">Quick</Badge> : null}{status === "POSTED" ? <Badge tone={overdue ? "danger" : PAY_TONE[String(data.pay.payment_status)]}>{overdue ? "Overdue" : payLabel(String(data.pay.payment_status))}</Badge> : <Badge tone={STATUS_TONE[status]}>{status.charAt(0) + status.slice(1).toLowerCase()}</Badge>}</>}
         footer={
           <>

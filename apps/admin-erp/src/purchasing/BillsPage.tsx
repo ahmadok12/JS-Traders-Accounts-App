@@ -17,6 +17,7 @@ import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Att
 import { BILL_TONE, CurrencyInput, rpc, useAction, useCan, useItemInfo, useSupplierName } from "./common";
 import { ApplyEarlierFxDialog, FxPayDialog } from "../fx/FxPaymentsPage";
 import { FxDiff, PaySourceFields, emptySource, rateText, sourcePayload, type PaySource } from "../fx/common";
+import { ReportShortcuts } from "../reports/Shortcuts";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Receipt className="h-4 w-4" />;
@@ -200,7 +201,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   };
   return (
     <>
-      <ErpDialog open onRequestClose={onClose} size="full" accent="bill" icon={icon} title={h ? String(h.doc_no) : "Bill"} subtitle={sup ? `${sup.name}${sup.city ? ` · ${sup.city}` : ""}` : undefined}
+      <ErpDialog open onRequestClose={onClose} size="full" accent="bill" icon={icon} headerActions={<ReportShortcuts voucher="SUPPLIER_BILL" context={{ SUPPLIER: h?.supplier_id as string | undefined }} />} title={h ? String(h.doc_no) : "Bill"} subtitle={sup ? `${sup.name}${sup.city ? ` · ${sup.city}` : ""}` : undefined}
         status={h ? <>{h.is_quick ? <Badge tone="neutral" className="mr-1">Quick</Badge> : null}{st === "POSTED" ? <Badge tone={PAY_TONE[q.data?.v?.payment_status ?? "UNPAID"]}>{String(q.data?.v?.payment_status ?? "").replace("_", " ").toLowerCase()}</Badge> : <Badge tone={BILL_TONE[st]}>{st.toLowerCase()}</Badge>}</> : null}
         footer={h && <>
           {draft && c.manage && <Button variant="destructive-ghost" icon={<Ban className="h-3.5 w-3.5" />} onClick={() => setAsk("cancel")}>Cancel draft</Button>}

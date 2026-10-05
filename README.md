@@ -29,6 +29,26 @@ One Supabase PostgreSQL database per environment, multiple controlled apps.
 - Test: `tests/sql/picking_teams.sql` (runs as admin / ali / bilal and rolls back).
 - If moving staff errors with "function does not exist", run `supabase/RUN_ME_set_staff_warehouses.sql` once in the SQL editor.
 
+## Reports, dashboard and report shortcuts (Stage 11) — 2026-10-05
+
+- **Reports** (`/reports`, registry in `apps/admin-erp/src/reports/registry.tsx`): 41 reports in Sales, Inventory, Purchasing & imports, Finance,
+  Cash/bank/cheques, People, Administration. Each is a fixed, permission-checked database function (`rpt_*`, security invoker so RLS applies;
+  money columns that need extra rights come back empty) or an existing screen. Generic report screen: period / as-of / party / warehouse /
+  bank / account filters, filter rows, sort by any column, group by with subtotals, choose columns, totals, open the document from any row,
+  export Excel (.xlsx) / CSV, print / save as PDF, saved reports (personal or shared by an administrator; `saved_reports`).
+- Reports include: sales register (with COGS / margin), sales by item, dispatch register, pending orders, receivables / payables ageing
+  (buckets always add up to the ledger balance) + open-document detail, customer / supplier / any-party ledger, stock summary (any past date,
+  reserved, available, value), low stock, stock movement summary, count variance, purchase register, purchases by item, shipments & ETA,
+  landed cost charges, foreign payments, P&L (with previous-period comparison), balance sheet, general ledger, trial balance, cash & bank
+  summary, bank book, unreconciled bank items, PDC register, payroll register, employee advances, pay items, assembly labour, audit activity.
+- **Dashboard** (`rpt_dashboard`, role-aware): sales month vs last month, profit, receivables (overdue), payables, cash & bank, stock value,
+  open orders, shipments; 12-month sales chart; top customers; "needs attention" alerts (cheques due / bounced, overdue invoices, orders to
+  approve, picking, low stock, late shipments, unreconciled bank lines).
+- **Report shortcuts** (spec §20.1, `report_shortcuts`, Administration → Report shortcuts): configurable buttons on sales invoices, orders,
+  quotations, supplier bills, purchase orders, receipts / payments and cheques that open a quick view (or the full report) for the current
+  customer / supplier / bank / party. Only declared report parameters can be mapped — no SQL from configuration.
+- Tests: `tests/sql/reports_reconcile.sql` (10 reconciliation checks), `tests/unit/reports.test.ts`.
+
 ## Post-dated cheques and bank reconciliation (Stage 10) — 2026-10-05
 
 - **Post-dated cheques** (`/pdc`, PDC-): received from customers / issued to suppliers. HELD (in hand / issued; shown as *due* from the cheque date)

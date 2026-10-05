@@ -14,6 +14,7 @@ import { DiscountField, qtyFmt } from "../sales/common";
 import { printDocument } from "../sales/print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { CurrencyInput, PO_TONE, poLabel, rpc, useAction, useCan, useItemInfo } from "./common";
+import { ReportShortcuts } from "../reports/Shortcuts";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -154,6 +155,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
   return (
     <>
       <ErpDialog open onRequestClose={onClose} size="full" accent="purchase" icon={icon} title={h ? String(h.doc_no) : "New purchase order"}
+        headerActions={<ReportShortcuts voucher="PURCHASE_ORDER" context={{ SUPPLIER: head.supplier_id }} />}
         subtitle={(h?.supplier as { name: string } | undefined)?.name} status={h ? <Badge tone={PO_TONE[st]}>{poLabel(st)}</Badge> : null}
         footer={<>
           {id && ["DRAFT", "APPROVED"].includes(st) && c.manage && <Button variant="destructive-ghost" icon={<Ban className="h-3.5 w-3.5" />} onClick={() => setAsk("cancel")}>Cancel order</Button>}

@@ -1,3 +1,4 @@
+import { ReportShortcuts } from "../reports/Shortcuts";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -93,6 +94,8 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
     <>
       <ErpDialog
         open onRequestClose={onClose} size="xl" title={title} icon={ENTRY_ICON[type]}
+        headerActions={data && (type === "RECEIPT" || type === "PAYMENT") ? <ReportShortcuts voucher={type === "RECEIPT" ? "BANK_RECEIPT" : "BANK_PAYMENT"}
+          context={{ BANK_ACCOUNT: data.bank_account_id as string | null, PARTY: data.party_id ? { type: data.party_type as "CUSTOMER" | "SUPPLIER" | "AGENT" | "EMPLOYEE", id: String(data.party_id) } : null }} /> : null}
         subtitle={data ? `${ENTRY_LABEL[type]} · ${formatDate(data.entry_date as string)}` : undefined}
         status={<Badge tone={STATUS_TONE[status]}>{humanize(status)}</Badge>}
         footer={

@@ -17,6 +17,7 @@ import { DiscountField, n, qtyFmt, useLastPrice } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
 import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { ReportShortcuts } from "../reports/Shortcuts";
 
 type Row = Record<string, unknown> & { id: string };
 const Q_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -178,6 +179,7 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
   return (
     <>
       <ErpDialog open onRequestClose={() => guard(onClose)} size="full" accent="quote" icon={icon} title={id ? `Edit ${String(h?.doc_no ?? "")}` : "New Quotation"}
+        headerActions={<ReportShortcuts voucher="QUOTATION" context={{ CUSTOMER: f.customer_id }} />}
         footer={
           <>
             {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
@@ -296,6 +298,7 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
   return (
     <>
       <ErpDialog open onRequestClose={onClose} size="full" accent="quote" icon={icon} title={h ? String(h.doc_no) : "Quotation"} subtitle={cust ? `${cust.name}${cust.city ? ` · ${cust.city}` : ""}` : undefined}
+        headerActions={<ReportShortcuts voucher="QUOTATION" context={{ CUSTOMER: h?.customer_id as string | undefined }} />}
         status={h ? <Badge tone={isExpired(h) ? "danger" : Q_TONE[status]}>{isExpired(h) ? "Expired" : qLabel(status)}</Badge> : null}
         footer={
           <>

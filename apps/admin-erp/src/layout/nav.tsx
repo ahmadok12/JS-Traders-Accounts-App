@@ -45,6 +45,8 @@ import {
   Coins,
   Globe2,
   ArrowRightLeft,
+  BarChart3,
+  Zap,
 } from "lucide-react";
 import type * as React from "react";
 import { P } from "@jst/permissions";
@@ -66,7 +68,7 @@ export interface NavGroup {
 
 /** Navigation follows the ERP module structure (spec §3.1), filtered by role. */
 export const NAV: NavGroup[] = [
-  { label: "", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }, { to: "/warehouse-desk", label: "Warehouse Desk", icon: Gauge, perms: [P.pickingManage] }] },
+  { label: "", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }, { to: "/warehouse-desk", label: "Warehouse Desk", icon: Gauge, perms: [P.pickingManage] }, { to: "/reports", label: "Reports", icon: BarChart3 }] },
   {
     label: "Sales",
     items: [
@@ -153,6 +155,7 @@ export const NAV: NavGroup[] = [
       { to: "/users", label: "Users & Access", icon: ShieldCheck, perms: [P.usersView, P.securityManage] },
       { to: "/audit", label: "Audit Log", icon: ScrollText, perms: [P.auditView] },
       { to: "/settings", label: "Settings", icon: Settings, perms: [P.settingsManage] },
+      { to: "/report-shortcuts", label: "Report shortcuts", icon: Zap, perms: [P.settingsManage] },
     ],
   },
 ];
