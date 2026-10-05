@@ -15,6 +15,8 @@ import { printDocument } from "../sales/print";
 import { DiscountField } from "../sales/common";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { BILL_TONE, CurrencyInput, rpc, useAction, useCan, useItemInfo, useSupplierName } from "./common";
+import { ApplyEarlierFxDialog, FxPayDialog } from "../fx/FxPaymentsPage";
+import { FxDiff, PaySourceFields, emptySource, rateText, sourcePayload, type PaySource } from "../fx/common";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Receipt className="h-4 w-4" />;
@@ -37,7 +39,7 @@ export function BillsPage() {
   const [quick, setQuick] = React.useState(params.get("quick") === "1");
   const flt = FILTERS[f];
   const list = useEntityList<Row>({
-    table: "supplier_bills_v", select: "id, doc_no, bill_date, due_date, supplier_name, supplier_invoice_no, currency, total_amount, total_pkr, paid_pkr, outstanding_pkr, payment_status, status, discount_amount, is_quick",
+    table: "supplier_bills_v", select: "id, doc_no, bill_date, due_date, supplier_name, supplier_invoice_no, currency, total_amount, total_pkr, paid_pkr, outstanding_pkr, outstanding_fx, payment_status, status, discount_amount, is_quick",
     companyId, search: q, searchColumns: ["doc_no", "supplier_invoice_no", "supplier_name"], filters: { status: flt.status },
     orderBy: { column: "bill_date", ascending: false }, page, pageSize: 50, enabled: c.costs,
   });
@@ -65,7 +67,9 @@ export function BillsPage() {
               { key: "dt", header: "Date", width: "100px", cell: (r) => formatDate(r.bill_date as string) },
               { key: "s", header: "Supplier", cell: (r) => <span>{String(r.supplier_name)}{r.supplier_invoice_no ? <span className="text-xs text-ink-muted"> · {String(r.supplier_invoice_no)}</span> : null}</span> },
               { key: "t", header: "Amount", width: "150px", align: "right", cell: (r) => <span className="tabular-nums">{r.currency !== "PKR" && <span className="text-2xs text-ink-muted">{String(r.currency)} {money(r.total_amount as number)} = </span>}{money(r.total_pkr as number)}</span> },
-              { key: "o", header: "Outstanding", width: "130px", align: "right", cell: (r) => <span className={cn("font-medium tabular-nums", Number(r.outstanding_pkr) > 0 && "text-danger")}>{r.status === "POSTED" ? money(r.outstanding_pkr as number) : ""}</span> },
+              { key: "o", header: "Outstanding", width: "140px", align: "right", cell: (r) => r.status !== "POSTED" ? null : r.currency !== "PKR"
+                ? <span className={cn("font-medium tabular-nums", Number(r.outstanding_fx) > 0 && "text-danger")}>{String(r.currency)} {money(r.outstanding_fx as number)}{Number(r.outstanding_fx) > 0 && <div className="text-2xs font-normal text-ink-muted">PKR {money(r.outstanding_pkr as number)} at bill rate</div>}</span>
+                : <span className={cn("font-medium tabular-nums", Number(r.outstanding_pkr) > 0 && "text-danger")}>{money(r.outstanding_pkr as number)}</span> },
               { key: "due", header: "Due", width: "100px", hideBelow: "lg", cell: (r) => (r.due_date ? formatDate(r.due_date as string) : null) },
               { key: "st", header: "Status", width: "130px", cell: (r) => r.status === "POSTED" ? <Badge tone={PAY_TONE[String(r.payment_status)]}>{String(r.payment_status).replace("_", " ").toLowerCase()}</Badge> : <Badge tone={BILL_TONE[String(r.status)]}>{String(r.status).toLowerCase()}</Badge> },
             ]}
@@ -133,12 +137,12 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
     queryFn: async () => {
       const [h, v, l, a] = await Promise.all([
         sb().from("supplier_bills").select("*, supplier:suppliers(name, code, city)").eq("id", id).single(),
-        sb().from("supplier_bills_v").select("paid_pkr, outstanding_pkr, payment_status").eq("id", id).maybeSingle(),
+        sb().from("supplier_bills_v").select("paid_pkr, outstanding_pkr, payment_status, paid_fx, outstanding_fx, fx_diff, paid_actual_pkr").eq("id", id).maybeSingle(),
         sb().from("supplier_bill_lines").select("*").eq("bill_id", id).order("line_no"),
         sb().from("supplier_bill_allocations").select("id, amount, created_at, payment_entry_id, status, entry:journal_entries(entry_no, entry_date, reference)").eq("bill_id", id).eq("status", "ACTIVE").order("created_at"),
       ]);
       if (h.error) throw h.error;
-      return { h: h.data as Row, v: v.data as { paid_pkr: number; outstanding_pkr: number; payment_status: string } | null, lines: (l.data ?? []) as Row[], allocs: (a.data ?? []) as Row[] };
+      return { h: h.data as Row, v: v.data as { paid_pkr: number; outstanding_pkr: number; payment_status: string; paid_fx: number; outstanding_fx: number; fx_diff: number; paid_actual_pkr: number } | null, lines: (l.data ?? []) as Row[], allocs: (a.data ?? []) as Row[] };
     },
   });
   const h = q.data?.h;
@@ -148,7 +152,8 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const [head, setHead] = React.useState({ bill_date: today(), due_date: "", supplier_invoice_no: "", currency: "PKR", fx_rate: "1", notes: "", discount_amount: "" });
   const [lines, setLines] = React.useState<BLine[]>([]);
   const [payNow, setPayNow] = React.useState(false);
-  const [pay, setPay] = React.useState({ bank: null as string | null, amount: "", date: today(), reference: "" });
+  const [pay, setPay] = React.useState({ bank: null as string | null, amount: "", date: today(), reference: "", rate: "" });
+  const [paySrc, setPaySrc] = React.useState<PaySource>(emptySource());
   const [tab, setTab] = React.useState("lines");
   const [ask, setAsk] = React.useState<null | "post" | "reverse" | "cancel" | "pay" | "apply">(null);
   const [reason, setReason] = React.useState("");
@@ -172,13 +177,18 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const save = useAction(() => rpc("save_supplier_bill", { p_id: id, p_header: { company_id: companyId, supplier_id: h?.supplier_id, ...head, fx_rate: fx, discount_amount: disc }, p_lines: payload() }), "Saved");
   const post = useAction(async () => {
     await rpc("save_supplier_bill", { p_id: id, p_header: { company_id: companyId, supplier_id: h?.supplier_id, ...head, fx_rate: fx, discount_amount: disc }, p_lines: payload() });
-    await rpc("post_supplier_bill", { p_id: id, p_pay: payNow ? { bank_account_id: pay.bank, amount: num(pay.amount), date: pay.date, reference: pay.reference || null } : null });
+    await rpc("post_supplier_bill", { p_id: id, p_pay: !payNow ? null : head.currency === "PKR"
+      ? { bank_account_id: pay.bank, amount: num(pay.amount), date: pay.date, reference: pay.reference || null }
+      : { amount: num(pay.amount), fx_rate: num(pay.rate), date: pay.date, reference: pay.reference || null, source: sourcePayload(paySrc) } });
   }, payNow ? "Bill posted and paid" : "Bill posted — the amount is on the supplier's account", () => setAsk(null));
   const reverse = useAction(() => rpc("reverse_supplier_bill", { p_id: id, p_reason: reason }), "Bill reversed", () => { setAsk(null); setReason(""); });
   const cancel = useAction(() => rpc("cancel_supplier_bill", { p_id: id }), "Draft cancelled", () => { setAsk(null); onClose(); });
   const unalloc = useAction((aid: string) => rpc("remove_supplier_allocation", { p_id: aid }), "Payment unlinked from this bill");
   const linkShip = useAction((v: string | null) => rpc("set_bill_shipment", { p_bill_id: id, p_shipment_id: v }), (v) => (v ? "Linked to the shipment" : "Shipment link removed"));
+  const foreign = String(h?.currency ?? "PKR") !== "PKR";
   const outstanding = q.data?.v?.outstanding_pkr ?? 0;
+  const outstandingFx = q.data?.v?.outstanding_fx ?? 0;
+  const owes = foreign ? outstandingFx : outstanding;
   const sup = h?.supplier as { name: string; code: string; city: string | null } | undefined;
   const print = () => {
     if (!h) return;
@@ -201,7 +211,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
           <Button onClick={onClose}>Close</Button>
           {editable && <Button icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending} onClick={() => save.mutate(undefined)}>Save draft</Button>}
           {draft && c.approve && <Button variant="primary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={missing > 0} title={missing ? "Enter every price first" : undefined} onClick={() => setAsk("post")}>{payNow ? "Post & pay" : "Post bill"}</Button>}
-          {st === "POSTED" && outstanding > 0 && h.currency === "PKR" && c.approve && can("journals.create") && <>
+          {st === "POSTED" && owes > 0 && c.approve && can("journals.create") && <>
             <Button icon={<Link2 className="h-3.5 w-3.5" />} onClick={() => setAsk("apply")}>Use earlier payment</Button>
             <Button variant="primary" icon={<Banknote className="h-3.5 w-3.5" />} onClick={() => setAsk("pay")}>Pay</Button></>}
         </>}>
@@ -223,8 +233,12 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
                   : <div className="text-lg font-semibold tabular-nums">{money(disc)}</div>}</div>}
               <Tile k={`Total ${head.currency}${disc ? " (after discount)" : ""}`} v={money(total)} />
               {head.currency !== "PKR" && <Tile k="Total PKR" v={money(total * fx)} />}
-              {st === "POSTED" && <Tile k="Paid" v={money(q.data?.v?.paid_pkr)} />}
-              {st === "POSTED" && <Tile k="Outstanding" v={money(outstanding)} hot={outstanding > 0} />}
+              {st === "POSTED" && !foreign && <Tile k="Paid" v={money(q.data?.v?.paid_pkr)} />}
+              {st === "POSTED" && !foreign && <Tile k="Outstanding" v={money(outstanding)} hot={outstanding > 0} />}
+              {st === "POSTED" && foreign && <Tile k={`Paid ${head.currency}`} v={money(q.data?.v?.paid_fx)} />}
+              {st === "POSTED" && foreign && <Tile k={`Outstanding ${head.currency}`} v={money(outstandingFx)} hot={outstandingFx > 0} />}
+              {st === "POSTED" && foreign && Number(q.data?.v?.paid_fx) > 0 && <div className="rounded-card border border-line px-3 py-2"><div className="text-2xs uppercase tracking-wide text-ink-muted">Exchange difference</div>
+                <div className="text-lg font-semibold"><FxDiff v={q.data?.v?.fx_diff} /></div><div className="text-2xs text-ink-muted">actually paid PKR {money(q.data?.v?.paid_actual_pkr)}</div></div>}
             </div>
             <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Lines (${lines.length})` }, ...(st === "POSTED" ? [{ key: "pay", label: `Payments (${q.data?.allocs.length ?? 0})` }] : []),
               { key: "files", label: filesLabel(files.data?.length) }, { key: "history", label: "History" }]} />
@@ -260,9 +274,19 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
                   <Field label="Notes"><Textarea rows={2} disabled={!editable} value={head.notes} onChange={(e) => setHead((s) => ({ ...s, notes: e.target.value }))} /></Field>
                   {draft && c.approve && can("journals.create") && (
                     <div className={cn("rounded-card border p-3", payNow ? "border-primary" : "border-line")}>
-                      <Checkbox checked={payNow} disabled={head.currency !== "PKR"} onChange={(v) => { setPayNow(v); if (v && !pay.amount) setPay((s) => ({ ...s, amount: String(total) })); }}
-                        label="Pay Supplier Now" description={head.currency !== "PKR" ? "For PKR bills — foreign-currency payments come with multi-currency settlement." : "Records the payment with the bill. Paying more than the bill keeps the extra as an advance to the supplier."} />
-                      {payNow && (
+                      <Checkbox checked={payNow} onChange={(v) => { setPayNow(v); if (v && !pay.amount) setPay((s) => ({ ...s, amount: String(total) })); }}
+                        label="Pay Supplier Now" description={head.currency !== "PKR" ? `Pay in ${head.currency} at this payment's own rate — the difference from the bill rate is booked as exchange gain / loss.` : "Records the payment with the bill. Paying more than the bill keeps the extra as an advance to the supplier."} />
+                      {payNow && head.currency !== "PKR" && (
+                        <FormGrid cols={2} className="mt-2">
+                          <Field label="Paid from" required className="sm:col-span-2"><PaySourceFields value={paySrc} onChange={setPaySrc} currency={head.currency} fxAmount={num(pay.amount) || 0} rate={num(pay.rate) || 0} /></Field>
+                          <Field label={`Amount (${head.currency})`} required><Input className="text-right tabular-nums" inputMode="decimal" value={pay.amount} onChange={(e) => setPay((s) => ({ ...s, amount: e.target.value }))} /></Field>
+                          <Field label={`Payment rate (PKR per 1 ${head.currency})`} required hint={`Bill rate ${head.fx_rate}`}><Input className="text-right tabular-nums" inputMode="decimal" value={pay.rate} onChange={(e) => setPay((s) => ({ ...s, rate: e.target.value }))} /></Field>
+                          <Field label="Date"><Input type="date" value={pay.date} onChange={(e) => setPay((s) => ({ ...s, date: e.target.value }))} /></Field>
+                          <Field label="Reference"><Input value={pay.reference} onChange={(e) => setPay((s) => ({ ...s, reference: e.target.value }))} /></Field>
+                          {num(pay.amount) > 0 && num(pay.rate) > 0 && <p className="text-xs text-ink-muted sm:col-span-2">PKR cost {money(num(pay.amount) * num(pay.rate))} · <FxDiff v={Math.min(num(pay.amount), total) * (num(pay.rate) - fx)} /></p>}
+                        </FormGrid>
+                      )}
+                      {payNow && head.currency === "PKR" && (
                         <FormGrid cols={2} className="mt-2">
                           <Field label="Paid from" required className="sm:col-span-2"><BankPicker value={pay.bank} onChange={(v) => setPay((s) => ({ ...s, bank: v }))} /></Field>
                           <Field label="Amount" required><Input className="text-right tabular-nums" inputMode="decimal" value={pay.amount} onChange={(e) => setPay((s) => ({ ...s, amount: e.target.value }))} /></Field>
@@ -276,37 +300,59 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
                 </div>
               </>
             )}
-            {tab === "pay" && (
-              <div className="space-y-1.5">
-                {(q.data?.allocs ?? []).length === 0 ? <p className="text-sm text-ink-muted">No payments yet.</p> : (q.data?.allocs ?? []).map((a) => {
-                  const e = a.entry as { entry_no: string; entry_date: string; reference: string | null } | null;
-                  return (
-                    <div key={a.id} className="flex items-center gap-3 rounded-card border border-line px-3 py-2 text-sm">
-                      <span className="w-24 text-xs">{formatDate(e?.entry_date)}</span>
-                      <button className="font-mono text-xs text-primary hover:underline" onClick={() => navigate(`/vouchers?view=${a.payment_entry_id}`)}>{e?.entry_no}</button>
-                      <span className="text-xs text-ink-muted">{e?.reference}</span>
-                      <span className="ml-auto font-medium tabular-nums">{money(a.amount as number)}</span>
-                      {c.approve && <Button size="icon-sm" variant="ghost" title="Unlink from this bill (the payment stays as an advance)" onClick={() => unalloc.mutate(a.id)}><X className="h-3.5 w-3.5" /></Button>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            {tab === "pay" && <BillSettlements billId={id} currency={String(h.currency)} canUnlink={c.approve} onUnlink={(aid) => unalloc.mutate(aid)} />}
             {tab === "files" && <AttachmentsPanel entityType="supplier_bills" entityId={id} />}
             {tab === "history" && <AuditTimeline table="supplier_bills" id={id} />}
           </>
         )}
       </ErpDialog>
       <ConfirmDialog open={ask === "post"} title="Post this bill?" confirmLabel={payNow ? "Post & pay" : "Post"} loading={post.isPending} onCancel={() => setAsk(null)} onConfirm={() => post.mutate(undefined)}
-        message={`PKR ${money(total * fx)} goes on ${sup?.name ?? "the supplier"}'s account. Received goods: clears “goods received not billed”; any price difference adjusts stock value; receipts without a cost are costed from this bill.${payNow ? ` PKR ${money(num(pay.amount))} is paid now.` : ""}`} />
+        message={`${head.currency !== "PKR" ? `${head.currency} ${money(total)} @ ${fx} = ` : ""}PKR ${money(total * fx)} goes on ${sup?.name ?? "the supplier"}'s account. Received goods: clears “goods received not billed”; any price difference adjusts stock value; receipts without a cost are costed from this bill.${payNow ? ` ${head.currency} ${money(num(pay.amount))} is paid now.` : ""}`} />
       <ConfirmDialog open={ask === "reverse"} title="Reverse this bill?" tone="destructive" confirmLabel="Reverse" loading={reverse.isPending} onCancel={() => setAsk(null)} onConfirm={() => reverse.mutate(undefined)}
         message="Its accounting entry is reversed and the receipts can be billed again. Unlink any payments first.">
         <Field label="Reason" required className="mt-3"><Input value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
       </ConfirmDialog>
       <ConfirmDialog open={ask === "cancel"} title="Cancel this draft?" tone="destructive" confirmLabel="Cancel draft" loading={cancel.isPending} onCancel={() => setAsk(null)} onConfirm={() => cancel.mutate(undefined)} message="The receipts become available to bill again." />
-      {ask === "pay" && h && <PayBillDialog bill={h} outstanding={outstanding} onClose={() => setAsk(null)} />}
-      {ask === "apply" && h && <ApplyPaymentDialog bill={h} outstanding={outstanding} onClose={() => setAsk(null)} />}
+      {ask === "pay" && h && !foreign && <PayBillDialog bill={h} outstanding={outstanding} onClose={() => setAsk(null)} />}
+      {ask === "apply" && h && !foreign && <ApplyPaymentDialog bill={h} outstanding={outstanding} onClose={() => setAsk(null)} />}
+      {ask === "pay" && h && foreign && <FxPayDialog supplierId={String(h.supplier_id)} currency={String(h.currency)} billId={id} amount={outstandingFx} onClose={() => setAsk(null)} onDone={() => setAsk(null)} />}
+      {ask === "apply" && h && foreign && <ApplyEarlierFxDialog bill={h} outstanding={outstandingFx} onClose={() => setAsk(null)} />}
     </>
+  );
+}
+
+interface Settlement { allocation_id: string; settle_date: string; payment_no: string; payment_entry_id: string; fx_payment_id: string | null; paid_via: string | null; fx_amount: number; bill_rate: number; pay_rate: number; carrying_pkr: number; actual_pkr: number; fx_diff: number }
+function BillSettlements({ billId, currency, canUnlink, onUnlink }: { billId: string; currency: string; canUnlink: boolean; onUnlink: (id: string) => void }) {
+  const navigate = useNavigate();
+  const q = useQuery({ queryKey: ["bill-settlements", billId], queryFn: async () => (await rpc<Settlement[]>("bill_settlements", { p_bill_id: billId })) ?? [] });
+  const rows = q.data ?? [];
+  if (q.isLoading) return <Skeleton className="h-24" />;
+  if (!rows.length) return <p className="text-sm text-ink-muted">No payments yet.</p>;
+  const foreign = currency !== "PKR";
+  const sfx = rows.reduce((s, r) => s + Number(r.fx_amount), 0), spk = rows.reduce((s, r) => s + Number(r.actual_pkr), 0), sd = rows.reduce((s, r) => s + Number(r.fx_diff), 0);
+  return (
+    <div className="overflow-x-auto rounded-card border border-line">
+      <table className="w-full text-sm">
+        <thead className="bg-subtle"><tr><th className={th}>Date</th><th className={th}>Payment</th><th className={th}>Paid via</th><th className={cn(th, "text-right")}>{currency}</th>
+          {foreign && <><th className={cn(th, "text-right")}>Rate paid</th><th className={cn(th, "text-right")}>At bill rate</th></>}<th className={cn(th, "text-right")}>PKR paid</th>{foreign && <th className={cn(th, "text-right")}>FX</th>}<th className={cn(th, "w-10")} /></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.allocation_id}>
+              <td className={cn(td, "text-xs")}>{formatDate(r.settle_date)}</td>
+              <td className={cn(td, "font-mono text-xs")}><button className="text-primary hover:underline" onClick={() => navigate(r.fx_payment_id ? `/fx-payments?view=${r.fx_payment_id}` : `/vouchers?view=${r.payment_entry_id}`)}>{r.payment_no}</button></td>
+              <td className={cn(td, "text-xs")}>{r.paid_via}</td>
+              <td className={cn(td, "text-right tabular-nums")}>{money(r.fx_amount)}</td>
+              {foreign && <><td className={cn(td, "text-right tabular-nums")}>{rateText(r.pay_rate)}</td><td className={cn(td, "text-right tabular-nums text-ink-muted")}>{money(r.carrying_pkr)}</td></>}
+              <td className={cn(td, "text-right tabular-nums")}>{money(r.actual_pkr)}</td>
+              {foreign && <td className={cn(td, "text-right")}><FxDiff v={r.fx_diff} /></td>}
+              <td className={td}>{canUnlink && <Button size="icon-sm" variant="ghost" title={foreign ? "Unlink (the exchange difference is reversed; the payment stays as an advance)" : "Unlink from this bill (the payment stays as an advance)"} onClick={() => onUnlink(r.allocation_id)}><X className="h-3.5 w-3.5" /></Button>}</td>
+            </tr>
+          ))}
+          <tr className="bg-subtle/60 font-semibold"><td className={td} colSpan={3}>Total{foreign && sfx > 0 ? <span className="ml-2 text-2xs font-normal text-ink-muted">average rate {rateText(spk / sfx)} (report only)</span> : null}</td>
+            <td className={cn(td, "text-right tabular-nums")}>{money(sfx)}</td>{foreign && <><td className={td} /><td className={td} /></>}<td className={cn(td, "text-right tabular-nums")}>{money(spk)}</td>{foreign && <td className={cn(td, "text-right")}><FxDiff v={sd} /></td>}<td className={td} /></tr>
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -376,7 +422,8 @@ export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; on
   const [head, setHead] = React.useState({ supplier_invoice_no: "", bill_date: today(), due_date: "", currency: "PKR", fx_rate: "1", notes: "", discount: "" });
   const [lines, setLines] = React.useState<QBLine[]>([newQB("ITEM")]);
   const [payNow, setPayNow] = React.useState(false);
-  const [pay, setPay] = React.useState({ bank: null as string | null, amount: "", date: today(), reference: "" });
+  const [pay, setPay] = React.useState({ bank: null as string | null, amount: "", date: today(), reference: "", rate: "" });
+  const [paySrc, setPaySrc] = React.useState<PaySource>(emptySource());
   const [showErrors, setShowErrors] = React.useState(false);
   const [confirm, setConfirm] = React.useState(false);
   React.useEffect(() => {
@@ -402,7 +449,8 @@ export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; on
   }
   if (disc > gross + 0.001) errors.disc = "Discount is more than the bill";
   else if (used.length && total <= 0) errors.disc = "The bill total must be more than 0";
-  if (payNow && (!pay.bank || !(num(pay.amount) > 0))) errors.pay = "Choose the account and the amount paid";
+  if (payNow && head.currency === "PKR" && (!pay.bank || !(num(pay.amount) > 0))) errors.pay = "Choose the account and the amount paid";
+  if (payNow && head.currency !== "PKR" && (!(num(pay.amount) > 0) || !(num(pay.rate) > 0) || (paySrc.kind === "BANK" ? !paySrc.bank_account_id : !paySrc.agent_id))) errors.pay = "Choose where it was paid from, the amount and this payment's rate";
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const canPay = can("journals.create");
 
@@ -411,7 +459,8 @@ export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; on
       currency: head.currency, fx_rate: fx || 1, discount_amount: disc, notes: head.notes },
     p_lines: used.map((l) => ({ kind: l.kind, product_id: l.product_id, variant_id: l.variant_id, warehouse_id: l.warehouse_id, account_id: l.account_id,
       quantity: num(l.qty), unit_price: num(l.price), description: l.desc || null })),
-    p_pay: payNow ? { bank_account_id: pay.bank, amount: num(pay.amount), date: pay.date, reference: pay.reference || null } : null,
+    p_pay: !payNow ? null : head.currency === "PKR" ? { bank_account_id: pay.bank, amount: num(pay.amount), date: pay.date, reference: pay.reference || null }
+      : { amount: num(pay.amount), fx_rate: num(pay.rate), date: pay.date, reference: pay.reference || null, source: sourcePayload(paySrc) },
     p_idempotency_key: idem.current,
   }), payNow ? "Goods received, bill posted and paid" : "Goods received and bill posted");
   const tryPost = () => {
@@ -438,7 +487,7 @@ export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; on
           <Field label="Supplier's invoice no."><Input value={head.supplier_invoice_no} onChange={(e) => setHead((s) => ({ ...s, supplier_invoice_no: e.target.value }))} /></Field>
           <Field label="Bill date" required><Input type="date" value={head.bill_date} onChange={(e) => setHead((s) => ({ ...s, bill_date: e.target.value }))} /></Field>
           <Field label="Due date"><Input type="date" value={head.due_date} onChange={(e) => setHead((s) => ({ ...s, due_date: e.target.value }))} /></Field>
-          <Field label="Currency" error={err("fx")}><CurrencyInput currency={head.currency} rate={head.fx_rate} onCurrency={(v) => { setHead((s) => ({ ...s, currency: v })); if (v !== "PKR") setPayNow(false); }} onRate={(v) => setHead((s) => ({ ...s, fx_rate: v }))} /></Field>
+          <Field label="Currency" error={err("fx")}><CurrencyInput currency={head.currency} rate={head.fx_rate} onCurrency={(v) => setHead((s) => ({ ...s, currency: v }))} onRate={(v) => setHead((s) => ({ ...s, fx_rate: v }))} /></Field>
           <Field label="Notes" className="sm:col-span-2"><Input value={head.notes} onChange={(e) => setHead((s) => ({ ...s, notes: e.target.value }))} /></Field>
         </FormGrid>
         {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
@@ -463,9 +512,18 @@ export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; on
           <div>
             {canPay && (
               <div className={cn("rounded-card border p-3", payNow ? "border-primary" : "border-line")}>
-                <Checkbox checked={payNow} disabled={head.currency !== "PKR"} onChange={(v) => { setPayNow(v); if (v && !pay.amount && total > 0) setPay((s) => ({ ...s, amount: String(total) })); }}
-                  label="Pay Supplier Now" description={head.currency !== "PKR" ? "For PKR bills — foreign-currency payments come with multi-currency settlement." : "Records the payment with the bill. Paying more than the bill keeps the extra as an advance to the supplier."} />
-                {payNow && (
+                <Checkbox checked={payNow} onChange={(v) => { setPayNow(v); if (v && !pay.amount && total > 0) setPay((s) => ({ ...s, amount: String(total) })); }}
+                  label="Pay Supplier Now" description={head.currency !== "PKR" ? `Pay in ${head.currency} at this payment's own rate (bank or payment agent).` : "Records the payment with the bill. Paying more than the bill keeps the extra as an advance to the supplier."} />
+                {payNow && head.currency !== "PKR" && (
+                  <FormGrid cols={2} className="mt-2">
+                    <Field label="Paid from" required className="sm:col-span-2"><PaySourceFields value={paySrc} onChange={setPaySrc} currency={head.currency} fxAmount={num(pay.amount) || 0} rate={num(pay.rate) || 0} /></Field>
+                    <Field label={`Amount (${head.currency})`} required><Input className="text-right tabular-nums" inputMode="decimal" value={pay.amount} onChange={(e) => setPay((s) => ({ ...s, amount: e.target.value }))} /></Field>
+                    <Field label={`Payment rate (PKR per 1 ${head.currency})`} required><Input className="text-right tabular-nums" inputMode="decimal" value={pay.rate} onChange={(e) => setPay((s) => ({ ...s, rate: e.target.value }))} /></Field>
+                    <Field label="Date"><Input type="date" value={pay.date} onChange={(e) => setPay((s) => ({ ...s, date: e.target.value }))} /></Field>
+                    <Field label="Reference"><Input value={pay.reference} onChange={(e) => setPay((s) => ({ ...s, reference: e.target.value }))} /></Field>
+                  </FormGrid>
+                )}
+                {payNow && head.currency === "PKR" && (
                   <FormGrid cols={2} className="mt-2">
                     <Field label="Paid from" required className="sm:col-span-2"><BankPicker value={pay.bank} onChange={(v) => setPay((s) => ({ ...s, bank: v }))} /></Field>
                     <Field label="Amount" required><Input className="text-right tabular-nums" inputMode="decimal" value={pay.amount} onChange={(e) => setPay((s) => ({ ...s, amount: e.target.value }))} /></Field>
@@ -493,7 +551,7 @@ export function QuickBillDialog({ onClose, onPosted }: { onClose: () => void; on
       <ConfirmDialog open={confirm} title="Receive goods and post the bill?" loading={post.isPending} confirmLabel={payNow ? "Receive, post & pay" : "Receive & post"}
         onCancel={() => setConfirm(false)}
         onConfirm={() => post.mutate(undefined, { onSuccess: (id) => { setConfirm(false); onPosted(id as string); }, onError: () => { setConfirm(false); idem.current = crypto.randomUUID(); } })}
-        message={`${whCount ? `Stock goes into ${whCount} warehouse${whCount > 1 ? "s" : ""} now. ` : ""}PKR ${money(total * (fx || 1))} goes on ${supInfo.data?.name ?? "the supplier"}'s account.${payNow ? ` PKR ${money(num(pay.amount))} is paid now.` : ""} Use Reverse on the bill to correct it later.`} />
+        message={`${whCount ? `Stock goes into ${whCount} warehouse${whCount > 1 ? "s" : ""} now. ` : ""}PKR ${money(total * (fx || 1))} goes on ${supInfo.data?.name ?? "the supplier"}'s account.${payNow ? ` ${head.currency} ${money(num(pay.amount))} is paid now.` : ""} Use Reverse on the bill to correct it later.`} />
     </>
   );
 }

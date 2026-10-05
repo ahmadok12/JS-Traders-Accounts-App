@@ -5,7 +5,7 @@ import { formatNumber } from "@jst/utilities";
 import { LookupPicker } from "../inventory/pickers";
 
 export type EntryType = "RECEIPT" | "PAYMENT" | "TRANSFER" | "JOURNAL" | "OPENING" | "SYSTEM";
-export type PartyType = "CUSTOMER" | "SUPPLIER" | "EMPLOYEE";
+export type PartyType = "CUSTOMER" | "SUPPLIER" | "EMPLOYEE" | "AGENT";
 
 export const ENTRY_LABEL: Record<EntryType, string> = {
   RECEIPT: "Receipt",
@@ -35,8 +35,8 @@ export function BankPicker(p: { value: string | null; onChange: (v: string | nul
 export function PartyPicker({ type, ...p }: { type: PartyType; value: string | null; onChange: (v: string | null) => void; invalid?: boolean; disabled?: boolean }) {
   const spec = type === "EMPLOYEE"
     ? { table: "employees", label: "full_name", secondary: "code", filters: { is_active: true } }
-    : { table: type === "CUSTOMER" ? "customers" : "suppliers", label: "name", secondary: "code", filters: { is_active: true } };
-  return <LookupPicker key={type} {...p} clearable={false} placeholder={type === "CUSTOMER" ? "Customer…" : type === "SUPPLIER" ? "Supplier…" : "Employee…"} spec={spec} />;
+    : { table: type === "CUSTOMER" ? "customers" : type === "AGENT" ? "payment_agents" : "suppliers", label: "name", secondary: "code", filters: { is_active: true } };
+  return <LookupPicker key={type} {...p} clearable={false} placeholder={type === "CUSTOMER" ? "Customer…" : type === "SUPPLIER" ? "Supplier…" : type === "AGENT" ? "Payment agent…" : "Employee…"} spec={spec} />;
 }
 
 /** System accounts by key (AR_CONTROL, AP_CONTROL, OPENING_BALANCE …) and which accounts need a party. */
@@ -57,6 +57,7 @@ export function useSystemAccounts() {
         if (k === "AR_CONTROL" || k === "CUSTOMER_ADVANCE") partyOf[a.id] = "CUSTOMER";
         if (k === "AP_CONTROL" || k === "SUPPLIER_ADVANCE") partyOf[a.id] = "SUPPLIER";
         if (k === "EMPLOYEE_ADVANCE" || k === "EMPLOYEE_PAYABLE") partyOf[a.id] = "EMPLOYEE";
+        if (k === "AGENT_ADVANCE" || k === "AGENT_PAYABLE") partyOf[a.id] = "AGENT";
       }
       return { byKey, partyOf };
     },
@@ -101,11 +102,13 @@ export function usePartyNames(parties: { type: string | null; id: string | null 
     queryFn: async () => {
       const ids = (t: string) => parties.filter((p) => p.type === t && p.id).map((p) => p.id!) as string[];
       const m = new Map<string, string>();
-      const [c, s, e] = await Promise.all([
+      const [c, s, e, g] = await Promise.all([
         ids("CUSTOMER").length ? sb().from("customers").select("id, name").in("id", ids("CUSTOMER")) : Promise.resolve({ data: [] }),
         ids("SUPPLIER").length ? sb().from("suppliers").select("id, name").in("id", ids("SUPPLIER")) : Promise.resolve({ data: [] }),
         ids("EMPLOYEE").length ? sb().from("employees").select("id, full_name").in("id", ids("EMPLOYEE")) : Promise.resolve({ data: [] }),
+        ids("AGENT").length ? sb().from("payment_agents").select("id, name").in("id", ids("AGENT")) : Promise.resolve({ data: [] }),
       ]);
+      for (const r of (g.data ?? []) as { id: string; name: string }[]) m.set(r.id, r.name);
       for (const r of (c.data ?? []) as { id: string; name: string }[]) m.set(r.id, r.name);
       for (const r of (s.data ?? []) as { id: string; name: string }[]) m.set(r.id, r.name);
       for (const r of (e.data ?? []) as { id: string; full_name: string }[]) m.set(r.id, r.full_name);
@@ -154,6 +157,7 @@ export function Amount({ v, className }: { v: number | string | null | undefined
 export function BalanceText({ v, partyType }: { v: number; partyType: PartyType | "BANK" }) {
   if (Math.abs(v) < 0.005) return <span className="tabular-nums text-ink-faint">0.00</span>;
   const label = partyType === "BANK" ? (v >= 0 ? "" : " overdrawn")
+    : partyType === "AGENT" ? (v >= 0 ? " with agent" : " agent is owed")
     : partyType === "SUPPLIER" ? (v >= 0 ? " we owe" : " they owe")
     : (v >= 0 ? " they owe" : " we owe");
   return <span className="whitespace-nowrap tabular-nums font-medium">{money(Math.abs(v))}<span className="text-2xs font-normal text-ink-muted">{label}</span></span>;

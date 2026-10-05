@@ -9,7 +9,8 @@ import { formatDateTime } from "@jst/utilities";
 
 export type AttachmentEntity =
   | "journal_entries" | "sales_invoices" | "quotations" | "sales_orders" | "gdns" | "goods_receipts" | "stock_adjustments"
-  | "stock_transfers" | "stock_counts" | "assembly_orders" | "reservation_orders" | "price_tasks" | "customers" | "suppliers" | "products" | "purchase_orders" | "supplier_bills" | "purchase_cost_tasks" | "shipments" | "landed_costs";
+  | "stock_transfers" | "stock_counts" | "assembly_orders" | "reservation_orders" | "price_tasks" | "customers" | "suppliers" | "products" | "purchase_orders" | "supplier_bills" | "purchase_cost_tasks" | "shipments" | "landed_costs"
+  | "fx_payments" | "payment_agent_transactions" | "currency_conversions";
 
 export interface Attachment {
   id: string; entity_type: string; entity_id: string; original_file_name: string; mime_type: string; file_size: number;

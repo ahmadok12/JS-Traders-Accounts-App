@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 
-export const CURRENCIES = ["PKR", "RMB", "USD", "AED", "EUR"];
+export const CURRENCIES = ["PKR", "CNY", "USD", "AED", "SAR", "EUR"];
 export const PO_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
   DRAFT: "warning", APPROVED: "info", PARTIALLY_RECEIVED: "info", RECEIVED: "success", CLOSED: "neutral", CANCELLED: "neutral",
 };
@@ -68,7 +68,7 @@ export function CurrencyInput({ currency, rate, onCurrency, onRate, disabled }: 
     <div className="flex items-center gap-2">
       <select className="h-control rounded-control border border-line bg-surface px-2 text-sm" value={currency} disabled={disabled}
         onChange={(e) => { onCurrency(e.target.value); if (e.target.value === "PKR") onRate("1"); }}>
-        {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
+        {CURRENCIES.map((c) => <option key={c} value={c}>{c === "CNY" ? "CNY (RMB)" : c}</option>)}
       </select>
       {currency !== "PKR" && (
         <label className="flex items-center gap-1 text-xs text-ink-muted">@

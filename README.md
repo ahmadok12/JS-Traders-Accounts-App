@@ -29,6 +29,21 @@ One Supabase PostgreSQL database per environment, multiple controlled apps.
 - Test: `tests/sql/picking_teams.sql` (runs as admin / ali / bilal and rolls back).
 - If moving staff errors with "function does not exist", run `supabase/RUN_ME_set_staff_warehouses.sql` once in the SQL editor.
 
+## Payments, multi-currency and payment agents (Stage 9) — 2026-10-05
+
+- **Ledger currency**: `journal_lines` now carry `currency`, `fx_amount`, `fx_rate` (the actual rate of that transaction). PKR stays the base — debit/credit are PKR.
+  New party type `AGENT` (accounts `AGENT_ADVANCE` / `AGENT_PAYABLE`); agent lines always carry a currency, so each agent sub-account (PKR / CNY / USD …) is a ledger.
+- **Foreign bills** credit the supplier in the bill currency at the bill rate.
+- **Foreign payments** (`/fx-payments`, FXP-): supplier currency amount × this payment's own rate, paid from a PKR bank, a bank in that currency, or a payment
+  agent's sub-account (= agent settlement). Booked to Supplier Advances until applied. Applying to a bill posts the settlement:
+  Dr AP (bill rate) / Cr Supplier Advances (payment rate) / difference → 4900 Realized FX Gain/Loss. Unlink / reverse undoes it. Rates are never averaged
+  (bill view shows the weighted average for reporting only). Pay Supplier Now and Quick bill work for foreign bills too.
+- **Agent accounts** (`/agent-accounts`, AGT-): fund (bank → agent), refund, charges, opening balance; balances per currency (advance or we owe the agent),
+  settlements by agent / supplier / shipment / bill, ledger with running foreign + PKR balance.
+- **Currency conversions** (`/currency-conversions`, CCV-): supplier balance, agent money or bank money from one currency to another; difference → FX gain/loss.
+- **Currency balances & FX** (`/fx`): balances per supplier / agent / bank per currency with carrying rate, currency ledgers, realized FX gain/loss report.
+- Test: `tests/sql/fx_payments_agents.sql` (spec §12 example: ¥100,000 @ 40 paid @ 40 / 41 / 42 → PKR 4,090,000, FX loss 90,000).
+
 ## Layout
 
 ```

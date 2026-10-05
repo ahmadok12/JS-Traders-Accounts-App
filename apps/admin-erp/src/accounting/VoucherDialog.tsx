@@ -18,7 +18,7 @@ import {
 } from "./common";
 
 type Row = Record<string, unknown>;
-type DraftLine = { account_id: string; debit: number; credit: number; party_type: string | null; party_id: string | null; bank_account_id: string | null; description: string | null };
+type DraftLine = { account_id: string; debit: number; credit: number; party_type: string | null; party_id: string | null; bank_account_id: string | null; description: string | null; currency?: string | null; fx_amount?: number | null; fx_rate?: number | null };
 type Counter = "CUSTOMER" | "SUPPLIER" | "ACCOUNT";
 interface GridLine { key: string; account_id: string | null; party_id: string | null; description: string; debit: string; credit: string }
 const newGrid = (): GridLine => ({ key: crypto.randomUUID(), account_id: null, party_id: null, description: "", debit: "", credit: "" });
@@ -133,7 +133,8 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
                       <tr key={i} className="border-b border-line/70">
                         <td className="h-row px-3">{accts.data?.get(l.account_id) ?? "…"}</td>
                         <td className="px-3 text-xs">{l.party_id ? parties.data?.get(l.party_id) ?? "…" : l.bank_account_id ? banks.data?.find((b) => b.id === l.bank_account_id)?.name : <span className="text-ink-faint">—</span>}</td>
-                        <td className="hidden px-3 text-xs text-ink-muted md:table-cell">{l.description}</td>
+                        <td className="hidden px-3 text-xs text-ink-muted md:table-cell">{l.description}
+                          {l.currency && l.currency !== "PKR" && <div className="font-medium text-ink">{l.currency} {money(l.fx_amount)}{l.fx_rate ? ` @ ${Number(l.fx_rate)}` : ""}</div>}</td>
                         <td className="px-3 text-right"><Amount v={l.debit} /></td>
                         <td className="px-3 text-right"><Amount v={l.credit} /></td>
                       </tr>

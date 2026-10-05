@@ -43,6 +43,8 @@ import {
   ListChecks,
   Smartphone,
   Coins,
+  Globe2,
+  ArrowRightLeft,
 } from "lucide-react";
 import type * as React from "react";
 import { P } from "@jst/permissions";
@@ -87,6 +89,7 @@ export const NAV: NavGroup[] = [
       { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList, perms: [P.purchasingView] },
       { to: "/purchase-costs", label: "Purchase Costs", icon: Calculator, perms: [P.purchasingCosts] },
       { to: "/supplier-bills", label: "Supplier Bills", icon: Receipt, perms: [P.purchasingCosts] },
+      { to: "/fx-payments", label: "Foreign Payments", icon: Globe2, perms: [P.purchasingCosts, P.journalsView] },
       { to: "/shipments", label: "Shipments", icon: Ship, perms: [P.purchasingView] },
       { to: "/landed-costs", label: "Landed Cost", icon: Calculator, perms: [P.purchasingCosts] },
     ],
@@ -122,6 +125,9 @@ export const NAV: NavGroup[] = [
       { to: "/chart-of-accounts", label: "Chart of Accounts", icon: BookOpen, perms: [P.accountsView] },
       { to: "/bank-accounts", label: "Bank & Cash", icon: Banknote, perms: [P.banksView] },
       { to: "/payment-agents", label: "Payment Agents", icon: Handshake, perms: [P.paymentAgentsView] },
+      { to: "/agent-accounts", label: "Agent Accounts", icon: Wallet, perms: [P.paymentAgentsView, P.journalsView] },
+      { to: "/currency-conversions", label: "Currency Conversions", icon: ArrowRightLeft, perms: [P.journalsView] },
+      { to: "/fx", label: "Currency Balances & FX", icon: Coins, perms: [P.journalsView] },
       { to: "/vouchers", label: "Vouchers & Journals", icon: ReceiptText, perms: [P.journalsView] },
       { to: "/statements", label: "Statements", icon: BookText, perms: [P.journalsView] },
       { to: "/receivables", label: "Receivables", icon: HandCoins, perms: [P.journalsView] },
