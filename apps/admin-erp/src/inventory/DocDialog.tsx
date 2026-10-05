@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, CheckCircle2, Minus, Pencil, Plus, Save, Trash2, Undo2 } from "lucide-react";
@@ -148,6 +149,7 @@ function ViewDoc({
 }) {
   const { can } = useAccess();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [confirm, setConfirm] = React.useState<null | "post" | "cancel" | "reverse">(null);
   const [reason, setReason] = React.useState("");
   const files = useAttachments(cfg.table as AttachmentEntity, id);
@@ -194,6 +196,9 @@ function ViewDoc({
               <Button variant="destructive-ghost" icon={<Undo2 className="h-3.5 w-3.5" />} onClick={() => setConfirm("reverse")}>Reverse</Button>
             )}
             <div className="flex-1" />
+            {status === "POSTED" && cfg.type === "GOODS_RECEIPT" && !!h?.supplier_id && can(P.purchasingReturn) && (
+              <Button icon={<Undo2 className="h-3.5 w-3.5" />} onClick={() => navigate(`/purchase-returns?new=1&grn=${id}`)}>Return to supplier</Button>
+            )}
             <Button onClick={onClose}>Close</Button>
             {canEdit && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
             {status === "DRAFT" && can(cfg.perms.post) && (

@@ -47,6 +47,7 @@ import {
   ArrowRightLeft,
   BarChart3,
   Zap,
+  Undo2,
 } from "lucide-react";
 import type * as React from "react";
 import { P } from "@jst/permissions";
@@ -80,6 +81,7 @@ export const NAV: NavGroup[] = [
       { to: "/picking", label: "Picking", icon: ListChecks, perms: [P.pickingManage] },
       { to: "/warehouse-staff", label: "Warehouse Staff", icon: UsersRound, perms: [P.pickingManage] },
       { to: "/gdn", label: "Dispatch (GDN)", icon: Truck, perms: [P.salesView, P.inventoryView] },
+      { to: "/sales-returns", label: "Sales Returns", icon: Undo2, perms: [P.salesReturn, P.salesView, P.inventoryView] },
       { to: "/pricing", label: "Pricing", icon: Tag, perms: [P.salesViewPrices, P.pricingEnter] },
       { to: "/invoices", label: "Sales Invoices", icon: Receipt, perms: [P.salesViewPrices, P.journalsView] },
     ],
@@ -90,6 +92,7 @@ export const NAV: NavGroup[] = [
       { to: "/suppliers", label: "Suppliers", icon: Truck, perms: [P.suppliersView] },
       { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList, perms: [P.purchasingView] },
       { to: "/purchase-costs", label: "Purchase Costs", icon: Calculator, perms: [P.purchasingCosts] },
+      { to: "/purchase-returns", label: "Purchase Returns", icon: Undo2, perms: [P.purchasingReturn, P.purchasingView, P.inventoryView] },
       { to: "/supplier-bills", label: "Supplier Bills", icon: Receipt, perms: [P.purchasingCosts] },
       { to: "/fx-payments", label: "Foreign Payments", icon: Globe2, perms: [P.purchasingCosts, P.journalsView] },
       { to: "/shipments", label: "Shipments", icon: Ship, perms: [P.purchasingView] },

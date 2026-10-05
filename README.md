@@ -29,9 +29,26 @@ One Supabase PostgreSQL database per environment, multiple controlled apps.
 - Test: `tests/sql/picking_teams.sql` (runs as admin / ali / bilal and rolls back).
 - If moving staff errors with "function does not exist", run `supabase/RUN_ME_set_staff_warehouses.sql` once in the SQL editor.
 
+## Returns, warehouse trial and trial reset — 2026-10-05
+
+- **Sales returns** (`/sales-returns`, SR-; button "Return goods" on a dispatched GDN): goods back from a customer against one GDN, into any warehouse,
+  condition Good / Damaged. The part not yet invoiced simply stops being invoiceable (`gdn_lines.returned_open_qty`); the invoiced part gets an automatic
+  credit note Dr 4200 Sales Returns / Cr AR at the invoiced price after discount, set against that invoice. Stock comes back at the cost it left with
+  (Dr Inventory / Cr COGS). Reverse with a reason.
+- **Purchase returns** (`/purchase-returns`, PR-; button "Return to supplier" on a posted goods receipt): goods back to the supplier against one GRN.
+  Not-yet-billed part: no longer billed or costed (`goods_receipt_lines.returned_unbilled_qty`; bills and cost tasks use the reduced quantity);
+  if it already had a cost, value leaves Inventory against GRNI. Billed part: value leaves at the billed cost and a supplier debit note
+  Dr AP (in the bill currency) / Cr GRNI is set against that bill. Reverse with a reason. A GDN / GRN with returns cannot itself be reversed.
+- Permissions `sales.return`, `purchasing.return` (Admin, Owner, Accountant, Warehouse Manager). Warehouse Manager can now raise purchase orders
+  (`purchasing.manage`, prices only with `purchasing.costs`). Returns registers in Reports (Sales / Purchasing).
+- **Trial reset** (Settings → Trial data, administrators only, type `RESET <company code>`): `reset_trial_transactions` removes every transaction
+  (stock, orders, picking, GDNs, invoices, receipts, bills, returns, shipments, payments, cheques, payroll runs, ledger) and restarts document numbers;
+  masters, users, settings and the audit log are kept.
+- Tests: `tests/sql/returns.sql` (18 checks incl. credit / debit notes, CNY bill, GRNI, stock value = ledger), `tests/sql/returns_warehouse_manager.sql`.
+
 ## Reports, dashboard and report shortcuts (Stage 11) — 2026-10-05
 
-- **Reports** (`/reports`, registry in `apps/admin-erp/src/reports/registry.tsx`): 41 reports in Sales, Inventory, Purchasing & imports, Finance,
+- **Reports** (`/reports`, registry in `apps/admin-erp/src/reports/registry.tsx`): 40 reports in Sales, Inventory, Purchasing & imports, Finance,
   Cash/bank/cheques, People, Administration. Each is a fixed, permission-checked database function (`rpt_*`, security invoker so RLS applies;
   money columns that need extra rights come back empty) or an existing screen. Generic report screen: period / as-of / party / warehouse /
   bank / account filters, filter rows, sort by any column, group by with subtotals, choose columns, totals, open the document from any row,

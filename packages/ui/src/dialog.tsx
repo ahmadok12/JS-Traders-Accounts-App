@@ -23,7 +23,7 @@ const centred = "sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 
 const fullScreen = "sm:inset-3 lg:inset-4";
 
 /** Document colour accents — each document type gets its own header tint so it is recognisable at a glance. */
-export type DialogAccent = "neutral" | "order" | "quote" | "dispatch" | "invoice" | "picking" | "pricing" | "purchase" | "bill";
+export type DialogAccent = "neutral" | "order" | "quote" | "dispatch" | "invoice" | "picking" | "pricing" | "purchase" | "bill" | "return";
 const accentClass: Record<DialogAccent, { bar: string; head: string; icon: string }> = {
   neutral: { bar: "", head: "", icon: "border border-line bg-subtle text-ink-2" },
   order: { bar: "before:bg-indigo-500", head: "bg-gradient-to-r from-indigo-50 via-white to-white", icon: "bg-indigo-600 text-white shadow-sm" },
@@ -33,6 +33,7 @@ const accentClass: Record<DialogAccent, { bar: string; head: string; icon: strin
   purchase: { bar: "before:bg-teal-500", head: "bg-gradient-to-r from-teal-50 via-white to-white", icon: "bg-teal-600 text-white shadow-sm" },
   bill: { bar: "before:bg-orange-500", head: "bg-gradient-to-r from-orange-50 via-white to-white", icon: "bg-orange-600 text-white shadow-sm" },
   pricing: { bar: "before:bg-rose-500", head: "bg-gradient-to-r from-rose-50 via-white to-white", icon: "bg-rose-600 text-white shadow-sm" },
+  return: { bar: "before:bg-red-500", head: "bg-gradient-to-r from-red-50 via-white to-white", icon: "bg-red-600 text-white shadow-sm" },
   picking: { bar: "before:bg-sky-500", head: "bg-gradient-to-r from-sky-50 via-white to-white", icon: "bg-sky-600 text-white shadow-sm" },
 };
 

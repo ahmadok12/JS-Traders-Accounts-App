@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Boxes, Building2, Hash, Save, Tag, Zap } from "lucide-react";
+import { Boxes, Building2, Hash, RotateCcw, Save, Tag, TriangleAlert, Zap } from "lucide-react";
 import { Button, Card, Checkbox, ConfirmDialog, DataTable, Field, FormGrid, Input, PageHeader, SectionTitle, Skeleton, Textarea } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { diffObject, humanize } from "@jst/utilities";
@@ -15,15 +15,17 @@ import { Tabs } from "../entity/EntityDialog";
 type Company = { id: string; code: string; name: string; legal_name: string | null; ntn: string | null; strn: string | null; phone: string | null; email: string | null; address: string | null; base_currency: string };
 
 export function SettingsPage() {
+  const { roles } = useAccess();
   const [tab, setTab] = React.useState("company");
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Settings" description="Company profile, branches, optional features and document numbering" />
-      <Tabs value={tab} onChange={setTab} tabs={[{ key: "company", label: "Company" }, { key: "branches", label: "Branches" }, { key: "features", label: "Features" }, { key: "numbering", label: "Numbering" }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ key: "company", label: "Company" }, { key: "branches", label: "Branches" }, { key: "features", label: "Features" }, { key: "numbering", label: "Numbering" }, ...(roles.includes("ADMINISTRATOR") ? [{ key: "trial", label: "Trial data" }] : [])]} />
       {tab === "company" && <CompanyForm />}
       {tab === "branches" && <div className="min-h-0 flex-1"><EntityPage config={branches} /></div>}
       {tab === "features" && <FeatureSettings />}
       {tab === "numbering" && <Numbering />}
+      {tab === "trial" && <TrialReset />}
     </div>
   );
 }
@@ -254,6 +256,54 @@ function SalesSettings() {
         label="Quick invoice (counter sale)"
         description="Adds a “Quick invoice” button on Sales Invoices: pick customer, items, warehouse, quantity and price, then post — the goods are dispatched from that warehouse automatically (a sales order and GDN are created and linked behind the scenes). Turning it off only hides the button; invoices already made stay as they are."
       />
+    </Card>
+  );
+}
+
+/** Wipe trial transactions before going live (administrators only). Masters stay. */
+function TrialReset() {
+  const { companyId, company } = useAccess();
+  const qc = useQueryClient();
+  const code = useQuery({
+    queryKey: ["company-code", companyId], enabled: !!companyId,
+    queryFn: async () => ((await sb().from("companies").select("code").eq("id", companyId!).single()).data as { code: string } | null)?.code ?? "",
+  });
+  const [text, setText] = React.useState("");
+  const [ask, setAsk] = React.useState(false);
+  const want = `RESET ${code.data ?? ""}`;
+  const run = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await sb().rpc("reset_trial_transactions", { p_company: companyId, p_confirm: text.trim() });
+      if (error) throw error;
+      return data as { deleted: Record<string, number> };
+    },
+    onSuccess: (d) => {
+      const total = Object.values(d.deleted ?? {}).reduce((a, b) => a + Number(b), 0);
+      toast.success(`Trial data cleared — ${total.toLocaleString()} records removed. Masters kept.`);
+      setAsk(false); setText(""); qc.invalidateQueries();
+    },
+    onError: (e) => { setAsk(false); toast.error(friendlyError(e)); },
+  });
+  return (
+    <Card className="max-w-3xl space-y-3 p-4">
+      <SectionTitle>Clear trial transactions</SectionTitle>
+      <div className="flex gap-3 rounded-card border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+        <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="space-y-1.5">
+          <p>Use this once, when the trial is over and you are ready to go live. It permanently removes <b>every transaction</b> of {company?.company_name ?? "this company"}:
+            stock movements and balances, rolls, sales orders, reservations, picking, GDNs, invoices, quotations, purchase orders, goods receipts, bills, returns,
+            shipments, landed costs, payments, cheques, bank reconciliations, payroll runs and all accounting entries. Document numbers restart at 1.</p>
+          <p><b>Kept:</b> products, variants, categories, units, warehouses and locations, customers, suppliers, chart of accounts, bank accounts, payment agents,
+            employees, users and roles, settings, saved reports. The audit log is kept and records that the reset happened.</p>
+          <p>After the reset, enter opening stock from a physical count and opening balances before starting live work.</p>
+        </div>
+      </div>
+      <Field label={`Type ${want} to confirm`}>
+        <Input className="max-w-xs font-mono" value={text} onChange={(e) => setText(e.target.value)} placeholder={want} />
+      </Field>
+      <Button variant="destructive" icon={<RotateCcw className="h-4 w-4" />} disabled={!code.data || text.trim() !== want} onClick={() => setAsk(true)}>Clear all transactions</Button>
+      <ConfirmDialog open={ask} tone="destructive" title="Clear all trial transactions?" confirmLabel="Yes, clear everything" cancelLabel="Keep" loading={run.isPending}
+        message="This cannot be undone. Make sure nobody is entering data right now." onCancel={() => setAsk(false)} onConfirm={() => run.mutate()} />
     </Card>
   );
 }

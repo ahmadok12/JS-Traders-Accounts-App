@@ -35,6 +35,17 @@ export function movementTone(t: string): "success" | "danger" | "info" | "warnin
   return "info";
 }
 
+/** Returns are one movement type for both directions — name them by where they came from. */
+export function movementLabel(r: { movement_type: string; source_type: string }) {
+  if (r.movement_type === "RETURN") return r.source_type === "PURCHASE_RETURN" ? "Return to supplier" : r.source_type === "SALES_RETURN" ? "Customer return" : "Return";
+  return humanize(r.movement_type);
+}
+export function movementBadgeTone(r: { movement_type: string; source_type: string; reversal_of: string | null }) {
+  if (r.reversal_of) return "warning" as const;
+  if (r.movement_type === "RETURN" && r.source_type === "PURCHASE_RETURN") return "danger" as const;
+  return movementTone(r.movement_type);
+}
+
 /** Bounded list of movements for a document or an item (read-only, View → source document). */
 export function MovementsTable({
   sourceId,
@@ -76,7 +87,7 @@ export function MovementsTable({
         onView={sourceId ? undefined : (r) => navigate(`${SOURCE_ROUTE[r.source_type] ?? "/stock"}?view=${r.source_id}`)}
         columns={[
           { key: "t", header: "When", width: "150px", cell: (r) => <span className="tabular-nums text-ink-2">{formatDateTime(r.created_at)}</span> },
-          { key: "type", header: "Movement", cell: (r) => <Badge tone={r.reversal_of ? "warning" : movementTone(r.movement_type)}>{r.reversal_of ? "Reversal · " : ""}{humanize(r.movement_type)}</Badge> },
+          { key: "type", header: "Movement", cell: (r) => <Badge tone={movementBadgeTone(r)}>{r.reversal_of ? "Reversal · " : ""}{movementLabel(r)}</Badge> },
           ...(showItem
             ? [{ key: "item", header: "Item", cell: (r: LedgerRow) => <span>{r.product_name}{r.variant_name ? <span className="text-ink-muted"> · {r.variant_name}</span> : null}</span> }]
             : []),

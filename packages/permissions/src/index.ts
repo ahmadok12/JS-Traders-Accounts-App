@@ -49,6 +49,7 @@ export const P = {
   salesDispatch: "sales.dispatch",
   salesInvoice: "sales.invoice",
   salesViewPrices: "sales.view_prices",
+  salesReturn: "sales.return",
   pickingManage: "picking.manage",
   pickingPerform: "picking.perform",
   pricingEnter: "pricing.enter",
@@ -61,6 +62,7 @@ export const P = {
   purchasingManage: "purchasing.manage",
   purchasingApprove: "purchasing.approve",
   purchasingCosts: "purchasing.costs",
+  purchasingReturn: "purchasing.return",
   inventoryValuation: "inventory.valuation",
 } as const;
 

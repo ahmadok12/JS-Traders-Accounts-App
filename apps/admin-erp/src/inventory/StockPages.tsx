@@ -5,7 +5,7 @@ import { Badge, Card, DataTable, EmptyState, ErpDialog, KeyValue, PageHeader, Se
 import { friendlyError, sb, useAccess, useEntityList, makeLookupLoader } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { formatDateTime, formatNumber, humanize } from "@jst/utilities";
-import { LEDGER_SELECT, MovementsTable, movementTone, type LedgerRow } from "./MovementsTable";
+import { LEDGER_SELECT, MovementsTable, movementBadgeTone, movementLabel, type LedgerRow } from "./MovementsTable";
 import { SearchBox, StatusFilter, useUrlState } from "./DocPage";
 import { SOURCE_ROUTE } from "./docConfigs";
 import { useNavigate } from "react-router-dom";
@@ -271,7 +271,7 @@ export function StockLedgerPage() {
             onPageChange={(p) => update({ page: String(p) })}
             columns={[
               { key: "t", header: "When", width: "150px", cell: (r) => <span className="whitespace-nowrap tabular-nums text-ink-2">{formatDateTime(r.created_at)}</span> },
-              { key: "type", header: "Movement", cell: (r) => <Badge tone={r.reversal_of ? "warning" : movementTone(r.movement_type)}>{r.reversal_of ? "Reversal · " : ""}{humanize(r.movement_type)}</Badge> },
+              { key: "type", header: "Movement", cell: (r) => <Badge tone={movementBadgeTone(r)}>{r.reversal_of ? "Reversal · " : ""}{movementLabel(r)}</Badge> },
               { key: "doc", header: "Document", cell: (r) => <span className="whitespace-nowrap font-mono text-xs">{r.source_doc_no ?? (r.source_type === "LOCATION_SETTING" ? "Setting change" : "")}</span> },
               { key: "item", header: "Item", cell: (r) => <span>{r.product_name}{r.variant_name ? <span className="text-ink-muted"> · {r.variant_name}</span> : null}</span> },
               { key: "wh", header: "Wh / Loc", hideBelow: "md", cell: (r) => <span className="text-xs">{r.warehouse_code}{r.location_code ? ` / ${r.location_code}` : ""}</span> },

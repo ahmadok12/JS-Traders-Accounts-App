@@ -107,6 +107,9 @@ export const SOURCE_ROUTE: Record<string, string> = {
   STOCK_ADJUSTMENT: "/stock-adjustments",
   STOCK_COUNT: "/stock-counts",
   ASSEMBLY_ORDER: "/assembly",
+  GDN: "/gdn",
+  SALES_RETURN: "/sales-returns",
+  PURCHASE_RETURN: "/purchase-returns",
 };
 
 export const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {

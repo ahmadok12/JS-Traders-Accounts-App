@@ -35,6 +35,8 @@ const RollsPage = React.lazy(() => import("./inventory/RollsPage").then((m) => (
 const AssemblyPage = React.lazy(() => import("./inventory/AssemblyPage").then((m) => ({ default: m.AssemblyPage })));
 const SalesOrdersPage = React.lazy(() => import("./sales/SalesOrdersPage").then((m) => ({ default: m.SalesOrdersPage })));
 const GdnPage = React.lazy(() => import("./sales/GdnPage").then((m) => ({ default: m.GdnPage })));
+const SalesReturnsPage = React.lazy(() => import("./returns/ReturnsPage").then((m) => ({ default: m.SalesReturnsPage })));
+const PurchaseReturnsPage = React.lazy(() => import("./returns/ReturnsPage").then((m) => ({ default: m.PurchaseReturnsPage })));
 const QuotationsPage = React.lazy(() => import("./sales/QuotationsPage").then((m) => ({ default: m.QuotationsPage })));
 const PickingPage = React.lazy(() => import("./picking/PickingPage").then((m) => ({ default: m.PickingPage })));
 const StaffPage = React.lazy(() => import("./picking/StaffPage").then((m) => ({ default: m.StaffPage })));
@@ -103,6 +105,8 @@ const router = createBrowserRouter([
       { path: "periods", element: lazy(<PeriodsPage />) },
       { path: "sales-orders", element: lazy(<SalesOrdersPage />) },
       { path: "gdn", element: lazy(<GdnPage />) },
+      { path: "sales-returns", element: lazy(<SalesReturnsPage />) },
+      { path: "purchase-returns", element: lazy(<PurchaseReturnsPage />) },
       { path: "quotations", element: lazy(<QuotationsPage />) },
       { path: "picking", element: lazy(<PickingPage />) },
       { path: "warehouse-staff", element: lazy(<StaffPage />) },

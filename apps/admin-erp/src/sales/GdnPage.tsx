@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, CheckCircle2, ExternalLink, FileText, Pencil, Plus, Printer, RotateCcw, Save, ShieldAlert, Truck } from "lucide-react";
+import { Ban, CheckCircle2, ExternalLink, FileText, Pencil, Plus, Printer, RotateCcw, Save, ShieldAlert, Truck, Undo2 } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, FormGrid, Input, KeyValue, PageHeader, SearchableSelect, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -29,7 +29,7 @@ const FILTERS = [
   { label: "All" },
 ] as { label: string; status?: string; statuses?: string[]; uninvoiced?: boolean }[];
 const icon = <Truck className="h-4 w-4" />;
-const leftToInvoice = (ls: { quantity: number; invoiced_qty: number }[]) => ls.reduce((a, l) => a + Number(l.quantity) - Number(l.invoiced_qty), 0);
+const leftToInvoice = (ls: { quantity: number; invoiced_qty: number; returned_open_qty?: number }[]) => ls.reduce((a, l) => a + Number(l.quantity) - Number(l.invoiced_qty) - Number(l.returned_open_qty ?? 0), 0);
 
 export function GdnPage() {
   const { can, companyId } = useAccess();
@@ -45,7 +45,7 @@ export function GdnPage() {
 
   const list = useEntityList<Row>({
     table: "gdns",
-    select: "id, doc_no, gdn_date, status, transport_details, customer:customers(name, code), so:sales_orders(doc_no), lines:gdn_lines(quantity, invoiced_qty)",
+    select: "id, doc_no, gdn_date, status, transport_details, customer:customers(name, code), so:sales_orders(doc_no), lines:gdn_lines(quantity, invoiced_qty, returned_open_qty)",
     companyId, search: q, searchColumns: ["doc_no", "transport_details"],
     filters: { status: FILTERS[f].status },
     orderBy: { column: "created_at", ascending: false }, page, pageSize: 50, enabled: allowed,
@@ -105,7 +105,7 @@ function useGdn(id: string | null) {
     queryFn: async () => {
       const [h, l] = await Promise.all([
         sb().from("gdns").select("id, doc_no, gdn_date, status, sales_order_id, customer_id, transport_details, notes, lines_draft, posted_at, reversed_at, reversal_reason, customer:customers(name, code, city), so:sales_orders(doc_no, customer_reference)").eq("id", id!).single(),
-        sb().from("gdn_lines").select("id, line_no, quantity, invoiced_qty, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), warehouse:warehouses(code, name)").eq("gdn_id", id!).order("line_no"),
+        sb().from("gdn_lines").select("id, line_no, quantity, invoiced_qty, returned_open_qty, returned_credit_qty, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), warehouse:warehouses(code, name)").eq("gdn_id", id!).order("line_no"),
       ]);
       if (h.error) throw h.error;
       if (l.error) throw l.error;
@@ -116,7 +116,7 @@ function useGdn(id: string | null) {
   });
 }
 interface GdnLine {
-  id: string; line_no: number; quantity: number; invoiced_qty: number; unit_price: number | null;
+  id: string; line_no: number; quantity: number; invoiced_qty: number; returned_open_qty?: number; returned_credit_qty?: number; unit_price: number | null;
   product: { name: string; sku: string; uom: { code: string } | null }; variant: { name: string } | null; warehouse: { code: string; name: string };
 }
 
@@ -423,6 +423,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
             {status === "DRAFT" && can(P.salesDispatch) && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
             {status === "POSTED" && can(P.salesDispatch) && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setConfirm(invoicedAny ? "blocked" : "correct")}>Edit</Button>}
             {status === "DRAFT" && can(P.salesDispatch) && <Button variant="primary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => setConfirm("post")}>Dispatch</Button>}
+            {status === "POSTED" && can(P.salesReturn) && <Button icon={<Undo2 className="h-3.5 w-3.5" />} onClick={() => navigate(`/sales-returns?new=1&gdn=${id}`)}>Return goods</Button>}
             {status === "POSTED" && left > 0 && can(P.salesInvoice) && <Button variant="primary" icon={<FileText className="h-3.5 w-3.5" />} onClick={() => navigate(`/invoices?new=1&gdn=${id}`)}>Create invoice</Button>}
           </>
         }
@@ -452,7 +453,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
                 <table className="w-full text-sm">
                   <thead><tr className="bg-subtle text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
                     <th className="h-8 px-3">#</th><th className="px-3">Item</th><th className="px-3">From</th><th className="px-3 text-right">Quantity</th>
-                    {status === "POSTED" && <th className="px-3 text-right">Invoiced</th>}{can(P.salesViewPrices) && <th className="px-3 text-right">Price</th>}
+                    {status === "POSTED" && <th className="px-3 text-right">Invoiced</th>}{status === "POSTED" && <th className="px-3 text-right">Returned</th>}{can(P.salesViewPrices) && <th className="px-3 text-right">Price</th>}
                   </tr></thead>
                   <tbody>
                     {lines.map((l) => {
@@ -464,6 +465,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
                           <td className={cn(td, "font-mono text-xs")} title={l.warehouse.name}>{l.warehouse.code}</td>
                           <td className={cn(td, "text-right tabular-nums font-medium")}>{qtyFmt(l.quantity)} <span className="text-2xs font-normal text-ink-faint">{l.product.uom?.code}</span></td>
                           {status === "POSTED" && <td className={cn(td, "text-right tabular-nums")}>{qtyFmt(l.invoiced_qty)}</td>}
+                          {status === "POSTED" && <td className={cn(td, "text-right tabular-nums text-ink-muted")}>{Number(l.returned_open_qty ?? 0) + Number(l.returned_credit_qty ?? 0) > 0 ? qtyFmt(Number(l.returned_open_qty ?? 0) + Number(l.returned_credit_qty ?? 0)) : ""}</td>}
                           {can(P.salesViewPrices) && <td className={cn(td, "text-right tabular-nums")}>{l.unit_price == null ? <Badge tone="warning">Pending</Badge> : money(l.unit_price)}</td>}
                         </tr>
                       );

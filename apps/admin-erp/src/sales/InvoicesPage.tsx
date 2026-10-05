@@ -128,14 +128,14 @@ function CreateInvoiceDialog({ presetGdn, onClose, onCreated }: { presetGdn: str
     queryKey: ["uninvoiced-gdns", customer],
     enabled: !!customer,
     queryFn: async () => {
-      const { data, error } = await sb().from("gdns").select("id, doc_no, gdn_date, so:sales_orders(doc_no), lines:gdn_lines(id, quantity, invoiced_qty)")
+      const { data, error } = await sb().from("gdns").select("id, doc_no, gdn_date, so:sales_orders(doc_no), lines:gdn_lines(id, quantity, invoiced_qty, returned_open_qty)")
         .eq("customer_id", customer!).eq("status", "POSTED").order("gdn_date");
       if (error) throw error;
       const pm = await fetchGdnLinePrices((data ?? []).map((g) => g.id as string));
-      return ((data ?? []) as unknown as (OpenGdn & { lines: { id: string; quantity: number; invoiced_qty: number }[] })[])
+      return ((data ?? []) as unknown as (OpenGdn & { lines: { id: string; quantity: number; invoiced_qty: number; returned_open_qty: number }[] })[])
         .map((g) => {
-          const open = g.lines.filter((l) => Number(l.quantity) > Number(l.invoiced_qty));
-          return { ...g, left: open.reduce((a, l) => a + Number(l.quantity) - Number(l.invoiced_qty), 0), pending: open.filter((l) => (pm.get(l.id) ?? null) == null).length };
+          const open = g.lines.filter((l) => Number(l.quantity) - Number(l.returned_open_qty) > Number(l.invoiced_qty));
+          return { ...g, left: open.reduce((a, l) => a + Number(l.quantity) - Number(l.returned_open_qty) - Number(l.invoiced_qty), 0), pending: open.filter((l) => (pm.get(l.id) ?? null) == null).length };
         })
         .filter((g) => g.left > 0);
     },
