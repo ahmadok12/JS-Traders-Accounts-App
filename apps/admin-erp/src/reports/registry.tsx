@@ -11,6 +11,8 @@ export interface PartyRef { type: "CUSTOMER" | "SUPPLIER" | "AGENT" | "EMPLOYEE"
 export interface Params {
   from?: string | null; to?: string | null; asOf?: string | null; customer?: string | null; supplier?: string | null; warehouse?: string | null;
   bank?: string | null; account?: string | null; party?: PartyRef | null; compare?: boolean; payType?: string | null; entity?: string | null;
+  /** period preset (periods.ts) — "last10" etc. means: all dates, newest N rows */
+  period?: string | null;
 }
 export type Kind = "text" | "money" | "qty" | "date" | "datetime" | "pct" | "int" | "badge" | "rate";
 export interface Col { key: string; label: string; kind?: Kind; total?: boolean; hidden?: boolean; width?: string }
@@ -33,7 +35,9 @@ export interface ReportDef {
   groupBy?: string;
   /** an existing full screen instead of a generic table */
   route?: string;
-  /** default date range preset */
+  /** date column: enables "Last 10 / 25 … transactions" (the default) */
+  dateKey?: string;
+  /** default date range preset when there is no dateKey */
   rangePreset?: "month" | "year" | "all" | "prev";
   /** quick view: columns to show and how many rows */
   quick?: { columns: string[]; limit?: number; sortDesc?: string };
@@ -50,7 +54,7 @@ const d = (v?: string | null) => v || null;
 
 export const REPORTS: ReportDef[] = [
   /* ------------------------------------------------------------------ Sales */
-  { code: "sales_register", title: "Sales register", category: "Sales", perms: ["sales.view_prices"], params: ["range", "customer"], rangePreset: "month",
+  { code: "sales_register", dateKey: "invoice_date", title: "Sales register", category: "Sales", perms: ["sales.view_prices"], params: ["range", "customer"], rangePreset: "month",
     description: "Every posted invoice with paid / outstanding and, with stock-value rights, cost of goods and margin.",
     run: (p, c) => call("rpt_sales_register", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_customer: d(p.customer) }),
     link: (r) => `/invoices?view=${r.invoice_id}`,
@@ -69,7 +73,7 @@ export const REPORTS: ReportDef[] = [
       { key: "qty", label: "Qty", kind: "qty", total: true }, { key: "amount", label: "Amount", kind: "money", total: true }, { key: "avg_price", label: "Avg price", kind: "money" },
       { key: "invoices", label: "Invoices", kind: "int" }, { key: "customers", label: "Customers", kind: "int" }, { key: "last_sold", label: "Last sold", kind: "date" }],
     quick: { columns: ["item", "variant", "qty", "avg_price", "last_sold"], limit: 10 } },
-  { code: "dispatch_register", title: "Dispatch (GDN) register", category: "Sales", perms: ["sales.view", "inventory.view"], params: ["range", "warehouse", "customer"], rangePreset: "month",
+  { code: "dispatch_register", dateKey: "gdn_date", title: "Dispatch (GDN) register", category: "Sales", perms: ["sales.view", "inventory.view"], params: ["range", "warehouse", "customer"], rangePreset: "month",
     description: "Every dispatched line by warehouse, with how much has been invoiced.",
     run: (p, c) => call("rpt_dispatch_register", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_warehouse: d(p.warehouse), p_customer: d(p.customer) }),
     link: (r) => `/gdn?view=${r.gdn_id}`,
@@ -100,7 +104,7 @@ export const REPORTS: ReportDef[] = [
     columns: [{ key: "party", label: "Customer" }, { key: "doc_no", label: "Invoice" }, { key: "doc_date", label: "Date", kind: "date" }, { key: "due_date", label: "Due", kind: "date" },
       { key: "days_overdue", label: "Days overdue", kind: "int" }, { key: "bucket", label: "Bucket", kind: "badge" }, { key: "total", label: "Invoice total", kind: "money" }, { key: "outstanding", label: "Outstanding", kind: "money", total: true }],
     quick: { columns: ["doc_no", "due_date", "days_overdue", "outstanding"], limit: 10 } },
-  { code: "customer_ledger", title: "Customer ledger", category: "Sales", perms: ["journals.view"], params: ["range", "party"], required: ["party"], rangePreset: "all",
+  { code: "customer_ledger", dateKey: "entry_date", title: "Customer ledger", category: "Sales", perms: ["journals.view"], params: ["range", "party"], required: ["party"], rangePreset: "all",
     description: "Opening balance, every entry and the running balance of one customer.",
     run: (p) => call("party_statement", { p_party_type: "CUSTOMER", p_party_id: p.party?.id, p_from: d(p.from), p_to: d(p.to), p_include_linked: false }),
     link: (r) => (r.entry_id ? `/vouchers?view=${r.entry_id}` : null), columns: LEDGER_COLS(),
@@ -126,7 +130,7 @@ export const REPORTS: ReportDef[] = [
       { key: "opening", label: "Opening", kind: "qty", total: true }, { key: "purchases", label: "Purchases", kind: "qty", total: true }, { key: "transfers_in", label: "Transfers in", kind: "qty", total: true },
       { key: "transfers_out", label: "Transfers out", kind: "qty", total: true }, { key: "sales", label: "Sales", kind: "qty", total: true }, { key: "assembly", label: "Assembly", kind: "qty", total: true },
       { key: "adjustments", label: "Adjustments", kind: "qty", total: true }, { key: "closing", label: "Closing", kind: "qty", total: true }] },
-  { code: "count_variance", title: "Stock count variance", category: "Inventory", perms: ["inventory.view"], params: ["range", "warehouse"], rangePreset: "year",
+  { code: "count_variance", dateKey: "count_date", title: "Stock count variance", category: "Inventory", perms: ["inventory.view"], params: ["range", "warehouse"], rangePreset: "year",
     description: "Approved count differences (counted vs system) with their value.",
     run: (p, c) => call("rpt_count_variance", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_warehouse: d(p.warehouse) }),
     link: (r) => `/stock-counts?view=${r.count_id}`,
@@ -138,7 +142,7 @@ export const REPORTS: ReportDef[] = [
   { code: "reservations", title: "Customer reservations", category: "Inventory", perms: ["inventory.view", "sales.view"], route: "/reservations", description: "Stock held for customers." },
 
   /* ------------------------------------------------------------------ Purchasing & imports */
-  { code: "purchase_register", title: "Purchase register", category: "Purchasing & imports", perms: ["purchasing.costs"], params: ["range", "supplier"], rangePreset: "month",
+  { code: "purchase_register", dateKey: "bill_date", title: "Purchase register", category: "Purchasing & imports", perms: ["purchasing.costs"], params: ["range", "supplier"], rangePreset: "month",
     description: "Every posted supplier bill — currency, PKR, paid, outstanding and exchange difference.",
     run: (p, c) => call("rpt_purchase_register", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_supplier: d(p.supplier) }),
     link: (r) => `/supplier-bills?view=${r.bill_id}`,
@@ -168,7 +172,7 @@ export const REPORTS: ReportDef[] = [
     columns: [{ key: "party", label: "Supplier" }, { key: "doc_no", label: "Bill" }, { key: "doc_date", label: "Date", kind: "date" }, { key: "due_date", label: "Due", kind: "date" },
       { key: "days_overdue", label: "Days overdue", kind: "int" }, { key: "bucket", label: "Bucket", kind: "badge" }, { key: "outstanding", label: "Outstanding (PKR)", kind: "money", total: true }],
     quick: { columns: ["doc_no", "due_date", "days_overdue", "outstanding"], limit: 10 } },
-  { code: "supplier_ledger", title: "Supplier ledger", category: "Purchasing & imports", perms: ["journals.view"], params: ["range", "party"], required: ["party"], rangePreset: "all",
+  { code: "supplier_ledger", dateKey: "entry_date", title: "Supplier ledger", category: "Purchasing & imports", perms: ["journals.view"], params: ["range", "party"], required: ["party"], rangePreset: "all",
     description: "Opening balance, every entry and the running balance of one supplier (+ = we owe).",
     run: (p) => call("party_statement", { p_party_type: "SUPPLIER", p_party_id: p.party?.id, p_from: d(p.from), p_to: d(p.to), p_include_linked: false }),
     link: (r) => (r.entry_id ? `/vouchers?view=${r.entry_id}` : null), columns: LEDGER_COLS(),
@@ -181,13 +185,13 @@ export const REPORTS: ReportDef[] = [
       { key: "days_late", label: "Days late", kind: "int" }, { key: "currency", label: "Cur.", hidden: true }, { key: "goods_value_pkr", label: "Goods value (PKR)", kind: "money", total: true },
       { key: "qty", label: "Qty", kind: "qty", hidden: true }, { key: "received_qty", label: "Received", kind: "qty", hidden: true },
       { key: "landed_cost_pkr", label: "Landed cost", kind: "money", total: true }, { key: "landed_pct", label: "Landed %", kind: "pct" }] },
-  { code: "landed_costs", title: "Landed cost charges", category: "Purchasing & imports", perms: ["purchasing.costs"], params: ["range"], rangePreset: "year",
+  { code: "landed_costs", dateKey: "doc_date", title: "Landed cost charges", category: "Purchasing & imports", perms: ["purchasing.costs"], params: ["range"], rangePreset: "year",
     description: "Every landed-cost charge (freight, customs, clearing …), who it was paid to and how it was split.",
     run: (p, c) => call("rpt_landed_costs", { p_company: c, p_from: d(p.from), p_to: d(p.to) }), link: (r) => `/landed-costs?view=${r.landed_cost_id}`, groupBy: "component",
     columns: [{ key: "doc_date", label: "Date", kind: "date" }, { key: "doc_no", label: "Landed cost" }, { key: "status", label: "Status", kind: "badge" }, { key: "shipment", label: "Shipment" },
       { key: "component", label: "Component" }, { key: "description", label: "Description", hidden: true }, { key: "payee", label: "Paid to" }, { key: "currency", label: "Cur." },
       { key: "amount", label: "Amount", kind: "money" }, { key: "amount_pkr", label: "PKR", kind: "money", total: true }, { key: "treatment", label: "Treatment" }, { key: "method", label: "Split by" }] },
-  { code: "fx_payments", title: "Foreign payments", category: "Purchasing & imports", perms: ["purchasing.costs", "journals.view"], params: ["range", "supplier"], rangePreset: "year",
+  { code: "fx_payments", dateKey: "pay_date", title: "Foreign payments", category: "Purchasing & imports", perms: ["purchasing.costs", "journals.view"], params: ["range", "supplier"], rangePreset: "year",
     description: "Payments in RMB / USD with the rate of each payment, PKR cost and exchange difference.",
     run: async (p, c) => {
       let q = sb().from("fx_payments_v").select("*").eq("company_id", c).eq("status", "POSTED");
@@ -216,7 +220,7 @@ export const REPORTS: ReportDef[] = [
     run: (p, c) => call("rpt_balance_sheet", { p_company: c, p_as_of: d(p.asOf) }), groupBy: "section",
     link: (r) => (r.account_id ? `/reports/general_ledger?account=${r.account_id}` : null),
     columns: [{ key: "section", label: "Section" }, { key: "code", label: "Code" }, { key: "name", label: "Account" }, { key: "parent", label: "Group", hidden: true }, { key: "amount", label: "Amount", kind: "money", total: true }] },
-  { code: "general_ledger", title: "General ledger", category: "Finance", perms: ["journals.view"], params: ["account", "range"], required: ["account"], rangePreset: "month",
+  { code: "general_ledger", dateKey: "entry_date", title: "General ledger", category: "Finance", perms: ["journals.view"], params: ["account", "range"], required: ["account"], rangePreset: "month",
     description: "Every line on one account with opening and running balance.",
     run: (p, c) => call("rpt_general_ledger", { p_company: c, p_account: p.account, p_from: d(p.from), p_to: d(p.to) }),
     link: (r) => (r.entry_id ? `/vouchers?view=${r.entry_id}` : null),
@@ -227,7 +231,7 @@ export const REPORTS: ReportDef[] = [
     run: (p, c) => call("trial_balance", { p_company_id: c, p_as_of: d(p.asOf) }), link: (r) => `/reports/general_ledger?account=${r.account_id}`,
     columns: [{ key: "code", label: "Code" }, { key: "name", label: "Account" }, { key: "account_type", label: "Type", kind: "badge" }, { key: "parent_code", label: "Group", hidden: true },
       { key: "debit", label: "Debit", kind: "money", total: true }, { key: "credit", label: "Credit", kind: "money", total: true }] },
-  { code: "party_ledger", title: "Party ledger", category: "Finance", perms: ["journals.view"], params: ["party", "range"], required: ["party"], rangePreset: "all",
+  { code: "party_ledger", dateKey: "entry_date", title: "Party ledger", category: "Finance", perms: ["journals.view"], params: ["party", "range"], required: ["party"], rangePreset: "all",
     description: "Ledger of any customer, supplier, payment agent or employee.",
     run: (p) => call("party_statement", { p_party_type: p.party?.type, p_party_id: p.party?.id, p_from: d(p.from), p_to: d(p.to), p_include_linked: false }),
     link: (r) => (r.entry_id ? `/vouchers?view=${r.entry_id}` : null), columns: LEDGER_COLS(),
@@ -242,7 +246,7 @@ export const REPORTS: ReportDef[] = [
     columns: [{ key: "name", label: "Account" }, { key: "kind", label: "Kind", kind: "badge" }, { key: "currency", label: "Cur.", hidden: true }, { key: "opening", label: "Opening", kind: "money", total: true },
       { key: "money_in", label: "In", kind: "money", total: true }, { key: "money_out", label: "Out", kind: "money", total: true }, { key: "closing", label: "Closing", kind: "money", total: true },
       { key: "reconciled_until", label: "Reconciled until", kind: "date" }, { key: "unmatched_items", label: "Not reconciled", kind: "int" }] },
-  { code: "bank_book", title: "Cash / bank book", category: "Cash, bank & cheques", perms: ["journals.view"], params: ["bank", "range"], required: ["bank"], rangePreset: "month",
+  { code: "bank_book", dateKey: "entry_date", title: "Cash / bank book", category: "Cash, bank & cheques", perms: ["journals.view"], params: ["bank", "range"], required: ["bank"], rangePreset: "month",
     description: "Every movement on one bank / cash account with running balance.",
     run: (p) => call("bank_book", { p_bank_account_id: p.bank, p_from: d(p.from), p_to: d(p.to) }), link: (r) => (r.entry_id ? `/vouchers?view=${r.entry_id}` : null),
     columns: [{ key: "entry_date", label: "Date", kind: "date" }, { key: "entry_no", label: "Entry" }, { key: "party_name", label: "Party" }, { key: "memo", label: "Narration" },
@@ -254,7 +258,7 @@ export const REPORTS: ReportDef[] = [
     columns: [{ key: "entry_date", label: "Date", kind: "date" }, { key: "entry_no", label: "Entry" }, { key: "entry_type", label: "Type", kind: "badge" }, { key: "party", label: "Party" },
       { key: "memo", label: "Narration" }, { key: "reference", label: "Reference" }, { key: "amount", label: "Amount", kind: "money", total: true }, { key: "age_days", label: "Age (days)", kind: "int" }],
     quick: { columns: ["entry_date", "entry_no", "amount", "age_days"], limit: 10 } },
-  { code: "pdc_register", title: "PDC register", category: "Cash, bank & cheques", perms: ["journals.view", "pdc.manage"], params: ["range", "party"], rangePreset: "all",
+  { code: "pdc_register", dateKey: "cheque_date", title: "PDC register", category: "Cash, bank & cheques", perms: ["journals.view", "pdc.manage"], params: ["range", "party"], rangePreset: "all",
     description: "Post-dated cheques received and issued with status, due date and bounce count.",
     run: async (p, c) => {
       let q = sb().from("pdc_records_v").select("*").eq("company_id", c);
@@ -283,20 +287,20 @@ export const REPORTS: ReportDef[] = [
     columns: [{ key: "advance_date", label: "Date", kind: "date" }, { key: "doc_no", label: "Advance" }, { key: "employee", label: "Employee" }, { key: "amount", label: "Amount", kind: "money", total: true },
       { key: "recovered", label: "Recovered", kind: "money", total: true }, { key: "written_off", label: "Written off", kind: "money", total: true }, { key: "outstanding", label: "Outstanding", kind: "money", total: true },
       { key: "per_month", label: "Per month", kind: "money" }, { key: "status", label: "Status", kind: "badge" }, { key: "reason", label: "Reason", hidden: true }] },
-  { code: "pay_items", title: "Bonuses, overtime & other pay items", category: "People", perms: ["payroll.view"], params: ["range", "payType"], rangePreset: "year",
+  { code: "pay_items", dateKey: "item_date", title: "Bonuses, overtime & other pay items", category: "People", perms: ["payroll.view"], params: ["range", "payType"], rangePreset: "year",
     description: "Approved / pending bonuses, overtime, allowances, fines and labour earnings.",
     run: (p, c) => call("rpt_pay_items", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_type: d(p.payType) }), groupBy: "item_type",
     columns: [{ key: "item_date", label: "Date", kind: "date" }, { key: "employee", label: "Employee" }, { key: "item_type", label: "Type", kind: "badge" }, { key: "direction", label: "Earning / deduction", hidden: true },
       { key: "product", label: "Assembled item" }, { key: "quantity", label: "Qty", kind: "qty", total: true }, { key: "rate", label: "Rate", kind: "money" }, { key: "amount", label: "Amount", kind: "money", total: true },
       { key: "status", label: "Status", kind: "badge" }, { key: "description", label: "Description", hidden: true }] },
-  { code: "labour_earnings", title: "Assembly labour earnings", category: "People", perms: ["payroll.view", "labour.supervise"], params: ["range"], rangePreset: "month",
+  { code: "labour_earnings", dateKey: "item_date", title: "Assembly labour earnings", category: "People", perms: ["payroll.view", "labour.supervise"], params: ["range"], rangePreset: "month",
     description: "Piece-rate labour: quantity, rate and earning per employee and assembled item.",
     run: (p, c) => call("rpt_pay_items", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_type: "ASSEMBLY_LABOUR" }), groupBy: "employee",
     columns: [{ key: "item_date", label: "Date", kind: "date" }, { key: "employee", label: "Employee" }, { key: "product", label: "Item / variant" }, { key: "quantity", label: "Qty", kind: "qty", total: true },
       { key: "rate", label: "Rate", kind: "money" }, { key: "amount", label: "Earning", kind: "money", total: true }, { key: "status", label: "Status", kind: "badge" }] },
 
   /* ------------------------------------------------------------------ Administration */
-  { code: "activity", title: "Audit / activity", category: "Administration", perms: ["audit.view"], params: ["range", "entity"], rangePreset: "month",
+  { code: "activity", dateKey: "created_at", title: "Audit / activity", category: "Administration", perms: ["audit.view"], params: ["range", "entity"], rangePreset: "month",
     description: "Who created or changed what, and when (latest 5,000 changes in the range).",
     run: (p, c) => call("rpt_activity", { p_company: c, p_from: d(p.from), p_to: d(p.to), p_entity: d(p.entity), p_user: null }),
     columns: [{ key: "created_at", label: "When", kind: "datetime" }, { key: "user_name", label: "User" }, { key: "action", label: "Action", kind: "badge" }, { key: "entity_type", label: "Record type" },

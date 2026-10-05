@@ -6,28 +6,51 @@ import { toast } from "sonner";
 import { Badge, Button, Card, ConfirmDialog, EmptyState, Field, Input, Skeleton, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { LookupPicker } from "../inventory/pickers";
-import { AccountPicker, BankPicker, DateRangeBar, PartyPicker, presetRange } from "../accounting/common";
+import { AccountPicker, BankPicker, PartyPicker } from "../accounting/common";
+import { LAST_N, PERIOD_GROUPS, PERIOD_LABEL, asOfPreset, periodRange, type PeriodKey } from "./periods";
 import { cellText, exportCsv, exportXlsx, printReport, type ExportRow } from "./exporting";
 import type { Col, Params, PartyRef, ReportDef, Row } from "./registry";
 
 /* ---------------------------------------------------------------- params <-> URL */
 export function paramsToSearch(p: Params): Record<string, string> {
   const o: Record<string, string> = {};
-  for (const k of ["from", "to", "asOf", "customer", "supplier", "warehouse", "bank", "account", "payType", "entity"] as const) if (p[k]) o[k] = String(p[k]);
+  if (p.period) o.period = p.period;
+  if (!p.period || p.period === "custom") { if (p.from) o.from = p.from; if (p.to) o.to = p.to; }
+  for (const k of ["asOf", "customer", "supplier", "warehouse", "bank", "account", "payType", "entity"] as const) if (p[k]) o[k] = String(p[k]);
   if (p.party) { o.ptype = p.party.type; o.party = p.party.id; }
   if (p.compare) o.compare = "1";
   return o;
 }
 function searchToParams(def: ReportDef, sp: URLSearchParams): Params {
-  const has = (k: string) => sp.has(k);
-  const preset = def.rangePreset ? presetRange(def.rangePreset) : { from: null, to: null };
+  const r = defaultPeriodRange(def, sp);
   return {
-    from: has("from") ? sp.get("from") || null : def.params?.includes("range") ? preset.from : null,
-    to: has("to") ? sp.get("to") || null : def.params?.includes("range") ? preset.to : null,
+    period: r.period, from: r.from, to: r.to,
     asOf: sp.get("asOf"), customer: sp.get("customer"), supplier: sp.get("supplier"), warehouse: sp.get("warehouse"), bank: sp.get("bank"), account: sp.get("account"),
     payType: sp.get("payType"), entity: sp.get("entity"), compare: sp.get("compare") === "1",
     party: sp.get("party") ? { type: (sp.get("ptype") as PartyRef["type"]) ?? fixedPartyType(def) ?? "CUSTOMER", id: sp.get("party")! } : null,
   };
+}
+const PRESET_TO_PERIOD: Record<string, PeriodKey> = { month: "month", prev: "lastmonth", year: "year", all: "all" };
+/** Which period a report opens with: URL → explicit dates (custom) → "Last 10 transactions" for transaction lists → the report's own preset. */
+export function defaultPeriodRange(def: ReportDef, sp: URLSearchParams): { period: PeriodKey | null; from: string | null; to: string | null } {
+  if (!def.params?.includes("range")) return { period: null, from: null, to: null };
+  const valid = (k: string | null): k is PeriodKey => !!k && k in PERIOD_LABEL && (!LAST_N[k as PeriodKey] || !!def.dateKey);
+  const asked = sp.get("period");
+  const period: PeriodKey = valid(asked) ? asked
+    : sp.has("from") || sp.has("to") ? "custom"
+    : def.dateKey ? "last10"
+    : PRESET_TO_PERIOD[def.rangePreset ?? "all"] ?? "all";
+  if (period === "custom") return { period, from: sp.get("from") || null, to: sp.get("to") || null };
+  return { period, ...periodRange(period) };
+}
+/** "Last N transactions": newest N real entries (opening-balance lines dropped). */
+export function latestN(def: ReportDef, rows: Row[], period: string | null | undefined): Row[] {
+  const n = period ? LAST_N[period as PeriodKey] : undefined;
+  if (!n || !def.dateKey) return rows;
+  const k = def.dateKey;
+  return rows.filter((r) => r.row_kind !== "OPENING")
+    .sort((a, b) => String(b[k] ?? "").localeCompare(String(a[k] ?? "")) || Number(b.__index ?? 0) - Number(a.__index ?? 0))
+    .slice(0, n);
 }
 export function fixedPartyType(def: ReportDef): PartyRef["type"] | null {
   if (def.code.startsWith("customer")) return "CUSTOMER";
@@ -85,7 +108,9 @@ export function ReportScreen({ def }: { def: ReportDef }) {
     enabled: !!companyId && !!def.run && missing.length === 0,
     queryFn: async (): Promise<Row[]> => (await def.run!(params, companyId!)).map((r, i) => ({ ...r, __index: i })),
   });
-  const rows = q.data ?? [];
+  const fetched = q.data ?? [];
+  const rows = React.useMemo(() => latestN(def, fetched, params.period), [def, fetched, params.period]);
+  const limitN = params.period ? LAST_N[params.period as PeriodKey] : undefined;
   const all = def.columns ?? [];
   const empty = new Set(all.filter((c) => rows.length > 0 && rows.every((r) => r[c.key] == null || r[c.key] === "")).map((c) => c.key));
   const defaultCols = all.filter((c) => !c.hidden && !empty.has(c.key)).map((c) => c.key);
@@ -164,6 +189,7 @@ export function ReportScreen({ def }: { def: ReportDef }) {
               )}
             </div>
             <span className="text-xs text-ink-muted">{q.isFetching ? "Loading…" : `${rows.length.toLocaleString()} rows`}</span>
+            {limitN && !q.isFetching && <span className="text-xs text-ink-faint">Newest first — showing the last {limitN} transactions. Choose a period to see more.</span>}
             <div className="ml-auto flex gap-1">
               <Button size="sm" variant="ghost" icon={<FileSpreadsheet className="h-3.5 w-3.5" />} disabled={!rows.length}
                 onClick={() => exportXlsx(def.title, subtitle, visible, shaped).catch((e) => toast.error(String(e)))}>Excel</Button>
@@ -249,8 +275,19 @@ function ParamBar({ def, params, onChange }: { def: ReportDef; params: Params; o
     <>
       {(def.params ?? []).map((k) => {
         switch (k) {
-          case "range": return <Field key={k} label="Period"><DateRangeBar value={{ from: params.from ?? null, to: params.to ?? null }} onChange={(r) => set({ from: r.from, to: r.to })} /></Field>;
-          case "asOf": return <Field key={k} label="As of" hint="Blank = today"><Input type="date" className="w-40" value={params.asOf ?? ""} onChange={(e) => set({ asOf: e.target.value || null })} /></Field>;
+          case "range": return <PeriodField key={k} def={def} params={params} set={set} />;
+          case "asOf": return (
+            <Field key={k} label="As of" hint="Blank = today">
+              <div className="flex flex-wrap items-center gap-1">
+                <Input type="date" className="w-40" value={params.asOf ?? ""} onChange={(e) => set({ asOf: e.target.value || null })} />
+                {([["today", "Today"], ["lastmonthend", "Last month end"], ["lastquarterend", "Last quarter end"], ["lastyearend", "Last year end"]] as const).map(([p, l]) => {
+                  const v = asOfPreset(p); const on = (params.asOf ?? asOfPreset("today")) === v;
+                  return <button key={p} type="button" onClick={() => set({ asOf: p === "today" ? null : v })}
+                    className={cn("h-control-sm rounded-control border px-2 text-xs", on ? "border-primary bg-primary/10 text-primary" : "border-line text-ink-muted hover:text-ink")}>{l}</button>;
+                })}
+              </div>
+            </Field>
+          );
           case "customer": return <Field key={k} label="Customer"><div className="w-56"><LookupPicker value={params.customer ?? null} onChange={(v) => set({ customer: v })} placeholder="All customers" spec={{ table: "customers", label: "name", secondary: "code" }} /></div></Field>;
           case "supplier": return <Field key={k} label="Supplier"><div className="w-56"><LookupPicker value={params.supplier ?? null} onChange={(v) => set({ supplier: v })} placeholder="All suppliers" spec={{ table: "suppliers", label: "name", secondary: "code" }} /></div></Field>;
           case "warehouse": return <Field key={k} label="Warehouse"><div className="w-48"><LookupPicker value={params.warehouse ?? null} onChange={(v) => set({ warehouse: v })} placeholder="All warehouses" spec={{ table: "warehouses", label: "name", secondary: "code" }} /></div></Field>;
@@ -277,9 +314,38 @@ function ParamBar({ def, params, onChange }: { def: ReportDef; params: Params; o
   );
 }
 
+function PeriodField({ def, params, set }: { def: ReportDef; params: Params; set: (p: Partial<Params>) => void }) {
+  const period = (params.period ?? "custom") as PeriodKey;
+  const groups = PERIOD_GROUPS.filter((g) => def.dateKey || g.label !== "Latest");
+  const dates = (from: string | null, to: string | null) => set({ period: "custom", from, to });
+  return (
+    <Field label="Show">
+      <div className="flex flex-wrap items-center gap-2">
+        <select className="h-control rounded-control border border-line bg-surface px-2 text-sm" value={period}
+          onChange={(e) => { const k = e.target.value as PeriodKey; set(k === "custom" ? { period: k, from: params.from ?? null, to: params.to ?? null } : { period: k, ...periodRange(k) }); }}>
+          {groups.map((g, i) => g.label
+            ? <optgroup key={i} label={g.label}>{g.items.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</optgroup>
+            : g.items.map(([k, l]) => <option key={k} value={k}>{l}</option>))}
+        </select>
+        {period === "custom" ? <>
+          <Input type="date" className="w-36" value={params.from ?? ""} onChange={(e) => dates(e.target.value || null, params.to ?? null)} />
+          <span className="text-xs text-ink-muted">to</span>
+          <Input type="date" className="w-36" value={params.to ?? ""} onChange={(e) => dates(params.from ?? null, e.target.value || null)} />
+        </> : params.from || params.to ? (
+          <button type="button" className="text-xs text-ink-muted hover:text-primary hover:underline" title="Edit these dates" onClick={() => dates(params.from ?? null, params.to ?? null)}>
+            {params.from === params.to ? params.from : `${params.from} → ${params.to}`}</button>
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
 export function describeParams(def: ReportDef, p: Params) {
   const parts: string[] = [];
-  if (def.params?.includes("range")) parts.push(p.from || p.to ? `${p.from ?? "start"} to ${p.to ?? "today"}` : "All dates");
+  if (def.params?.includes("range")) {
+    const n = p.period ? LAST_N[p.period as PeriodKey] : undefined;
+    parts.push(n ? `Last ${n} transactions` : p.from || p.to ? `${p.from ?? "start"} to ${p.to ?? "today"}` : "All dates");
+  }
   if (def.params?.includes("asOf")) parts.push(`As of ${p.asOf ?? "today"}`);
   if (p.compare) parts.push("vs previous period");
   return parts.join(" · ");

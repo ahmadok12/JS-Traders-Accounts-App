@@ -3,6 +3,7 @@ import { Input, cn } from "@jst/ui";
 import { sb, useAccess } from "@jst/data-access";
 import { formatNumber } from "@jst/utilities";
 import { LookupPicker } from "../inventory/pickers";
+import { periodRange, type PeriodKey } from "../reports/periods";
 
 export type EntryType = "RECEIPT" | "PAYMENT" | "TRANSFER" | "JOURNAL" | "OPENING" | "SYSTEM";
 export type PartyType = "CUSTOMER" | "SUPPLIER" | "EMPLOYEE" | "AGENT";
@@ -119,18 +120,11 @@ export function usePartyNames(parties: { type: string | null; id: string | null 
 
 /* ---------------------------------------------------------------- date range */
 export interface DateRange { from: string | null; to: string | null }
-const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 export function presetRange(k: string): DateRange {
-  const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
-  switch (k) {
-    case "month": return { from: iso(new Date(y, m, 1)), to: iso(new Date(y, m + 1, 0)) };
-    case "prev": return { from: iso(new Date(y, m - 1, 1)), to: iso(new Date(y, m, 0)) };
-    case "year": return { from: iso(new Date(y, 0, 1)), to: iso(new Date(y, 11, 31)) };
-    default: return { from: null, to: null };
-  }
+  if (k === "prev") return periodRange("lastmonth");
+  return periodRange(k as PeriodKey);
 }
-const PRESETS = [["all", "All"], ["month", "This month"], ["prev", "Last month"], ["year", "This year"]] as const;
+const PRESETS = [["all", "All"], ["today", "Today"], ["week", "This week"], ["month", "This month"], ["prev", "Last month"], ["quarter", "This quarter"], ["year", "This year"], ["lastyear", "Last year"]] as const;
 export function DateRangeBar({ value, onChange }: { value: DateRange; onChange: (r: DateRange) => void }) {
   const active = PRESETS.find(([k]) => { const r = presetRange(k); return r.from === value.from && r.to === value.to; })?.[0];
   return (
