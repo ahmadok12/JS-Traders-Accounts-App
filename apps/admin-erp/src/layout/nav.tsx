@@ -135,7 +135,8 @@ export const NAV: NavGroup[] = [
       { to: "/bank-book", label: "Cash & Bank Book", icon: Wallet, perms: [P.journalsView] },
       { to: "/trial-balance", label: "Trial Balance", icon: Scale, perms: [P.journalsView] },
       { to: "/periods", label: "Accounting Periods", icon: CalendarRange, perms: [P.journalsView, P.periodsManage] },
-      { to: "/pdc", label: "PDC & Reconciliation", icon: CalendarClock, soon: "Stage 10" },
+      { to: "/pdc", label: "Post-dated Cheques", icon: CalendarClock, perms: [P.journalsView, "pdc.manage"] },
+      { to: "/bank-reconciliation", label: "Bank Reconciliation", icon: Scale, perms: [P.journalsView, "bank.reconcile"] },
     ],
   },
   {

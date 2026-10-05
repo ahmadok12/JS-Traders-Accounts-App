@@ -29,6 +29,25 @@ One Supabase PostgreSQL database per environment, multiple controlled apps.
 - Test: `tests/sql/picking_teams.sql` (runs as admin / ali / bilal and rolls back).
 - If moving staff errors with "function does not exist", run `supabase/RUN_ME_set_staff_warehouses.sql` once in the SQL editor.
 
+## Post-dated cheques and bank reconciliation (Stage 10) — 2026-10-05
+
+- **Post-dated cheques** (`/pdc`, PDC-): received from customers / issued to suppliers. HELD (in hand / issued; shown as *due* from the cheque date)
+  → DEPOSITED → CLEARED, or → BOUNCED → RE-PRESENTED → … → CLEARED; return / cancel; undo deposit / undo clearing; notes. Every change writes `pdc_events`.
+  Accounting (normal engine, source `PDC`): received = Dr 1250 PDC Receivable / Cr AR (a RECEIPT, can pay invoices); clear = Dr Bank / Cr 1250.
+  Issued = Dr AP / Cr 2150 PDC Payable (a PAYMENT, can pay bills); clear = Dr 2150 / Cr Bank. Bounce reverses the receipt/payment and releases its
+  invoice/bill allocations (+ optional bank charges). Duplicate cheque numbers per party are refused.
+- **Bank reconciliation** (`/bank-reconciliation`): CSV / .xlsx statement import with column mapping (date formats, debit/credit or signed amount,
+  title rows, totals rows skipped). Duplicate-safe: each line gets a key (bank key, else date|amount|reference|description|balance + occurrence);
+  re-imports and overlapping statements skip existing lines; a real repeat can be imported as an *authorised duplicate*. Original rows kept (`raw`).
+  Matching: suggestions (amount + date window, cheque no. / reference / party raise the score) accepted by the user; manual 1:1, 1:n, n:1, n:n
+  (sides must agree); book-only clearing (opening balance, voucher + its reversal); ignore lines with a reason; create the missing receipt / payment /
+  expense / transfer / journal from a line (split over several lines) — posted through the normal engine and matched. Finalize: statement balance =
+  books − book items not yet on the statement + statement items not yet in the books; a difference needs `bank.reconcile_exception` + a note.
+  Finalizing locks the matches and moves `bank_accounts.reconciled_until`; undo restores it. Removed matches keep who / when / why.
+  A voucher matched in a reconciliation cannot be reversed until unmatched.
+- Permissions: `pdc.manage`, `bank.reconcile` (Administrator, Accountant), `bank.reconcile_exception` (Administrator).
+- Tests: `tests/sql/pdc_bank_reconciliation.sql` (25 checks), `tests/unit/statementParse.test.ts`.
+
 ## Payments, multi-currency and payment agents (Stage 9) — 2026-10-05
 
 - **Ledger currency**: `journal_lines` now carry `currency`, `fx_amount`, `fx_rate` (the actual rate of that transaction). PKR stays the base — debit/credit are PKR.
