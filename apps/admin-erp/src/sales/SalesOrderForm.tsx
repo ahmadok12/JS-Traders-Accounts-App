@@ -325,7 +325,7 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
                 {over ? "over · " : ""}avail {qtyFmt(a?.available ?? 0)}{(line.sent[w.id] ?? 0) > 0 && <> · {qtyFmt(line.sent[w.id])} sent</>}
               </div>
             )}
-            {isRoll && n(v) > 0 && (() => {
+            {isRoll && (n(v) > 0 || (a?.available ?? 0) > 0) && (() => {
               const c = line.rolls?.[w.id] ?? {};
               const chosen = Object.values(c).filter((q) => n(q) > 0).length;
               return (
@@ -356,7 +356,13 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
         {rollWh && (
           <RollChoiceDialog wh={rollWh} productId={line.product_id} variantId={line.variant_id} uom={meta.data?.uom ?? ""} qty={n(line.alloc[rollWh.id] ?? "0")}
             sent={line.sent[rollWh.id] ?? 0} value={line.rolls?.[rollWh.id] ?? {}} productName={meta.data?.name ?? ""}
-            onDone={(c) => { onChange({ rolls: { ...(line.rolls ?? {}), [rollWh.id]: c } }); setRollWh(null); }} onCancel={() => setRollWh(null)} />
+            onDone={(c) => {
+              // no quantity typed yet → the quantity becomes what was chosen from the rolls
+              const cut = sumCuts(c);
+              const q = n(line.alloc[rollWh.id] ?? "0");
+              onChange({ rolls: { ...(line.rolls ?? {}), [rollWh.id]: c }, ...(cut > 0 && !(q > 0) ? { alloc: { ...line.alloc, [rollWh.id]: String(cut) } } : {}) });
+              setRollWh(null);
+            }} onCancel={() => setRollWh(null)} />
         )}
       </td>
     </tr>
@@ -372,15 +378,19 @@ function RollChoiceDialog({ wh, productId, variantId, uom, qty, sent, value, pro
   const [cuts, setCuts] = React.useState<Cuts>(value);
   const rolls = useRolls(wh.id, productId, variantId);
   const total = sumCuts(cuts);
-  const tooMuch = mode === "pick" && total > qty + 1e-9;
+  const noQty = !(qty > 0);
+  const tooMuch = mode === "pick" && !noQty && total > qty + 1e-9;
   return (
     <ConfirmDialog open wide title={`Rolls — ${productName} from ${wh.code}`} confirmLabel="Done"
-      message={`Order quantity from ${wh.code}: ${fmtQty(qty)} ${uom}${sent > 0 ? ` (${fmtQty(sent)} already dispatched)` : ""}. Chosen rolls are cut first when the GDN is dispatched; anything not covered is cut automatically.`}
+      message={noQty
+        ? `Choose rolls and how much to cut from each — the order quantity from ${wh.code} is filled in from your choice.`
+        : `Order quantity from ${wh.code}: ${fmtQty(qty)} ${uom}${sent > 0 ? ` (${fmtQty(sent)} already dispatched)` : ""}. Chosen rolls are cut first when the GDN is dispatched; anything not covered is cut automatically.`}
       onCancel={onCancel}
       onConfirm={() => { if (tooMuch) { toast.error(`Rolls add up to ${fmtQty(total)} — more than ${fmtQty(qty)} ${uom}`); return; } onDone(mode === "auto" ? {} : Object.fromEntries(Object.entries(cuts).filter(([, q]) => n(q) > 0))); }}>
       <div className="mt-3 text-left">
         <RollCutsEditor mode={mode} cuts={cuts} onMode={setMode} onCuts={setCuts} warehouseId={wh.id} productId={productId} variantId={variantId} uom={uom} />
-        {mode === "pick" && (
+        {mode === "pick" && noQty && <div className="mt-2 text-xs tabular-nums text-ink-muted">{fmtQty(total)} {uom} chosen</div>}
+        {mode === "pick" && !noQty && (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <span className={cn("tabular-nums", tooMuch ? "text-danger" : total < qty ? "text-ink-muted" : "text-success")}>
               {fmtQty(total)} of {fmtQty(qty)} {uom} chosen{total < qty && total > 0 ? ` — ${fmtQty(qty - total)} will be cut automatically` : ""}
