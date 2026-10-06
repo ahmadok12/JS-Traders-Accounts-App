@@ -123,6 +123,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  wide,
 }: {
   open: boolean;
   title: string;
@@ -134,13 +135,16 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
   children?: React.ReactNode;
+  /** wider dialog for pickers / lists */
+  wide?: boolean;
 }) {
   return (
     <RD.Root open={open} onOpenChange={(o) => !o && onCancel()}>
       <RD.Portal>
         <RD.Overlay className="fixed inset-0 z-[60] bg-[rgba(17,24,39,0.40)]" />
-        <RD.Content className="fixed left-1/2 top-1/2 z-[61] w-[calc(100vw-32px)] max-w-dialog-sm -translate-x-1/2 -translate-y-1/2 rounded-dialog border border-line bg-surface p-5 shadow-dialog focus:outline-none">
-          <div className="flex gap-3">
+        <RD.Content className={cn("fixed left-1/2 top-1/2 z-[61] flex max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-dialog border border-line bg-surface p-5 shadow-dialog focus:outline-none", wide ? "max-w-2xl" : "max-w-dialog-sm")}>
+          {/* long content scrolls; the buttons stay in view */}
+          <div className="-mx-1 flex min-h-0 flex-1 gap-3 overflow-y-auto px-1">
             <div
               className={cn(
                 "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
@@ -157,7 +161,7 @@ export function ConfirmDialog({
               {children}
             </div>
           </div>
-          <div className="mt-5 flex justify-end gap-2">
+          <div className="mt-5 flex shrink-0 justify-end gap-2">
             <Button variant="secondary" onClick={onCancel} autoFocus>
               {cancelLabel}
             </Button>

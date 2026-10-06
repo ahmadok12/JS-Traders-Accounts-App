@@ -374,7 +374,7 @@ function RollChoiceDialog({ wh, productId, variantId, uom, qty, sent, value, pro
   const total = sumCuts(cuts);
   const tooMuch = mode === "pick" && total > qty + 1e-9;
   return (
-    <ConfirmDialog open title={`Rolls — ${productName} from ${wh.code}`} confirmLabel="Done"
+    <ConfirmDialog open wide title={`Rolls — ${productName} from ${wh.code}`} confirmLabel="Done"
       message={`Order quantity from ${wh.code}: ${fmtQty(qty)} ${uom}${sent > 0 ? ` (${fmtQty(sent)} already dispatched)` : ""}. Chosen rolls are cut first when the GDN is dispatched; anything not covered is cut automatically.`}
       onCancel={onCancel}
       onConfirm={() => { if (tooMuch) { toast.error(`Rolls add up to ${fmtQty(total)} — more than ${fmtQty(qty)} ${uom}`); return; } onDone(mode === "auto" ? {} : Object.fromEntries(Object.entries(cuts).filter(([, q]) => n(q) > 0))); }}>

@@ -96,6 +96,8 @@ export function RollCutsEditor({ mode, cuts, onMode, onCuts, warehouseId, produc
   const rolls = useRolls(warehouseId, productId, variantId);
   const total = sumCuts(cuts);
   const over = (r: RollRow) => { const v = cuts[r.id]; return !!v && n(v) > Number(r.remaining_qty); };
+  const [find, setFind] = React.useState("");
+  const shown = (rolls.data ?? []).filter((r) => !find.trim() || cuts[r.id] || `${r.unit_no} ${r.label ?? ""} ${r.remaining_qty}`.toLowerCase().includes(find.trim().toLowerCase()));
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -114,9 +116,12 @@ export function RollCutsEditor({ mode, cuts, onMode, onCuts, warehouseId, produc
         </span>
         {rolls.data && <span className="ml-auto text-2xs text-ink-faint">{rolls.data.length} roll{rolls.data.length === 1 ? "" : "s"} in stock</span>}
       </div>
+      {mode === "pick" && (rolls.data?.length ?? 0) > 8 && (
+        <Input className="h-control-sm" placeholder="Find roll (number, length or label)" value={find} onChange={(e) => setFind(e.target.value)} />
+      )}
       {mode === "pick" && (
-        <div className="flex flex-wrap gap-1.5">
-          {(rolls.data ?? []).map((r) => (
+        <div className="grid max-h-[45vh] grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-1.5 overflow-y-auto pr-1">
+          {shown.map((r) => (
             <label key={r.id} className={cn("flex items-center gap-1.5 rounded-control border bg-surface py-0.5 pl-2 pr-1 text-xs", over(r) ? "border-danger" : cuts[r.id] ? "border-primary" : "border-line")}>
               <span className="font-mono">{r.unit_no}</span>
               <span className="tabular-nums text-ink-muted">{fmtQty(Number(r.remaining_qty))}{r.label ? ` · ${r.label}` : ""}</span>
