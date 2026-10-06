@@ -1,0 +1,598 @@
+JS TRADERS ERP — DEVELOPMENT TRACKER
+Source: JS_Traders_ERP_Master_Specification_OPTIMIZED.md (v2.0), section 27.2
+Last updated: 5 Oct 2026 (Stage 11 — reports, dashboards, exports)
+
+Legend:  [x] done    [~] partly done    [ ] not started
+Status after each sprint is updated in this file.
+
+======================================================================
+OVERALL STATUS
+======================================================================
+Stage 1   Platform foundation ........................ [x] DONE (web app; CI/R2 pending)
+Stage 2   Master data ................................ [x] DONE
+Stage 3   Core inventory engine ...................... [x] DONE (rolls, assembly, bundles included)
+Stage 4   Accounting engine .......................... [x] DONE (invoice/bill posting arrives with Stages 5 & 7)
+Stage 5   Sales + warehouse workflow ................. [x]  (done 2026-10-04; R2 keys to be added by Ahmad)
+Stage 6   Commercial pricing ......................... [x]  (done 2026-10-04)
+Stage 6.5 Employees, HR, payroll, assembly labour .... [x]  (done 2026-10-04)
+Stage 7   Purchasing ................................. [x]  (done 2026-10-05)
+Stage 8   Shipments and landed cost .................. [x]  (done 2026-10-04)
+Stage 9   Payments, multi-currency, payment agents ... [x]  (done 2026-10-05)
+Stage 10  PDC and bank reconciliation ................ [x]  (done 2026-10-05)
+Stage 11  Reporting, dashboards, exports ............. [x]  (done 2026-10-05)
+Stage 12  Configuration and document engine .......... [ ]  (custom fields may be moved earlier)
+Stage 13  Interfaces (warehouse, owner, sales, mobile) [ ]
+Stage 14  Full-system integration .................... [ ]
+Stage 15  Full QA, security and performance .......... [ ]
+Stage 16  Release candidate .......................... [ ]
+Then:     Business implementation Phases 1–6 (live rollout)
+
+======================================================================
+STAGE 1 — PLATFORM FOUNDATION                                  [x]
+======================================================================
+[x] Monorepo structure (apps/, packages/, supabase/migrations/, tests/)
+[x] Shared TypeScript packages: ui, data-access, permissions, types, utilities
+[x] Version-controlled SQL migrations
+[x] Authentication (email + password login, password reset)
+[x] Profiles / users
+[x] Companies and branches
+[x] Roles (Administrator, Owner, Accountant, Warehouse Manager,
+    Warehouse Staff, Salesperson) and 27 permissions
+[x] Company scope, warehouse scope, customer (salesperson) scope
+[x] Row-level security on every table
+[x] Sensitive column protection (credit limit, CNIC, supplier bank details)
+[x] Audit framework (automatic change history on every table)
+[x] Document numbering engine (database-issued, no duplicates)
+[x] Shared data-access patterns (pagination, search, minimal updates)
+[x] Error handling with user-friendly messages
+[x] Design system tokens (Inter font, soft neutral theme, compact sizes)
+[x] Private R2 attachment service: edge function `attachments` (signed 10-min
+    links), permission checks in DB; needs R2 secrets in Supabase
+[ ] DEV / STAGING / PRODUCTION as separate Supabase projects
+[ ] CI/CD pipeline (GitHub: lint, typecheck, build, migration check)
+[ ] MFA screens for administrators (setup QR + code at login)
+[ ] Automated test suite (unit / integration / E2E)
+Manual settings for Ahmad:
+[ ] Supabase: leaked-password protection (Pro plan)
+[ ] Supabase: enable TOTP MFA
+
+======================================================================
+STAGE 2 — MASTER DATA                                          [x]
+======================================================================
+[x] Customers (basic + additional details + credit settings)
+[x] Customer groups / farms (parent account with linked farm accounts)
+[x] Customer ↔ salesperson assignments (table + security)
+[x] Suppliers (basic + details + restricted banking)
+[x] Parties that are both customer and supplier (1 Oct 2026):
+    "Also a supplier" / "Also a customer" ticked by default when adding;
+    creates + links the matching record (or links an existing one with
+    the same name); name/contact/address/NTN sync both ways; untick to
+    unlink (nothing deleted). Test: tests/sql/customer_supplier_link.sql
+[x] Products (basic + advanced details, tracking type, bundle/assembled flags)
+[x] Product variants
+[x] Product categories (with parent) and brands
+[x] Brands made optional (1 Oct 2026): Settings → Features → Products →
+    "Use brands". Currently OFF: Brands menu and product Brand field hidden
+    (data kept). Settings tab "Inventory" renamed "Features" — home for all
+    optional switches (storage locations, brands, future options).
+[x] Units of measure (seeded) + product unit conversions (table)
+[x] Warehouses + locations
+[x] Storage locations made optional (1 Oct 2026): Settings → Features →
+    "Track stock by storage location". Currently OFF: location pickers,
+    columns and the warehouse Locations tab are hidden; database posts all
+    stock at warehouse level. Turning off moved rack stock to unassigned
+    (logged as "Setting change" movements, totals unchanged).
+[x] User warehouse access
+[x] Currencies (PKR, USD, CNY, AED, SAR, EUR)
+[x] Chart of accounts (seeded with system accounts for later engines)
+[x] Bank / cash accounts
+[x] Payment agents + currency sub-accounts
+[x] Employees (master only)
+[x] Admin screens: View-first lists, Edit inside View, Deactivate
+    separated, unsaved-change guard, expandable optional sections,
+    searchable dropdowns, History tab, Audit Log, Users & Access, Settings
+[ ] Custom (dynamic) fields for every master — see Stage 12 / may move up
+[ ] Advanced list filters (any field, AND/OR, saved filters)
+[ ] Salesperson assignment screen on customer
+[ ] Unit conversion screen on product
+[ ] Master-data import templates (Excel/CSV)
+
+======================================================================
+STAGE 3 — CORE INVENTORY ENGINE                                [~]
+======================================================================
+[x] stock_movements — authoritative, append-only movement ledger
+    (OPENING, PURCHASE_RECEIPT, TRANSFER_OUT/IN, ADJUSTMENT, DAMAGE …)
+[x] stock_balances — derived read model (warehouse/location/product/variant)
+[x] Balance drift check (ledger vs balances must always match)
+[x] Opening stock (adjustment reason "Opening stock")
+[x] Goods receipt (quantity only; cost stays PENDING)
+[x] Stock transfers (out + in posted as one transaction)
+[x] Stock adjustments with reasons; approval (post) needs permission
+[x] Adjustment entry modes (1 Oct 2026): "Enter new quantity" (default —
+    system calculates +/−, recalculated from live stock at posting) and
+    "Add / remove" buttons. Test: tests/sql/adjustment_set_quantity.sql
+    [!] Manual step: run supabase/RUN_ME_save_stock_adjustment.sql once
+[x] Reversal of posted documents (with reason; history kept)
+[x] Progressive physical stock count (blind count for staff,
+    system qty / variance for approvers, approve in batches)
+[x] Reserved Orders: multi-line per customer, multi-warehouse, expiry date,
+    release per line or whole order, add items later
+[x] Convert Reserved Order → Sales Order (stock stays held, never released)
+[x] Stock on Hand: one row per item, one column per warehouse (dynamic)
+[x] Negative-stock policy per product / variant / warehouse
+[x] Variant required when product has variants; whole-unit check
+[x] Concurrency locks + duplicate-submit protection (idempotency)
+[x] Inventory permissions (receive, transfer, adjust, count, post, reserve)
+[x] Screens: Stock on Hand, Stock Movements, Goods Receipts, Transfers,
+    Adjustments & Opening, Stock Counts, Reservations, dashboard queues
+[x] Variant SKU auto-numbering (blank → product SKU-01, -02 …)
+[x] Sample data loader + reset script (DEV only)
+[x] Automated SQL regression test (tests/sql/inventory_engine.sql)
+[ ] Picking tasks, staff assignment / reassignment  → moved to Stage 5 (needs SOs)
+[x] Warehouse Staff role reduced to mobile tasks only (no receipts/counts/stock browsing)
+[x] Rolls / physical units (products with Tracking = "By roll"):
+    - receipts / adjustments record each roll's length (default one roll)
+    - transfers / removals / assembly / counts cut from rolls: Auto (least
+      off-cut) or Choose rolls; whole roll keeps its no., cut piece = child roll
+    - Inventory → Rolls: left vs original, cut-from, history, correct length
+      (posts an adjustment), register existing stock as rolls
+    - reversals restore rolls; Test: tests/sql/rolls_physical_units.sql
+[ ] Roll weight (kg) per roll — not needed yet
+[x] Rolls on Sales GDN: cut automatically (least off-cut) at dispatch; reversal restores
+[x] Product components (bill of materials): Products → Components tab for
+    Assembled items and Bundles; general list + per-variant lists; loop
+    protection; "can be built from stock now" per warehouse
+[x] Assembly / disassembly orders (Inventory → Assembly): components out +
+    finished item in (or reverse) in ONE transaction; draft / post / cancel /
+    reverse; auto-fills components from the product × quantity, editable;
+    shows availability and shortages. Test: tests/sql/assembly_and_bundles.sql
+[ ] Assembly labour (piece-rate earnings)                             → Stage 6.5
+[x] Bundles: component list + bundle availability calculated from
+    component stock (never double-counted)
+[x] Bundle dispatch consumes components on GDN (bundles are checked at dispatch, not reserved)
+[ ] Lock item against negative once physically counted (baseline lock)
+[ ] Stock import from Excel (opening stock template)
+[ ] Fix tests/sql/inventory_engine.sql steps 7-8 (old create_reservation call)
+Test gate: Opening → Receipt → Transfer → Reservation → Adjustment →
+           Count → Reversal all reconcile — PASSED (automated test).
+
+======================================================================
+STAGE 4 — ACCOUNTING ENGINE                                    [ ]
+======================================================================
+[x] Journal entries + journal lines (debit = credit enforced at posting)
+[x] Posting engine (atomic; ledger lines append-only)
+[x] Vouchers: Receipt, Payment (supplier / customer refund / expense),
+    Bank & cash transfer, Journal, Opening balances (auto-balanced to
+    Opening Balance Equity)
+[x] Customer / supplier statements (opening, running balance, closing,
+    View per row, print) + quick Statement tab on customer & supplier;
+    linked customer+supplier parties can be netted
+[x] Receivables / payables lists (as-of date, net-off linked parties)
+[x] Cash & bank book (balances per account, money in / out, running balance)
+[x] Trial balance (as of date, Dr = Cr check)
+[x] Accounting periods (create year, close / reopen; closed blocks posting)
+[x] Reversal (swapped entry, original kept; source documents reversed at source)
+[x] New bank / cash accounts get their own GL account automatically
+[x] Allocation of receipts to sales invoices (Stage 5); bills → Stage 7
+[ ] Ageing (30/60/90) and PDF statements with company header       → Stage 11 / 12
+[x] Multi-currency vouchers (foreign payments, conversions)        → Stage 9 done
+Test gate: tests/sql/accounting_engine.sql — PASSED (14 checks).
+Test gate: balances reconcile, unauthorized posting fails.
+
+======================================================================
+STAGE 5 — SALES + WAREHOUSE WORKFLOW                           [~]
+======================================================================
+PART 1 — DONE (migration 20261001000800_sales_gdn_invoices.sql)
+[x] Sales order foundation: header, lines, per-warehouse allocations,
+    approve, cancel (releases stock) — created from Reserved Orders
+[x] Manual sales order entry (Sales → Sales Orders → New): one quantity box
+    per active warehouse (no fixed columns), price or "Pending" (never 0),
+    last-charged price suggestion, edit while awaiting approval
+[x] Availability by warehouse shown when selecting product/variant
+    (available = on hand − reserved; bundles = buildable from components)
+[x] Approval reserves stock per warehouse; Close order releases the rest
+[x] GDN (Sales → Dispatch): from an approved SO, quantity per item ×
+    warehouse, defaults to everything left; draft / dispatch / cancel /
+    reverse; stock leaves the actual warehouse; reservation consumed;
+    rolls cut automatically; bundles take components; printable delivery note
+[x] Partial deliveries, multiple GDNs per SO; SO status Part delivered /
+    Delivered; GDN reversal returns stock and re-reserves it for the order
+[x] Sales invoice from one or more GDNs of a customer: ONE line per
+    item+variant+price; pending prices must be filled before posting;
+    discount; due date; posts Dr customer / Cr sales; reversal frees GDNs
+[x] "Receive payment now" on invoice (bank, amount, reference) — same
+    receipt engine, allocated automatically
+[x] Receive payment on a posted invoice; use an earlier receipt / advance
+[x] Receipt voucher → "Invoices paid" tab: allocate oldest-first, remove
+[x] Guards: an allocated receipt cannot be reversed; an invoiced GDN cannot
+    be reversed; invoice with payments cannot be reversed
+[x] Customer statement shows invoices as "Invoice"
+[x] Edit everywhere (migration 20261001000900_sales_corrections.sql):
+    - approved / part-delivered / delivered SO: Edit (never below what was
+      sent; dispatched items can't be removed); stock re-reserved
+    - dispatched GDN: Edit = reverse + new draft copy; Reverse always shown
+      (if invoiced, tells you which invoice to reverse first)
+    - posted invoice: Edit = reverse + new draft with same prices; payments
+      move to the new invoice when it posts; Reverse can release payments
+      (money stays on account as advance)
+[x] Quick invoice / counter sale (Settings → Features → Sales, off by default;
+    migration 20261001001000_quick_invoice.sql): customer + items + warehouse
+    + qty + price → SO, GDN and invoice created and posted in one step
+[x] GDN form: In stock column moved after "Send now"
+[ ] Cost of goods sold posting → Stage 7–8 (needs purchase costs)
+Test gate: tests/sql/sales_chain.sql — PASSED (18 checks; drift 0; TB equal)
+Test gate: tests/sql/sales_corrections.sql — PASSED (17 checks)
+Test gate: tests/sql/quick_invoice.sql — PASSED (9 checks)
+
+PART 2a — DONE (migration 20261002000100_quotations_picking_price_privacy.sql)
+[x] Quotations (Sales → Quotations): items, prices, discount, validity, terms;
+    draft → sent → accepted / rejected / cancelled; print; "Make sales
+    order" pre-fills the SO and spreads quantities over the warehouses with
+    the most stock; quotation marked Ordered and linked both ways
+[x] Picking tasks (Sales → Picking): per order × warehouse, default = all
+    still to pick; assign / reassign (history kept, new picker sees only
+    what is left); manager can tick on the picker's behalf; shortages need
+    a reason; finish → "Make GDN" from picked quantities (draft to check)
+[x] Nothing is picked twice: open tasks + picked-not-dispatched count
+[x] STAFF PHONE APP (/m, installable): My tasks, big "Picked all" / "Short"
+    buttons, finish; refreshes by itself; staff land here after login
+[x] Warehouse roles never receive selling prices: SO/GDN line prices are
+    column-protected (sales.view_prices); invoices + quotations hidden;
+    price fields/values hidden in their screens; their edits keep prices
+[x] New permissions: sales.view_prices, picking.manage, picking.perform
+Test gate: tests/sql/quotations_picking.sql — PASSED (19 checks)
+
+PART 2b — DONE (3 Oct 2026; migrations 20261003000100–000400)
+[x] Picking v2: warehouse staff teams (Warehouse Staff page, add staff with login name,
+    shift warehouses), one task per warehouse, several pickers per task, loud buzzer,
+    live updates, shortage decisions (re-pick other warehouse/staff, reduce order, keep)
+[x] Sales order: "Send to warehouse staff" in the form — save, approve & send in one go;
+    "Send to pickers" on approved orders; Picking tab on the order
+[x] Full-screen document dialogs with colour accents (SO, quotation, GDN, invoice, picking)
+[x] Android app "JS Picking" (GitHub Releases, built by GitHub Actions): alarm on the alarm
+    volume with full-screen ACCEPT even when the app is closed (device key polling)
+[x] Assigned stock counts on the phone (blind) → manager approves
+[x] Receiving check on the phone (all arrived / different + reason) → manager applies + posts
+[x] Warehouse Desk: live queues + staff on duty
+[x] Attachments (Cloudflare R2): "Files" tab on vouchers, invoices, quotations, SOs,
+    GDNs, receipts, transfers, adjustments, counts, assembly, reservations, price tasks;
+    drag-drop, phone camera, photos shrunk, open/download/remove (kept for audit)
+[x] WAREHOUSE MANAGER PORTAL — same app, role-based: menu and screens
+    without prices / invoices / accounting; home page = Warehouse Desk.
+    Original note (separate web portal, warehouse-only menu):
+    creates + approves SO (quantities/allocation, no prices), GDN, GRN,
+    opening stock, adjustments, counts, transfers; assigns staff tasks
+[~] STAFF MOBILE WEB APP (installable, phone browser; no Play Store):
+    [x] Picking tasks: tick items, picked qty, shortage, complete (photos → R2)
+    [ ] Assigned stock counts: count on phone → manager approves
+    [x] Receiving check: tick arriving items vs GRN + photos → manager approves
+    [x] Reassignment keeps history; new person sees only remaining work
+[x] Photo/attachment storage on Cloudflare R2 (private bucket, signed URLs)
+    — Ahmad to add R2 secrets + bucket CORS
+
+======================================================================
+STAGE 6 — COMMERCIAL PRICING                                   [x]
+DONE (migration 20261004000100_commercial_pricing.sql; Sales → Pricing)
+======================================================================
+[x] Customer + product + variant (+ currency) price history — from posted invoices
+    (backfilled) and approved price tasks; Pricing → Price history
+[x] Last charged price suggestion (reads the history; shown on price tasks + invoices)
+[x] Delayed pricing: SO/GDN lines without price listed under "Waiting for a price";
+    banner on SO/GDN with "Send for pricing"; pending never treated as zero
+[x] Price tasks PT-xxxxx: assign (owner/salesperson) → enter → submit → accountant
+    returns (with reason) or approves (can adjust); reassign / cancel; live alerts
+[x] Approved price written to SO, GDN lines and waiting draft invoices; locked on
+    the invoice (only pricing.approve can change it; change logged)
+[x] Price audit: task events with price snapshots per revision; invoice
+    override log (audit_log_price_overrides)
+    New permissions: pricing.enter (Owner, Salesperson, Admin),
+    pricing.approve (Accountant, Owner, Admin)
+
+======================================================================
+STAGE 6.5 — EMPLOYEES, HR, PAYROLL, ASSEMBLY LABOUR            [x]
+DONE (migrations 20261004000300/400/500; People → HR & Pay, People → Payroll, Assembly → Labour tab)
+======================================================================
+[x] Effective-dated fixed salary (history kept; payroll uses month-end salary; no back-dating into posted months)
+[x] Payroll runs per month: build → review/recalculate → approve → post → pay → reverse; register print
+[x] Bonuses / overtime / allowances / fines — owner approves before they enter payroll
+[x] Advances: request → approve & pay (Dr Employee Advances) → monthly payroll recovery / cash repayment / authorised write-off
+[x] Employee payable per employee (ledger) + salary payment vouchers (all / selected)
+[x] Leave types (paid/unpaid, days/year), requests, approval, yearly balances; unpaid leave deducted in payroll
+[x] Assembly labour rates (product / variant / optional employee, effective-dated)
+[x] Assembly labour on assembly orders: assign, completed/rejected, supervisor approval (≤ made, else exception note) → earning, never paid twice
+[x] Payroll posting: Dr Salaries & Wages / Dr Assembly Labour / Cr Employee Payable / Cr Employee Advances; labour expensed (capitalisation later with costing)
+    Permissions: payroll.view/manage/approve, labour.supervise (warehouse manager: quantities only, no money)
+[ ] Payroll security (salary data restricted)
+[ ] Payroll reports
+
+======================================================================
+STAGE 7 — PURCHASING                                           [x]
+DONE (migrations 20261005000100/200/300; Purchasing → Purchase Orders, Purchase Costs, Supplier Bills)
+======================================================================
+[x] Purchase orders: draft → approve → part received / received; close / reopen / cancel; currency + rate; prices only for purchasing.costs
+[x] Receive against a PO (partial receipts, PO quantities updated on posting, reversal undoes); link a draft receipt to a PO
+[x] Purchase cost tasks CT-: receipt COST_PENDING → assign → enter (currency/rate) → submit → accountant returns/approves → Dr Inventory / Cr GRNI;
+    "Enter purchase cost now" on the receipt; Purchase Costs page (waiting, item average costs)
+[x] Supplier bills BILL-: from receipts (prices from cost/PO) or expense bills; Pay Supplier Now (PKR; excess → supplier advance);
+    pay later, use earlier payments/advances, unlink, reverse
+[x] Accounts payable: Dr GRNI (receipt value) ± Inventory (price difference / receipts costed by the bill) + expenses / Cr AP (supplier)
+[x] Supplier price history (approved receipt costs + bill prices) with last-price suggestion on cost tasks
+[x] Attachments (PO, bills, cost tasks) and audit; foreign-currency settlement + FX gain/loss → Stage 9; COGS / valuation → Stage 8
+
+======================================================================
+STAGE 8 — SHIPMENTS AND LANDED COST                            [x]
+======================================================================
+[x] Shipments (/shipments): supplier, forwarder, mode, B/L/AWB, vessel/voyage, ports, incoterm, ETD/ETA (+ATD/ATA), commercial invoice, GD no.
+[x] Containers (no., size, seal, packages, weight, CBM); items from purchase orders (open qty) with weight/CBM/price
+[x] Tracking: Booked > Loaded > Departed > Transshipment > Arrived port > Customs > Released > Delivered; notes / new ETA timeline; late ETA flag
+[x] Documents via Files tab (invoice, packing list, B/L, COO, customs) — R2 attachments; packing-list print
+[x] Receive goods from shipment -> draft GRN; on posting: shipment received qty, PO received qty + status, auto Delivered
+[x] Landed cost (/landed-costs): freight, insurance, customs, clearing, port, bank, other
+[x] Paid how: forwarder/agent bill (auto supplier bill to Landed Cost Clearing), paid from bank, already billed, estimate (Accrued Import Costs)
+[x] Split by value / weight / quantity / volume (CBM) / percentage / manual amount; reconciles to the paisa (last line takes rounding)
+[x] Estimated vs actual: actual charge replaces an estimate; only the difference moves, split like the estimate
+[x] Capitalize vs expense; reverse landed cost (reverses auto bills); receipts with landed cost cannot be reversed
+[x] Stock valuation (moving average per item, company-wide) — every stock movement valued; GDN posts Dr COGS / Cr Inventory
+[x] Late costs (cost task, bill, bill price difference, landed cost): part for goods already sold goes straight to COGS
+[x] Adjustments / counts -> Inventory Adjustments; opening -> Opening Balance Equity; transfers value-neutral; assembly carries component cost
+[x] Stock Value page (/stock-valuation): value vs Inventory account, align once, opening stock cost entry, CSV export
+[x] Invoice view shows cost of goods and gross margin (permission inventory.valuation)
+[x] New accounts 1360 Landed Cost Clearing, 2160 Accrued Import Costs; permission inventory.valuation
+[x] Fixed: invoice-from-GDN / quick invoice failing (alias clash in discount code), bill-from-receipts same issue
+Tests: PO -> shipment (container, weights) -> status -> receive -> cost -> LC1 (freight by weight 750/250, customs by value 250/250,
+       clearing estimate by qty 200/100, bank charge expense) -> LC2 actual 360 replaces 300 estimate (+60 to stock) -> sale COGS 212.40/unit
+       -> reverse LC2; stock value = Inventory account at every step; opening cost 1,200 x 90; damage 5 x 90 -> Inventory Adjustments.
+
+======================================================================
+STAGE 9 — PAYMENTS, MULTI-CURRENCY, PAYMENT AGENTS             [x]
+DONE (migrations 20261009000100/200/300; Purchasing → Foreign Payments; Accounting → Agent Accounts,
+      Currency Conversions, Currency Balances & FX)
+======================================================================
+[x] Multi-currency on the ledger: every line keeps currency, foreign amount and the rate of THAT
+    transaction (PKR base); foreign bills credit the supplier in the bill currency at the bill rate
+[x] Foreign payments FXP-: amount × this payment's own rate; from a PKR bank, a same-currency bank, or a
+    payment agent sub-account; apply now or keep as advance and apply later; unlink / reverse
+[x] Individual FX rate per payment (never averaged; bill shows weighted average for reporting only)
+[x] Realized FX gain / loss on every application: Dr AP @ bill rate / Cr Supplier Advances @ payment rate,
+    difference → 4900 Realized FX Gain/Loss; unlinking reverses it
+[x] Pay Supplier Now + Quick bill now work for RMB / USD bills (rate + bank or agent)
+[x] Currency conversion vouchers CCV-: supplier balance (e.g. RMB → USD), agent money, bank money; old
+    transactions unchanged; PKR difference → FX gain / loss
+[x] Payment agents: fund (bank → agent), refund, charges, opening balance (advance or we owe the agent);
+    per-currency sub-accounts are ledgers; settlement keeps agent, supplier, bill, shipment, source
+    currency/amount, supplier currency/amount, rate, PKR, slip no., supplier bank ref.
+[x] Agent register: opening / funded / settled / charges / balance (advance vs payable), PKR funding vs
+    foreign settled, settlements by supplier / bill / shipment, ledger with running foreign + PKR balance
+[x] Currency balances (suppliers / agents / banks per currency, carrying rate), currency ledgers,
+    realized FX gain / loss report
+[x] Fix: currency list offered "RMB" which is not a currency code (CNY) — bills in RMB could not save
+[ ] Foreign-currency bank book screen (bank lines already carry currency) → Stage 11 reports
+[ ] Unrealized FX revaluation of open balances at month end — not in spec yet (ask if needed)
+Test gate: tests/sql/fx_payments_agents.sql — PASSED (20 checks: ¥100,000 @40 paid @40/41/42 →
+           PKR 4,090,000, FX loss 90,000; unlink/reverse; agent fund/settle; conversions; TB equal)
+
+======================================================================
+STAGE 10 — PDC AND BANK RECONCILIATION                         [x]
+DONE (migrations 20261010000100_pdc, 20261010000200_bank_reconciliation; Accounting → Post-dated Cheques,
+      Bank Reconciliation)
+======================================================================
+[x] PDC received (customers) / issued (suppliers): cheque no., party, bank/branch/account, cheque date,
+    amount, linked invoices / bills, notes, files; duplicate cheque no. per party refused
+[x] Held (in hand / issued; "due" from the cheque date) → deposited → cleared; can't clear before cheque date
+[x] Bounced (reason, optional bank charges) → re-presented → cleared; return / cancel; undo deposit / clearing
+[x] Accounting: received = Dr PDC Receivable / Cr customer (pays invoices); cleared = Dr Bank / Cr PDC Receivable;
+    issued = Dr supplier / Cr PDC Payable (pays bills); cleared = Dr PDC Payable / Cr Bank;
+    bounce reverses the receipt / payment and releases its invoice / bill allocations
+[x] Every state change = PDC event (timeline) + audit; PDC register: in hand, due now, due in 7 days, deposited, bounced
+[x] Bank statement import: CSV / Excel (.xlsx), column mapping (debit/credit or signed amount, date formats,
+    title + total rows skipped), original rows kept
+[x] Duplicate-safe: re-imports / overlapping statements skip existing lines; real repeats = authorised duplicates
+[x] Automatic match suggestions (amount, date window, cheque no., reference, party) — accepted by the user only
+[x] Manual matching 1:1, 1:n, n:1, n:n (sides must agree); book-only clearing (opening balance, voucher + reversal
+    pairs); ignore statement lines with reason
+[x] Create missing receipt / payment / expense / transfer / journal from a statement line (split over several
+    lines) through the normal accounting engine, matched automatically
+[x] Finalize: statement balance = books − not yet on statement + not yet in books; difference needs approved
+    exception (administrator); sets "reconciled until"; matches locked
+[x] Undo reconciliation (latest first) and unmatch with reason; history of removed matches + reconciliations
+[x] A voucher matched in a reconciliation cannot be reversed until unmatched
+[ ] Bank-specific import templates (save the column mapping per bank) → later
+[ ] PDC due reminders on the dashboard / notifications → Stage 11 / 12
+Test gate: tests/sql/pdc_bank_reconciliation.sql — PASSED (25 checks); tests/unit/statementParse.test.ts PASSED
+
+======================================================================
+STAGE 11 — REPORTING, DASHBOARDS, EXPORTS                      [x]
+DONE (migration 20261011000100_reports; Reports centre /reports, Dashboard, Administration → Report shortcuts)
+======================================================================
+[x] Stock summary (today or any past date; reserved / available / value), low stock, movement summary,
+    count variance; links to stock movements, stock value, reservations
+[x] Sales register (COGS + margin with value rights), sales by item, dispatch register, pending orders
+[x] Purchase register, purchases by item, shipments & ETA (late days, landed %), landed cost charges, foreign payments
+[x] Customer & supplier ageing (not due / 1–30 / 31–60 / 61–90 / 90+ / other — total = ledger balance) + open documents
+[x] Customer / supplier / any-party ledger, general ledger, trial balance, P&L (+ previous period), balance sheet
+[x] Cash & bank summary, bank book, unreconciled bank items, PDC register; links to agents, FX, reconciliation
+[x] Payroll register, employee advances & recovery, bonuses / pay items, assembly labour earnings
+[x] Audit / activity report
+[x] Dashboard widgets: KPIs, 12-month sales chart, top customers, needs-attention alerts (role-aware)
+[x] Report builder on fixed data sources: filters, sort, group-by subtotals, column chooser, totals, saved
+    reports (personal / shared by admin) — no free SQL
+[x] Contextual quick reports / report shortcuts in vouchers (configurable: add, rename, reorder, on/off,
+    quick view vs full report) on invoices, orders, quotations, bills, POs, receipts/payments, cheques
+[x] View action on every report row (opens the invoice / bill / voucher / order …)
+[x] Exports: Excel (.xlsx), CSV, print / save as PDF (built in the browser, no waiting on the server)
+[ ] Server-side scheduled / emailed exports for very large datasets → later if needed
+Test gate: tests/sql/reports_reconcile.sql — PASSED (10 checks: stock = balances, ageing = balances,
+           BS balances, P&L = BS profit, TB equal, cash/bank = ledgers …); tests/unit/reports.test.ts PASSED
+
+======================================================================
+STAGE 12 — CONFIGURATION AND DOCUMENT ENGINE                   [ ]
+======================================================================
+[ ] Custom fields for any record type (text, number, date, dropdown,
+    multi-select, reference, file, formula, …) — typed, filterable
+[ ] Configurable forms / optional sections per role
+[ ] Workflow definitions, steps, transitions, approval limits
+[ ] Document templates (logo, columns, terms, signature, print/PDF)
+[ ] Numbering configuration screen (edit prefixes/padding)
+[ ] Notification rules and in-app notifications
+[ ] Configurable report shortcuts
+
+======================================================================
+STAGE 13 — INTERFACES                                          [ ]
+======================================================================
+[~] Admin / main ERP web app (started — master data screens)
+[ ] Accountant portal
+[ ] Warehouse manager portal — DECIDED: built with Stage 5
+[ ] Staff mobile app — DECIDED: mobile web app (PWA) first, built in Stage 5
+[ ] Owner / management mobile app
+[ ] Salesperson mobile app
+[ ] Attachment upload UI (drag-drop, image compression, R2)
+
+======================================================================
+STAGE 14 — FULL-SYSTEM INTEGRATION                             [ ]
+======================================================================
+[ ] Customer → SO → Picking → GDN → Price → Invoice → Receipt → Ledger
+[ ] Supplier → PO → Receipt → Cost → Bill → Payment → Ledger
+[ ] Shipment → Receipt → Landed cost → Valuation → Accounting
+[ ] Bank → Agent → Currency → Supplier settlement → FX ledger
+[ ] Bank statement → Match → Accounting → Reconciliation
+[ ] PDC → Due → Deposit → Clear / Bounce / Re-present
+
+======================================================================
+STAGE 15 — FULL QA, SECURITY AND PERFORMANCE                   [ ]
+======================================================================
+[ ] Unit / integration / API / E2E tests
+[ ] Negative security tests for every role
+[ ] Concurrency and idempotency tests
+[ ] Realistic-volume performance tests
+[ ] Backup and restore test
+[ ] Migration rehearsal
+[ ] Browser / mobile compatibility
+[ ] User acceptance testing (UAT)
+
+======================================================================
+STAGE 16 — RELEASE CANDIDATE                                   [ ]
+======================================================================
+[ ] Production migrations and configuration
+[ ] Master-data, opening-stock, opening-balance import templates
+[ ] User / role setup, document numbering
+[ ] Training / SOPs
+[ ] Cutover checklist and rollback plan
+
+======================================================================
+BUSINESS IMPLEMENTATION (after Stage 16)
+======================================================================
+[ ] Phase 1 — Warehouse management & accurate stock   (Gate A)
+[ ] Phase 2 — Sales, picking & dispatch               (Gate B)
+[ ] Phase 3 — Commercial data & pricing               (Gate C)
+[ ] Phase 4 — Accounting & financial posting          (Gate D)
+[ ] Phase 5 — Advanced finance (FX, agents, PDC, bank, landed cost) (Gate E)
+[ ] Phase 6 — Full ERP operation                      (Gate F)
+
+======================================================================
+SPRINT LOG
+======================================================================
+Sprint 1 (30 Sep 2026) — Stages 1 & 2
+  - Old prototype tables moved to schema legacy_v1 (not deleted)
+  - Foundation + master data migrations applied to Supabase
+  - Admin ERP web app with all master-data screens
+  - Code: JS Accounts\js-traders-erp
+
+Sprint 2 (30 Sep 2026) — Stage 3 core inventory engine
+  - Fix: saving customers/warehouses failed with "no permission" (RLS on insert)
+  - Inventory schema, posting engine, reversals, progressive counts, reservations
+  - Inventory screens + dashboard operational queues
+  - Variant SKU auto-numbering
+  - Sample data loaded (tagged [sample]); reset script provided
+
+Decisions (30 Sep 2026)
+  - Warehouse Manager: own portal, approves all warehouse transactions, no financial data
+  - Warehouse Staff: mobile web app only — picking, assigned counts, receiving checks, photos
+  - Photos/attachments: Cloudflare R2
+  - Manager portal + staff app built together with Stage 5 (Sales / GDN / picking)
+
+Sprint 2b (30 Sep 2026)
+  - Warehouse Staff role reduced to mobile tasks only
+  - Reserved Orders (multi-line, per customer) + Convert to Sales Order
+  - Sales Orders screen (view, approve, cancel)
+  - Stock on Hand redesigned: warehouses as columns
+
+
+=== 2026-10-04 — Quick supplier bill + discounts everywhere (commit f87a63d) ===
+DONE:
+- Quick supplier bill (Supplier Bills > "Quick bill"): supplier, invoice no, dates, currency; item lines (item/variant/warehouse/qty/price, last price from this supplier auto-filled) + expense lines (account); discount; optional Pay Supplier Now (PKR).
+  Posting makes and posts one goods receipt per warehouse, then posts the bill (bill price less discount = stock cost). Marked "Quick" on the bill. Needs purchasing.approve + purchasing.costs + inventory.receive.
+- Discount (amount or % toggle) on: quotations, sales orders (new), sales invoices, quick invoices, purchase orders (new), supplier bills (new), quick bills.
+  SO discount carried into invoices made from GDNs pro-rata; PO discount carried into bills made from receipts pro-rata (same currency).
+  Bill discount spread over lines: stock lines lower inventory cost, expense lines lower the expense; supplier credited net.
+- DB: migration 20261006000100_discounts_quick_bill (applied). Tested: 2-warehouse quick bill + freight + 250 discount + part payment → net 2,250, costs 90/180, balanced.
+NEXT: Stage 8 — import shipments & landed cost.
+
+
+=== 2026-10-04 — Stage 8 shipments, landed cost, stock valuation (commit 3d8322b) ===
+Migrations: stock_valuation, fix aliases, shipments, landed_cost (all applied).
+NEXT: Stage 9 — payments, multi-currency (RMB/USD bills, individual FX rates, realized FX gain/loss), payment agents.
+
+=== 2026-10-04 — Import costs recorded as they happen ===
+[x] Record import cost (shipment > Import costs tab, or Landed Cost page): forwarder/agent bill (posted supplier bill, payable) or bank/cash payment; both to Landed Cost Clearing, tagged with shipment
+[x] Supplier bills: "For shipment" link; any bill line on Landed Cost Clearing becomes a recorded import cost
+[x] Landed cost: "Pick recorded costs" (shipment's + unlinked), amount locked, each cost usable once; reverse LC frees them; cancel unused cost reverses its bill/payment
+Test: freight USD100@280 bill + clearing 12,000 bank recorded before arrival -> picked into LC -> 21,000/7,000 by weight + 6,000/6,000 by value; Dr Inventory 40,000 / Cr Clearing 40,000; reverse -> costs open again.
+Idea queued: container tracking API (e.g. Tracktainer) -> shipment events + owner app view.
+
+=== 2026-10-04 — Landed cost: pick expenses already booked ===
+[x] "Pick costs" has two tabs: Recorded import costs / Expenses already booked (any expense account, date range, paid-to filter)
+[x] Picked expense entries move from the expense account into stock cost (Dr Inventory / Cr that expense); each entry used once; reversal frees it
+Test: PV 5,000 land freight on 5300 -> picked, split by qty 3,333.33/1,666.67; Dr 1300 / Cr 5300; stock value = ledger.
+
+
+=== 2026-10-05 — Stage 9 payments, multi-currency, payment agents (commit 02fecdc) ===
+Migrations: fx_1_ledger_currency, fx_2_supplier_payments, fx_3_agents_conversions (all applied).
+New screens: Purchasing → Foreign Payments; Accounting → Agent Accounts, Currency Conversions, Currency Balances & FX.
+Bills: foreign outstanding shown in the bill currency, Pay / Use earlier payment work for RMB/USD bills, Payments tab shows each rate and FX.
+NEXT: Stage 10 — PDC (received/issued cheques: held → due → deposited → cleared / bounced) and bank reconciliation.
+
+=== 2026-10-05 — Stage 10 PDC and bank reconciliation (commit 907b125) ===
+Migrations: pdc, bank_reconciliation (applied). New permissions pdc.manage, bank.reconcile (Admin, Accountant), bank.reconcile_exception (Admin).
+New screens: Accounting → Post-dated Cheques, Bank Reconciliation (Reconcile / Import statement / Matched / History).
+NEXT: Stage 11 — reports, dashboards and exports (stock, sales/purchase registers, ageing, GL, P&L, balance sheet, PDC/bank/agent/landed-cost reports, Excel/PDF exports).
+
+=== 2026-10-05 — Stage 11 reports, dashboards, exports (commit 0e0128c) ===
+Migration: reports (applied). New: Reports centre (41 reports), new Dashboard, saved reports, report shortcuts.
+NEXT: Stage 12 — configuration and document engine (custom fields, document templates/print layouts, numbering screen,
+      workflow/approval rules, notification rules).
+
+=== 2026-10-05 — Report periods: default "Last 10 transactions" (commit 13d1c02) ===
+[x] Transaction reports (registers, ledgers, GL, bank book, PDC, pay items, activity etc. — 15 reports) open on "Last 10 transactions", newest first
+[x] "Show" picker: Last 10/25/50/100 transactions; Today, Yesterday, This/Last week, This/Last month, This/Last quarter, This/Last year, All dates, Custom dates
+[x] Summary reports (P&L, stock movement, by-item) get the same period list without "Last N"; as-of reports get Today / Last month end / Last quarter end / Last year end
+[x] Older statement screens' date bar gained Today, This week, This quarter, Last year
+NEXT: Stage 12 — configuration and document engine.
+
+=== 2026-10-05 — Warehouse trial prep: returns + trial reset (commit a9bd4b3) ===
+[x] Sales returns SR- (Sales → Sales Returns; "Return goods" on a GDN): back into any warehouse, Good/Damaged; uninvoiced part stops being invoiceable,
+    invoiced part → automatic credit note (Dr Sales Returns / Cr AR) set against the invoice; stock back at its GDN cost
+[x] Purchase returns PR- (Purchasing → Purchase Returns; "Return to supplier" on a GRN): unbilled part no longer billed/costed;
+    billed part → automatic supplier debit note (in bill currency) set against the bill; GRNI nets to zero
+[x] Warehouse Manager: sales.return, purchasing.return, purchasing.manage (POs without prices); returns registers in Reports
+[x] Settings → Trial data (admin only, type RESET JST): clears all transactions, keeps masters/users/settings/audit log
+[x] Old test transactions cleared (live DB now has masters only, numbers restart at 1)
+Tests: tests/sql/returns.sql (18 ok), tests/sql/returns_warehouse_manager.sql (7 ok)
+Trial guide: "Warehouse Trial — Test Guide" doc (8 steps, problem log, sign-off)
+NEXT: warehouse manager trial (Implementation Phase 1 + 2), fix issues from the problem log; then Stage 12.
+
+=== 2026-10-06 — Trial opening data loaded (live DB) ===
+[x] ADJ-2026-00001 (WH-01, 27 lines) + ADJ-2026-00002 (WH-02, 5 lines) opening stock, dated 01-Oct-2026
+[x] Opening stock cost set: Dr 1300 Inventory 13,242,500 / Cr 3300 Opening Balance Equity
+[x] OB-2026-00001: Cash in Hand 500,000 + Meezan Current 2,500,000 / Cr 3300
+Check: stock value (item_costs) = Inventory ledger = 13,242,500. Script: supabase/seed/trial_opening_stock.sql
+
+=== 2026-10-06 — Picking photos, GDN PDF / WhatsApp, roll selection on sales orders (commit 04e7b00) ===
+Migrations: picking_photos, so_roll_selection (applied). Edge function attachments v4 (Supabase Storage fallback until R2 keys are set).
+[x] Staff app: Take photo / From gallery on a picking task; at least 1 photo needed to finish (Settings → Features → Picking, default ON)
+[x] Sales order window: "Picking photos (n)" tab, live, with full-screen viewer; popup when a new photo arrives; manager task dialog Photos tab
+[x] Android JS Picking app (new APK build): camera + gallery work inside the app
+[x] GDN window: Save as PDF; WhatsApp (PDF saved to Downloads + WhatsApp desktop opens on customer chat with message; "Use WhatsApp Web" option)
+[x] Sales order: roll items get "Rolls: auto / choose rolls" per warehouse; GDN cuts chosen rolls first, rest auto; pickers + GDN form show the rolls
+Tests: SQL (rolled back) — photo required / added / finish / no add after done / other staff blocked / manager sees; roll plan over-roll rejected,
+       GDN 6000 + 1000 cut R-00003 2000 → R-00002 4000 → R-00002 1000. tests/unit/pdf.test.ts PASSED.
+NEXT: continue warehouse manager trial; Stage 12.
