@@ -1,8 +1,8 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BellRing, CheckCircle2, Plus, Save, ShoppingCart, Trash2 } from "lucide-react";
-import { Badge, Button, ErpDialog, Field, FormGrid, Input, Textarea, cn } from "@jst/ui";
+import { BellRing, CheckCircle2, Plus, Save, Scissors, ShoppingCart, Trash2 } from "lucide-react";
+import { Badge, Button, ConfirmDialog, ErpDialog, Field, FormGrid, Input, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { useUnsavedGuard } from "../lib/unsaved";
@@ -11,12 +11,13 @@ import { money } from "../accounting/common";
 import { DiscountField, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
 import { PickerChips, staffOf, usePickingStaff } from "../picking/common";
 import { ReportShortcuts } from "../reports/Shortcuts";
+import { RollCutsEditor, fmtQty, sumCuts, useRolls, type Cuts } from "../inventory/rolls";
 
 type Row = Record<string, unknown>;
-interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number }
+interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** roll items: warehouse → chosen rolls (unit_id → qty); missing/empty = Auto */ rolls?: Record<string, Cuts>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number }
 const newLine = (): Line => ({ key: crypto.randomUUID(), id: null, product_id: null, variant_id: null, unit_price: "", notes: "", alloc: {}, sent: {}, held: {} });
 const sentTotal = (l: Line) => Object.values(l.sent).reduce((a, v) => a + v, 0);
-export interface SoInitial { header: Row; lines: { id: string | null; want?: number; product_id: string; variant_id: string | null; unit_price: number | null; notes: string | null; allocations: { warehouse_id: string; quantity: number; status: string; delivered_quantity?: number; reserved_quantity?: number }[] }[] }
+export interface SoInitial { header: Row; lines: { id: string | null; want?: number; product_id: string; variant_id: string | null; unit_price: number | null; notes: string | null; allocations: { warehouse_id: string; quantity: number; status: string; delivered_quantity?: number; reserved_quantity?: number; roll_cuts?: { unit_id: string; qty: number }[] | null }[] }[] }
 
 export function SalesOrderForm({ id, initial, revise = false, quotationId, onCancel, onClose, onSaved }: {
   id: string | null; initial: SoInitial | null; /** editing an approved / part-delivered order */ revise?: boolean; /** converting this quotation */ quotationId?: string; onCancel: () => void; onClose: () => void; onSaved: (id: string) => void;
@@ -38,6 +39,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
           alloc: Object.fromEntries(l.allocations.filter((a) => (revise ? a.status !== "CANCELLED" : a.status === "OPEN")).map((a) => [a.warehouse_id, String(Number(a.quantity))])),
           sent: Object.fromEntries(l.allocations.filter((a) => Number(a.delivered_quantity ?? 0) > 0).map((a) => [a.warehouse_id, Number(a.delivered_quantity)])),
           held: Object.fromEntries(l.allocations.filter((a) => Number(a.reserved_quantity ?? 0) > 0).map((a) => [a.warehouse_id, Number(a.reserved_quantity)])),
+          rolls: Object.fromEntries(l.allocations.filter((a) => a.status !== "CANCELLED" && a.roll_cuts?.length)
+            .map((a) => [a.warehouse_id, Object.fromEntries(a.roll_cuts!.map((c) => [c.unit_id, String(Number(c.qty))]))])),
         }))
       : [newLine()],
   }), [initial, revise]);
@@ -62,6 +65,10 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       const under = Object.entries(l.sent).find(([w, q]) => n(l.alloc[w] ?? "0") < q);
       if (under) errors[`${l.key}.q`] = `${qtyFmt(under[1])} already sent from ${whs.data?.find((w) => w.id === under[0])?.code ?? "a warehouse"} — the quantity cannot be less`;
     }
+    for (const [w, c] of Object.entries(l.rolls ?? {})) {
+      const cut = sumCuts(c);
+      if (cut > 0 && n(l.alloc[w] ?? "0") > 0 && cut > n(l.alloc[w]) + 1e-9) errors[`${l.key}.q`] = `Rolls chosen (${qtyFmt(cut)}) are more than the quantity from ${whs.data?.find((x) => x.id === w)?.code ?? "a warehouse"}`;
+    }
     if (l.unit_price.trim() !== "" && !(n(l.unit_price) >= 0)) errors[`${l.key}.price`] = "Invalid price";
   }
   const err = (k: string) => (showErrors ? errors[k] : undefined);
@@ -78,6 +85,30 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     if (r.error) throw Object.assign(r.error, { savedId: sid });
   };
 
+  const hadRolls = React.useMemo(() => init.lines.some((l) => Object.keys(l.rolls ?? {}).length > 0), [init]);
+  /** chosen rolls are saved after the order (they need the saved line ids) */
+  const saveRolls = async (sid: string) => {
+    const want = used.filter((l) => Object.values(l.rolls ?? {}).some((c) => sumCuts(c) > 0));
+    if (!want.length && !hadRolls) return;
+    const { data, error } = await sb().from("sales_order_lines").select("id, product_id, variant_id, line_no").eq("sales_order_id", sid).eq("is_active", true).order("line_no");
+    if (error) throw Object.assign(error, { savedId: sid });
+    const rows = (data ?? []) as { id: string; product_id: string; variant_id: string | null }[];
+    const taken = new Set<string>();
+    const idOf = (l: Line) => {
+      if (l.id && rows.some((r) => r.id === l.id)) { taken.add(l.id); return l.id; }
+      const r = rows.find((x) => !taken.has(x.id) && !used.some((u) => u.id === x.id) && x.product_id === l.product_id && (x.variant_id ?? null) === (l.variant_id ?? null));
+      if (r) taken.add(r.id);
+      return r?.id ?? null;
+    };
+    const lineIds = new Map(used.map((l) => [l.key, idOf(l)]));
+    const plan = want.flatMap((l) => Object.entries(l.rolls ?? {})
+      .filter(([w, c]) => sumCuts(c) > 0 && n(l.alloc[w] ?? "0") > 0 && lineIds.get(l.key))
+      .map(([warehouse_id, c]) => ({ line_id: lineIds.get(l.key), warehouse_id,
+        cuts: Object.entries(c).filter(([, q]) => n(q) > 0).map(([unit_id, q]) => ({ unit_id, qty: q.replace(/,/g, "") })) })));
+    const r = await sb().rpc("set_so_roll_plan", { p_so_id: sid, p_plan: plan });
+    if (r.error) throw Object.assign(r.error, { savedId: sid, rollsFailed: true });
+  };
+
   const save = useMutation({
     mutationFn: async (approve: boolean) => {
       const payload = {
@@ -91,6 +122,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
         const r = await sb().rpc("revise_sales_order", { p_id: id, ...payload });
         if (r.error) throw r.error;
         await saveDiscount(id!);
+        await saveRolls(id!);
         if (approve && sending) {
           const t = await sb().rpc("start_so_picking", { p_so_id: id, p_plan: plan, p_notes: f.notes || null });
           if (t.error) throw Object.assign(t.error, { savedId: id });
@@ -110,6 +142,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       if (error) throw error;
       const nid = data as string;
       await saveDiscount(nid);
+      await saveRolls(nid);
       if (quotationId) {
         const q = await sb().rpc("link_quotation_order", { p_quotation_id: quotationId, p_so_id: nid });
         if (q.error) throw Object.assign(q.error, { savedId: nid });
@@ -130,7 +163,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       toast.success(tasks ? `${revise ? "Order updated" : "Approved"} — ${tasks} picking task${tasks > 1 ? "s" : ""} sent, pickers' phones are buzzing` : approve ? "Sales order approved — stock reserved" : revise ? "Order updated — reserved stock adjusted" : "Sales order saved"); qc.invalidateQueries(); onSaved(nid);
     },
     onError: (e: Error & { savedId?: string }) => {
-      if (e.savedId) { snapshot.current = JSON.stringify(f); toast.error(`Saved, but not ${sending ? "sent to pickers" : "approved"}: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
+      if (e.savedId && (e as { rollsFailed?: boolean }).rollsFailed) { toast.error(`Order saved, but the roll choice was not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
+      else if (e.savedId) { snapshot.current = JSON.stringify(f); toast.error(`Saved, but not ${sending ? "sent to pickers" : "approved"}: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else toast.error(friendlyError(e));
     },
   });
@@ -259,6 +293,8 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [line.want, avail.data, warehouses]);
   const td = "border-b border-line/70 px-2 py-1.5 align-top";
+  const [rollWh, setRollWh] = React.useState<Wh | null>(null);
+  const isRoll = !!meta.data?.rolls && ready;
   return (
     <tr className="group bg-white hover:bg-indigo-50/30">
       <td className={cn(td, "pt-3 text-center text-2xs text-ink-faint")}>{idx + 1}</td>
@@ -289,6 +325,16 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
                 {over ? "over · " : ""}avail {qtyFmt(a?.available ?? 0)}{(line.sent[w.id] ?? 0) > 0 && <> · {qtyFmt(line.sent[w.id])} sent</>}
               </div>
             )}
+            {isRoll && n(v) > 0 && (() => {
+              const c = line.rolls?.[w.id] ?? {};
+              const chosen = Object.values(c).filter((q) => n(q) > 0).length;
+              return (
+                <button type="button" onClick={() => setRollWh(w)} title="Choose which rolls to cut"
+                  className={cn("mt-0.5 flex w-full items-center justify-end gap-1 text-2xs hover:underline", chosen ? "font-medium text-primary" : "text-info")}>
+                  <Scissors className="h-3 w-3" />{chosen ? `${chosen} roll${chosen > 1 ? "s" : ""} · ${qtyFmt(sumCuts(c))}` : "Rolls: auto"}
+                </button>
+              );
+            })()}
           </td>
         );
       })}
@@ -307,7 +353,49 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
       {showPrice && <td className={cn(td, "pt-2.5 text-right tabular-nums")}>{line.unit_price.trim() !== "" && total > 0 ? money(total * n(line.unit_price)) : <span className="text-ink-faint">—</span>}</td>}
       <td className={cn(td, "pt-1.5 text-center")}>
         {onRemove && <Button size="icon-sm" variant="ghost" aria-label="Remove item" className="opacity-50 group-hover:opacity-100" onClick={onRemove}><Trash2 className="h-3.5 w-3.5" /></Button>}
+        {rollWh && (
+          <RollChoiceDialog wh={rollWh} productId={line.product_id} variantId={line.variant_id} uom={meta.data?.uom ?? ""} qty={n(line.alloc[rollWh.id] ?? "0")}
+            sent={line.sent[rollWh.id] ?? 0} value={line.rolls?.[rollWh.id] ?? {}} productName={meta.data?.name ?? ""}
+            onDone={(c) => { onChange({ rolls: { ...(line.rolls ?? {}), [rollWh.id]: c } }); setRollWh(null); }} onCancel={() => setRollWh(null)} />
+        )}
       </td>
     </tr>
+  );
+}
+
+/** Choose rolls for one warehouse of an order line: Auto (best fit when dispatched) or specific rolls and how much from each. */
+function RollChoiceDialog({ wh, productId, variantId, uom, qty, sent, value, productName, onDone, onCancel }: {
+  wh: Wh; productId: string | null; variantId: string | null; uom: string; qty: number; sent: number; value: Cuts; productName: string;
+  onDone: (c: Cuts) => void; onCancel: () => void;
+}) {
+  const [mode, setMode] = React.useState<"auto" | "pick">(Object.keys(value).length ? "pick" : "auto");
+  const [cuts, setCuts] = React.useState<Cuts>(value);
+  const rolls = useRolls(wh.id, productId, variantId);
+  const total = sumCuts(cuts);
+  const tooMuch = mode === "pick" && total > qty + 1e-9;
+  return (
+    <ConfirmDialog open title={`Rolls — ${productName} from ${wh.code}`} confirmLabel="Done"
+      message={`Order quantity from ${wh.code}: ${fmtQty(qty)} ${uom}${sent > 0 ? ` (${fmtQty(sent)} already dispatched)` : ""}. Chosen rolls are cut first when the GDN is dispatched; anything not covered is cut automatically.`}
+      onCancel={onCancel}
+      onConfirm={() => { if (tooMuch) { toast.error(`Rolls add up to ${fmtQty(total)} — more than ${fmtQty(qty)} ${uom}`); return; } onDone(mode === "auto" ? {} : Object.fromEntries(Object.entries(cuts).filter(([, q]) => n(q) > 0))); }}>
+      <div className="mt-3 text-left">
+        <RollCutsEditor mode={mode} cuts={cuts} onMode={setMode} onCuts={setCuts} warehouseId={wh.id} productId={productId} variantId={variantId} uom={uom} />
+        {mode === "pick" && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className={cn("tabular-nums", tooMuch ? "text-danger" : total < qty ? "text-ink-muted" : "text-success")}>
+              {fmtQty(total)} of {fmtQty(qty)} {uom} chosen{total < qty && total > 0 ? ` — ${fmtQty(qty - total)} will be cut automatically` : ""}
+            </span>
+            {rolls.data && total < qty && (
+              <button type="button" className="text-info hover:underline" onClick={() => {
+                // fill the rest from the smallest rolls that are not chosen yet
+                let left = qty - total; const c = { ...cuts };
+                for (const r of rolls.data!) { if (left <= 0) break; if (c[r.id]) continue; const take = Math.min(left, Number(r.remaining_qty)); c[r.id] = String(take); left -= take; }
+                setCuts(c);
+              }}>Fill the rest</button>
+            )}
+          </div>
+        )}
+      </div>
+    </ConfirmDialog>
   );
 }

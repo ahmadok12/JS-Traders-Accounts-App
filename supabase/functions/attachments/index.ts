@@ -6,6 +6,8 @@
 //   POST { action: "remove", id, reason? }                            → { ok }
 // Every permission check happens in the database as the signed-in user (attachment_* functions).
 // Secrets (Supabase → Edge Functions → Secrets): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+// Until the R2 keys are set, files go to the private Supabase Storage bucket "attachments" (stored as bucket "sb:attachments").
+// Each file remembers where it lives, so files keep opening after R2 is switched on.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { AwsClient } from "npm:aws4fetch@1.0.20";
 
@@ -21,8 +23,34 @@ const ACCOUNT = Deno.env.get("R2_ACCOUNT_ID") ?? "";
 const KEY_ID = Deno.env.get("R2_ACCESS_KEY_ID") ?? "";
 const SECRET = Deno.env.get("R2_SECRET_ACCESS_KEY") ?? "";
 const BUCKET = Deno.env.get("R2_BUCKET") ?? "";
-const configured = !!(ACCOUNT && KEY_ID && SECRET && BUCKET);
-const r2 = configured ? new AwsClient({ accessKeyId: KEY_ID, secretAccessKey: SECRET, service: "s3", region: "auto" }) : null;
+const r2On = !!(ACCOUNT && KEY_ID && SECRET && BUCKET);
+const r2 = r2On ? new AwsClient({ accessKeyId: KEY_ID, secretAccessKey: SECRET, service: "s3", region: "auto" }) : null;
+const SB_BUCKET = "attachments";
+const SB_PREFIX = "sb:";
+const configured = true; // R2 or Supabase Storage
+const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+const isSb = (bucket: string) => bucket.startsWith(SB_PREFIX);
+const sbBucket = (bucket: string) => bucket.slice(SB_PREFIX.length) || SB_BUCKET;
+
+async function sbUploadUrl(bucket: string, key: string) {
+  const { data, error } = await admin.storage.from(sbBucket(bucket)).createSignedUploadUrl(key);
+  if (error || !data) throw new Error(error?.message ?? "Storage error");
+  return data.signedUrl;
+}
+async function sbSize(bucket: string, key: string): Promise<number | null> {
+  const i = key.lastIndexOf("/");
+  const { data, error } = await admin.storage.from(sbBucket(bucket)).list(key.slice(0, i), { search: key.slice(i + 1), limit: 5 });
+  if (error) return null;
+  const f = (data ?? []).find((o) => o.name === key.slice(i + 1));
+  return f ? Number((f.metadata as { size?: number } | null)?.size ?? 0) : null;
+}
+async function sbOpenUrl(bucket: string, key: string, name: string, download: boolean) {
+  const { data, error } = await admin.storage.from(sbBucket(bucket)).createSignedUrl(key, 600, download ? { download: name } : undefined);
+  if (error || !data) throw new Error(error?.message ?? "Storage error");
+  return data.signedUrl;
+}
 
 const objectUrl = (bucket: string, key: string) =>
   `https://${ACCOUNT}.r2.cloudflarestorage.com/${encodeURIComponent(bucket)}/${key.split("/").map(encodeURIComponent).join("/")}`;
@@ -54,18 +82,18 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { return json(400, { error: "Bad request" }); }
   const action = String(body.action ?? "");
 
-  if (action === "status") return json(200, { configured });
-  if (!configured) return json(503, { error: "File storage is not set up yet (Cloudflare R2 keys missing)" });
+  if (action === "status") return json(200, { configured, backend: r2On ? "r2" : "supabase" });
 
   try {
     if (action === "begin") {
       const { data, error } = await db.rpc("attachment_begin", {
         p_entity_type: body.entity_type, p_entity_id: body.entity_id, p_file_name: body.file_name,
-        p_mime: body.mime, p_size: body.size, p_bucket: BUCKET, p_description: body.description ?? null,
+        p_mime: body.mime, p_size: body.size, p_bucket: r2On ? BUCKET : SB_PREFIX + SB_BUCKET, p_description: body.description ?? null,
       });
       if (error) return json(400, { error: error.message });
       const r = data as { id: string; key: string };
-      return json(200, { id: r.id, url: await presign("PUT", BUCKET, r.key) });
+      const url = r2On ? await presign("PUT", BUCKET, r.key) : await sbUploadUrl(SB_PREFIX + SB_BUCKET, r.key);
+      return json(200, { id: r.id, url });
     }
 
     if (action === "confirm") {
@@ -74,11 +102,17 @@ Deno.serve(async (req) => {
       if (locErr) return json(400, { error: locErr.message });
       if (!loc) return json(404, { error: "Upload not found" });
       const l = loc as { bucket: string; key: string };
-      const head = await r2!.fetch(objectUrl(l.bucket, l.key), { method: "HEAD" });
-      const size = head.ok ? Number(head.headers.get("content-length") ?? "0") : null;
-      const { error } = await db.rpc("attachment_confirm", { p_id: id, p_size: size, p_ok: head.ok });
+      let ok = false; let size: number | null = null;
+      if (isSb(l.bucket)) {
+        size = await sbSize(l.bucket, l.key); ok = size !== null;
+      } else {
+        if (!r2) return json(503, { error: "Cloudflare R2 keys are missing" });
+        const head = await r2.fetch(objectUrl(l.bucket, l.key), { method: "HEAD" });
+        ok = head.ok; size = head.ok ? Number(head.headers.get("content-length") ?? "0") : null;
+      }
+      const { error } = await db.rpc("attachment_confirm", { p_id: id, p_size: size, p_ok: ok });
       if (error) return json(400, { error: error.message });
-      if (!head.ok) return json(400, { error: "The upload did not reach storage — try again" });
+      if (!ok) return json(400, { error: "The upload did not reach storage — try again" });
       return json(200, { ok: true });
     }
 
@@ -87,6 +121,8 @@ Deno.serve(async (req) => {
       if (error) return json(404, { error: error.message });
       const a = data as { bucket: string; key: string; name: string; mime: string };
       const disp = `${body.download ? "attachment" : "inline"}; filename="${asciiName(a.name)}"; filename*=UTF-8''${encodeURIComponent(a.name)}`;
+      if (isSb(a.bucket)) return json(200, { url: await sbOpenUrl(a.bucket, a.key, a.name, !!body.download), name: a.name, mime: a.mime });
+      if (!r2) return json(503, { error: "Cloudflare R2 keys are missing" });
       const url = await presign("GET", a.bucket, a.key, { "response-content-disposition": disp, "response-content-type": a.mime });
       return json(200, { url, name: a.name, mime: a.mime });
     }

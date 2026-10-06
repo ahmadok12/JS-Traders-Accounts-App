@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Boxes, Building2, Hash, RotateCcw, Save, Tag, TriangleAlert, Zap } from "lucide-react";
+import { Boxes, Building2, Camera, Hash, RotateCcw, Save, Tag, TriangleAlert, Zap } from "lucide-react";
 import { Button, Card, Checkbox, ConfirmDialog, DataTable, Field, FormGrid, Input, PageHeader, SectionTitle, Skeleton, Textarea } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { diffObject, humanize } from "@jst/utilities";
@@ -130,6 +130,7 @@ function FeatureSettings() {
       <InventorySettings />
       <ProductSettings />
       <SalesSettings />
+      <PickingSettings />
     </div>
   );
 }
@@ -255,6 +256,44 @@ function SalesSettings() {
         onChange={(v) => save.mutate(v)}
         label="Quick invoice (counter sale)"
         description="Adds a “Quick invoice” button on Sales Invoices: pick customer, items, warehouse, quantity and price, then post — the goods are dispatched from that warehouse automatically (a sales order and GDN are created and linked behind the scenes). Turning it off only hides the button; invoices already made stay as they are."
+      />
+    </Card>
+  );
+}
+
+function PickingSettings() {
+  const { companyId } = useAccess();
+  const qc = useQueryClient();
+  const photos = useFeature(FEATURES.pickingPhotosRequired);
+  const save = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const { error } = await sb()
+        .from("system_settings")
+        .upsert(
+          { company_id: companyId!, key: FEATURES.pickingPhotosRequired, value: enabled, description: "Pickers must add at least one photo before finishing a picking task" },
+          { onConflict: "company_id,key" },
+        );
+      if (error) throw error;
+      return enabled;
+    },
+    onSuccess: (enabled) => {
+      toast.success(enabled ? "Picking photos are now required" : "Picking photos are now optional");
+      qc.invalidateQueries({ queryKey: featureQueryKey(companyId) });
+    },
+    onError: (e) => toast.error(friendlyError(e)),
+  });
+  if (photos.loading) return <Skeleton className="h-24" />;
+  return (
+    <Card className="p-4">
+      <SectionTitle>
+        <span className="inline-flex items-center gap-1.5"><Camera className="h-3.5 w-3.5" /> Picking</span>
+      </SectionTitle>
+      <Checkbox
+        checked={photos.enabled}
+        disabled={save.isPending}
+        onChange={(v) => save.mutate(v)}
+        label="Photo required before finishing picking"
+        description="Pickers must take or upload at least one photo of the picked goods in the staff app before they can finish a task. Photos show instantly in the sales order (Picking photos tab). When off, photos are optional. Managers finishing a task themselves are never asked for a photo."
       />
     </Card>
   );

@@ -9,6 +9,9 @@ import { formatDate } from "@jst/utilities";
 import { PICK_TONE, PickLineCard, PickProgress, pickLabel, usePickingTask } from "./common";
 import { alarmReady, askNotificationPermission, chime, keepScreenAwake, startAlarm, stopAlarm, systemNotify, unlockAlarm } from "./alarm";
 import { usePickingRealtime, useMyNotifications, type StaffNotification } from "./realtime";
+import { PickPhotoCapture } from "./PickPhotos";
+import { useAttachments, isImage } from "../attachments/Attachments";
+import { useFeature, FEATURES } from "../lib/settings";
 import { CountScreen, JobCard, ReceiptScreen, useMyJobs, type MyJob } from "./StaffJobs";
 
 /**
@@ -277,6 +280,9 @@ function TaskScreen({ id, userId, onDone }: { id: string; userId: string; onDone
   const [confirm, setConfirm] = React.useState(false);
   const [note, setNote] = React.useState("");
   const names = React.useMemo(() => new Map([[userId, "you"]]), [userId]);
+  const photoFiles = useAttachments("picking_tasks", id);
+  const photosRequired = useFeature(FEATURES.pickingPhotosRequired).enabled;
+  const photoCount = (photoFiles.data ?? []).filter((f) => isImage(f.mime_type)).length;
   const finish = useMutation({
     mutationFn: async () => { const { error } = await sb().rpc("complete_picking_task", { p_id: id, p_note: note || null }); if (error) throw error; },
     onSuccess: () => { toast.success("Picking finished — the manager has been told"); setConfirm(false); qc.invalidateQueries(); onDone(); },
@@ -306,16 +312,17 @@ function TaskScreen({ id, userId, onDone }: { id: string; userId: string; onDone
         {todo.map((l) => <PickLineCard key={l.id} line={l} editable={open && mine} big names={names} />)}
         {picked.length > 0 && <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">Picked ({picked.length})</div>}
         {picked.map((l) => <PickLineCard key={l.id} line={l} editable={open && mine} big names={names} />)}
+        <PickPhotoCapture taskId={id} editable={open && mine} userId={userId} />
       </main>
       {open && mine && (
         <div className="fixed inset-x-0 bottom-0 border-t border-line bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <Button variant="primary" className="h-12 w-full text-base" icon={<CheckCircle2 className="h-5 w-5" />} disabled={todo.length > 0} onClick={() => setConfirm(true)}>
-            {todo.length > 0 ? `${todo.length} item${todo.length > 1 ? "s" : ""} left to tick` : "Finish picking"}
+          <Button variant="primary" className="h-12 w-full text-base" icon={<CheckCircle2 className="h-5 w-5" />} disabled={todo.length > 0 || (photosRequired && photoCount === 0)} onClick={() => setConfirm(true)}>
+            {todo.length > 0 ? `${todo.length} item${todo.length > 1 ? "s" : ""} left to tick` : photosRequired && photoCount === 0 ? "Add a photo to finish" : "Finish picking"}
           </Button>
         </div>
       )}
       <ConfirmDialog open={confirm} title="Finish picking?" confirmLabel="Finish" loading={finish.isPending}
-        message={picked.some((l) => Number(l.qty_picked) < Number(l.qty_requested)) ? "Some items are short — the manager will decide what to do." : "Everything was picked."}
+        message={`${picked.some((l) => Number(l.qty_picked) < Number(l.qty_requested)) ? "Some items are short — the manager will decide what to do." : "Everything was picked."}${photoCount ? ` ${photoCount} photo${photoCount > 1 ? "s" : ""} attached.` : ""}`}
         onCancel={() => setConfirm(false)} onConfirm={() => finish.mutate()}>
         <Input className="mt-3" placeholder="Note for the manager (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
       </ConfirmDialog>
