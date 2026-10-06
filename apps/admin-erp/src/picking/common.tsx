@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, CheckCircle2, Cylinder, TriangleAlert, Undo2, UserRound } from "lucide-react";
 import { Badge, Button, Input, cn } from "@jst/ui";
+import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { formatDateTime } from "@jst/utilities";
 import { qtyFmt, n } from "../sales/common";
@@ -123,12 +124,15 @@ export function PickLineCard({ line, editable, big = false, names, extra }: { li
   const isShort = done && Number(line.qty_picked) < Number(line.qty_requested);
   const uom = line.product?.uom?.code ?? "";
   const who = line.picked_by ? names?.get(line.picked_by) : null;
+  const isRoll = line.product?.tracking_type === "PHYSICAL_UNIT";
+  const chosen = useAllocRolls(isRoll ? [line.allocation_id] : []);
   return (
     <div className={cn("rounded-card border bg-surface", big ? "p-3" : "p-2", done ? (isShort ? "border-warning/60 bg-warning-soft/40" : "border-success/50 bg-success/5") : "border-line")}>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className={cn("font-medium", big ? "text-base" : "text-sm")}>{line.product?.name ?? "Item"}{line.variant && <span className="font-normal text-ink-muted"> · {line.variant.name}</span>}</div>
           <div className="text-2xs text-ink-muted">{line.product?.sku}{line.product?.tracking_type === "PHYSICAL_UNIT" && <span className="ml-1 inline-flex items-center gap-0.5"><Cylinder className="inline h-3 w-3" /> roll item</span>}</div>
+          {isRoll && <AllocRollsNote className={big ? "mt-1 text-xs" : "mt-0.5"} rolls={chosen.data?.get(line.allocation_id)} uom={uom} />}
         </div>
         <div className="text-right">
           <div className={cn("font-semibold tabular-nums", big ? "text-xl" : "text-base")}>{qtyFmt(line.qty_requested)} <span className="text-xs font-normal text-ink-faint">{uom}</span></div>

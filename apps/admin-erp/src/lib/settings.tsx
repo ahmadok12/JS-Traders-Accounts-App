@@ -12,6 +12,8 @@ export const FEATURES = {
   brands: "products.brands",
   /** Quick invoice: invoice + automatic dispatch from the chosen warehouse in one step */
   quickInvoice: "sales.quick_invoice",
+  /** pickers must add at least one photo before finishing a picking task (default on) */
+  pickingPhotosRequired: "picking.photos_required",
 } as const;
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 

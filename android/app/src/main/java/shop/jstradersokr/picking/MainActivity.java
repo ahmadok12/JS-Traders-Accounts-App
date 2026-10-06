@@ -4,14 +4,17 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.NotificationManager;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -20,13 +23,18 @@ import android.webkit.WebViewClient;
 
 import org.json.JSONObject;
 
+import java.io.File;
+
 /**
  * The staff picking app. Shows the ERP phone screen (/m) in a WebView — so it always runs the latest version —
  * and gives the page a small bridge (window.JSTNative) to switch the background alarm service on and off.
  */
 public class MainActivity extends Activity {
+    private static final int REQ_FILES = 41;
     private WebView web;
     private boolean loaded;
+    private ValueCallback<Uri[]> fileCallback;
+    private Uri cameraUri;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle b) {
@@ -40,7 +48,44 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setUserAgentString(s.getUserAgentString() + " JSPickingApp/" + BuildConfig.VERSION_NAME);
         web.addJavascriptInterface(new Bridge(), "JSTNative");
-        web.setWebChromeClient(new WebChromeClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            // <input type="file"> in the page: camera (capture) or gallery / files
+            @Override public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
+                if (fileCallback != null) fileCallback.onReceiveValue(null);
+                fileCallback = cb;
+                cameraUri = null;
+                try {
+                    boolean images = false;
+                    for (String t : p.getAcceptTypes()) if (t != null && t.startsWith("image")) images = true;
+                    Intent camera = null;
+                    if (images) {
+                        File f = new File(PhotoProvider.dir(MainActivity.this), "pick-" + System.currentTimeMillis() + ".jpg");
+                        cameraUri = PhotoProvider.uriFor(f);
+                        camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        camera.putExtra(MediaStore.EXTRA_OUTPUT, cameraUri);
+                        camera.setClipData(ClipData.newRawUri("photo", cameraUri));
+                        camera.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    }
+                    Intent intent;
+                    if (p.isCaptureEnabled() && camera != null) {
+                        intent = camera;
+                    } else {
+                        Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
+                        pick.addCategory(Intent.CATEGORY_OPENABLE);
+                        pick.setType(images ? "image/*" : "*/*");
+                        if (p.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                        intent = Intent.createChooser(pick, images ? "Choose photos" : "Choose files");
+                        if (camera != null) intent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[]{camera});
+                    }
+                    startActivityForResult(intent, REQ_FILES);
+                    return true;
+                } catch (Exception e) {
+                    fileCallback = null;
+                    cameraUri = null;
+                    return false;
+                }
+            }
+        });
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 Uri u = r.getUrl();
@@ -61,6 +106,28 @@ public class MainActivity extends Activity {
         if (task != null) web.loadUrl(BuildConfig.APP_URL + "/m?task=" + Uri.encode(task));
         else if (!loaded) web.loadUrl(BuildConfig.APP_URL + "/m");
         loaded = true;
+    }
+
+    @Override protected void onActivityResult(int code, int result, Intent data) {
+        super.onActivityResult(code, result, data);
+        if (code != REQ_FILES || fileCallback == null) return;
+        Uri[] out = null;
+        if (result == RESULT_OK) {
+            if (data != null && data.getClipData() != null && data.getClipData().getItemCount() > 0
+                    && !(cameraUri != null && cameraUri.equals(data.getClipData().getItemAt(0).getUri()))) {
+                ClipData c = data.getClipData();
+                out = new Uri[c.getItemCount()];
+                for (int i = 0; i < c.getItemCount(); i++) out[i] = c.getItemAt(i).getUri();
+            } else if (data != null && data.getData() != null) {
+                out = new Uri[]{data.getData()};
+            } else if (cameraUri != null) {
+                File f = new File(PhotoProvider.dir(this), cameraUri.getLastPathSegment());
+                if (f.exists() && f.length() > 0) out = new Uri[]{cameraUri};
+            }
+        }
+        fileCallback.onReceiveValue(out);
+        fileCallback = null;
+        cameraUri = null;
     }
 
     @Override public void onBackPressed() {

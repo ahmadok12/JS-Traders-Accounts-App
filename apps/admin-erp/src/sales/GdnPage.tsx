@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, CheckCircle2, ExternalLink, FileText, Pencil, Plus, Printer, RotateCcw, Save, ShieldAlert, Truck, Undo2 } from "lucide-react";
+import { Ban, CheckCircle2, ExternalLink, FileDown, FileText, Loader2, MessageCircle, Pencil, Plus, Printer, RotateCcw, Save, ShieldAlert, Truck, Undo2 } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, FormGrid, Input, KeyValue, PageHeader, SearchableSelect, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -14,7 +14,9 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { MovementsTable } from "../inventory/MovementsTable";
 import { money, today } from "../accounting/common";
 import { fetchGdnLinePrices, n, qtyFmt } from "./common";
-import { printDocument } from "./print";
+import { printDocument, type PrintSpec } from "./print";
+import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
+import { openWhatsApp, pdfFileName, savePdf, sendPdfToWhatsApp } from "./pdf";
 import { PricingStrip } from "../pricing/PricingPage";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 
@@ -104,7 +106,7 @@ function useGdn(id: string | null) {
     enabled: !!id,
     queryFn: async () => {
       const [h, l] = await Promise.all([
-        sb().from("gdns").select("id, doc_no, gdn_date, status, sales_order_id, customer_id, transport_details, notes, lines_draft, posted_at, reversed_at, reversal_reason, customer:customers(name, code, city), so:sales_orders(doc_no, customer_reference)").eq("id", id!).single(),
+        sb().from("gdns").select("id, doc_no, gdn_date, status, sales_order_id, customer_id, transport_details, notes, lines_draft, posted_at, reversed_at, reversal_reason, customer:customers(name, code, city, phone, whatsapp), so:sales_orders(doc_no, customer_reference)").eq("id", id!).single(),
         sb().from("gdn_lines").select("id, line_no, quantity, invoiced_qty, returned_open_qty, returned_credit_qty, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), warehouse:warehouses(code, name)").eq("gdn_id", id!).order("line_no"),
       ]);
       if (h.error) throw h.error;
@@ -204,6 +206,7 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
   const [touched, setTouched] = React.useState(false);
   const [showErrors, setShowErrors] = React.useState(false);
   const rows = useDispatchRows(soId);
+  const allocRolls = useAllocRolls((rows.data ?? []).filter((r) => r.rolls).map((r) => r.allocation_id));
   const { guard, dialog } = useUnsavedGuard(touched);
   const initFor = React.useRef<string | null>(null);
 
@@ -304,7 +307,8 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
                         <tr key={r.allocation_id} className={cn(r.remaining <= 0 && "text-ink-faint")}>
                           <td className={td}>
                             <div className="font-medium">{r.product}{r.variant && <span className="font-normal text-ink-muted"> · {r.variant}</span>}</div>
-                            <div className="text-2xs text-ink-muted">{r.sku}{r.is_bundle && " · bundle"}{r.rolls && " · rolls"}</div>
+                            <div className="text-2xs text-ink-muted">{r.sku}{r.is_bundle && " · bundle"}{r.rolls && (allocRolls.data?.get(r.allocation_id)?.length ? " · rolls chosen on the order are cut first" : " · rolls cut automatically")}</div>
+                            {r.rolls && <AllocRollsNote rolls={allocRolls.data?.get(r.allocation_id)} uom={r.uom} />}
                           </td>
                           <td className={cn(td, "font-mono text-xs")}>{r.wh_code}</td>
                           <td className={cn(td, "text-right tabular-nums")}>{qtyFmt(r.ordered)}</td>
@@ -389,22 +393,57 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
     },
     onError: (e) => toast.error(friendlyError(e)),
   });
-  const cust = h?.customer as { name: string; code: string; city: string | null } | null | undefined;
+  const cust = h?.customer as { name: string; code: string; city: string | null; phone: string | null; whatsapp: string | null } | null | undefined;
   const so = h?.so as { doc_no: string; customer_reference: string | null } | null | undefined;
   const left = leftToInvoice(doc.data?.lines ?? []);
   const invoicedAny = (doc.data?.lines ?? []).some((l) => Number(l.invoiced_qty) > 0);
 
+  const companyInfo = useQuery({
+    queryKey: ["company-info", company?.company_id],
+    enabled: !!company?.company_id,
+    staleTime: 30 * 60_000,
+    queryFn: async () => (await sb().from("companies").select("name, legal_name, phone, email, address, ntn").eq("id", company!.company_id).single()).data as
+      { name: string; legal_name: string | null; phone: string | null; email: string | null; address: string | null; ntn: string | null } | null,
+  });
+  const spec = (): PrintSpec & { companyLines: string[] } => ({
+    company: companyInfo.data?.legal_name || company?.company_name || "", title: "Delivery Note", docNo: String(h!.doc_no),
+    companyLines: [companyInfo.data?.address ?? "", [companyInfo.data?.phone, companyInfo.data?.email].filter(Boolean).join(" · ")],
+    meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h!.gdn_date as string)], ["Sales order", so?.doc_no ?? ""],
+      ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h!.transport_details as string) ?? ""]],
+    columns: [{ label: "#" }, { label: "Item" }, { label: "From" }, { label: "Quantity", align: "right" }],
+    rows: lines.map((l, i) => [String(i + 1), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}`, l.warehouse.code, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`]),
+    notes: h!.notes as string | null, signatures: ["Dispatched by", "Driver / transporter", "Received by (customer)"],
+  });
   const print = () => {
     if (!h) return;
-    const ok = printDocument({
-      company: company?.company_name ?? "", title: "Delivery Note", docNo: String(h.doc_no),
-      meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h.gdn_date as string)], ["Sales order", so?.doc_no ?? ""],
-        ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h.transport_details as string) ?? ""]],
-      columns: [{ label: "#" }, { label: "Item" }, { label: "From" }, { label: "Quantity", align: "right" }],
-      rows: lines.map((l, i) => [String(i + 1), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}`, l.warehouse.code, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`]),
-      notes: h.notes as string | null, signatures: ["Dispatched by", "Driver / transporter", "Received by (customer)"],
-    });
+    const ok = printDocument(spec());
     if (!ok) toast.error("Allow pop-ups to print");
+  };
+  const [pdfBusy, setPdfBusy] = React.useState<null | "pdf" | "wa">(null);
+  const fileName = h ? pdfFileName(String(h.doc_no), cust?.name) : "";
+  const custPhone = (cust?.whatsapp || cust?.phone) ?? null;
+  const waMessage = h ? `Assalam-o-Alaikum${cust?.name ? ` ${cust.name}` : ""},\nPlease find attached Delivery Note ${String(h.doc_no)} dated ${formatDate(h.gdn_date as string)}${so?.doc_no ? ` (order ${so.doc_no})` : ""}.\n${company?.company_name ?? ""}` : "";
+  const toPdf = async () => {
+    if (!h) return;
+    setPdfBusy("pdf");
+    try { await savePdf(spec(), fileName); toast.success(`Saved ${fileName} to your Downloads`); }
+    catch (e) { toast.error(friendlyError(e)); }
+    finally { setPdfBusy(null); }
+  };
+  const toWhatsApp = async () => {
+    if (!h) return;
+    setPdfBusy("wa");
+    try {
+      const r = await sendPdfToWhatsApp(spec(), fileName, custPhone, waMessage);
+      if (r === "opened") {
+        toast.success(`PDF saved to Downloads (${fileName}). WhatsApp is opening${custPhone ? ` on ${cust?.name}'s chat` : ""} — drag the PDF into the chat or attach it with the 📎, then send.`, {
+          duration: 12000,
+          action: { label: "Use WhatsApp Web", onClick: () => openWhatsApp(custPhone, waMessage, true) },
+        });
+        if (!custPhone) toast.info("This customer has no phone / WhatsApp number — choose the chat in WhatsApp. Add the number on the customer to open the chat directly next time.");
+      }
+    } catch (e) { toast.error(friendlyError(e)); }
+    finally { setPdfBusy(null); }
   };
 
   return (
@@ -419,6 +458,8 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
             <div className="flex-1" />
             {so && <Button icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => navigate(`/sales-orders?view=${h!.sales_order_id}`)}>{so.doc_no}</Button>}
             {h && status !== "CANCELLED" && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print</Button>}
+            {h && status !== "CANCELLED" && <Button icon={pdfBusy === "pdf" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} disabled={!!pdfBusy || (status === "DRAFT" && draft.isLoading)} onClick={() => void toPdf()}>Save as PDF</Button>}
+            {h && status !== "CANCELLED" && <Button className="border-[#25D366] text-[#128C7E] hover:bg-[#25D366]/10" title={custPhone ? `Send to ${cust?.name} (${custPhone}) on WhatsApp` : "Send on WhatsApp"} icon={pdfBusy === "wa" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />} disabled={!!pdfBusy || (status === "DRAFT" && draft.isLoading)} onClick={() => void toWhatsApp()}>WhatsApp</Button>}
             <Button onClick={onClose}>Close</Button>
             {status === "DRAFT" && can(P.salesDispatch) && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
             {status === "POSTED" && can(P.salesDispatch) && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setConfirm(invoicedAny ? "blocked" : "correct")}>Edit</Button>}

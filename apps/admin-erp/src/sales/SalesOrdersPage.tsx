@@ -16,6 +16,8 @@ import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
 import { PricingStrip } from "../pricing/PricingPage";
 import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPicking";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { SoPickingPhotos, useSoPickingPhotos } from "../picking/PickPhotos";
+import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -99,7 +101,7 @@ export function SalesOrdersPage() {
 interface SoLine {
   id: string; line_no: number; quantity: number; delivered_qty: number; unit_price: number | null; notes: string | null; product_id: string; variant_id: string | null;
   product: { name: string; sku: string; uom: { code: string } }; variant: { name: string } | null;
-  allocations: { id: string; warehouse_id: string; quantity: number; reserved_quantity: number; delivered_quantity: number; status: string; warehouse: { code: string; name: string } }[];
+  allocations: { id: string; warehouse_id: string; quantity: number; reserved_quantity: number; delivered_quantity: number; status: string; roll_cuts: { unit_id: string; qty: number }[] | null; warehouse: { code: string; name: string } }[];
 }
 
 function useSo(id: string | null) {
@@ -109,7 +111,7 @@ function useSo(id: string | null) {
     queryFn: async () => {
       const [h, l, g] = await Promise.all([
         sb().from("sales_orders").select("id, doc_no, order_date, status, customer_id, customer_reference, notes, discount_amount, approved_at, cancelled_at, cancel_reason, closed_at, close_reason, source_reservation_order_id, customer:customers(name, code, city), source:reservation_orders!sales_orders_source_reservation_order_id_fkey(doc_no), quote:quotations!sales_orders_source_quotation_id_fkey(id, doc_no)").eq("id", id!).single(),
-        sb().from("sales_order_lines").select("id, line_no, quantity, delivered_qty, notes, product_id, variant_id, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), allocations:sales_order_line_warehouse_allocations(id, warehouse_id, quantity, reserved_quantity, delivered_quantity, status, warehouse:warehouses(code, name))").eq("sales_order_id", id!).eq("is_active", true).order("line_no"),
+        sb().from("sales_order_lines").select("id, line_no, quantity, delivered_qty, notes, product_id, variant_id, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), allocations:sales_order_line_warehouse_allocations(id, warehouse_id, quantity, reserved_quantity, delivered_quantity, status, roll_cuts, warehouse:warehouses(code, name))").eq("sales_order_id", id!).eq("is_active", true).order("line_no"),
         sb().from("gdns").select("id, doc_no, gdn_date, status").eq("sales_order_id", id!).order("created_at"),
       ]);
       if (h.error) throw h.error;
@@ -165,6 +167,16 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
   const canPrices = can(P.salesViewPrices);
   const quote = h?.quote as { doc_no: string } | null | undefined;
   const tasks = useSoTasks(can(P.pickingManage) ? id : null);
+  const allocRolls = useAllocRolls(lines.flatMap((l) => l.allocations.filter((a) => a.roll_cuts?.length).map((a) => a.id)));
+  const pickPhotos = useSoPickingPhotos(can(P.pickingManage) || can(P.salesView) ? id : null);
+  const photoCount = pickPhotos.data?.length ?? 0;
+  const seenPhotos = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    // a picker just added photos while this window is open → tell the manager
+    if (pickPhotos.data == null) return;
+    if (seenPhotos.current != null && photoCount > seenPhotos.current) toast.info(`${photoCount - seenPhotos.current} new picking photo(s)`, { action: { label: "View", onClick: () => setTab("photos") } });
+    seenPhotos.current = photoCount;
+  }, [photoCount, pickPhotos.data]);
 
   return (
     <>
@@ -205,11 +217,13 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${lines.length})` },
               ...(can(P.pickingManage) ? [{ key: "picking", label: `Picking (${tasks.data?.length ?? 0})` }] : []),
+              ...(can(P.pickingManage) || can(P.salesView) ? [{ key: "photos", label: `Picking photos (${photoCount})` }] : []),
               { key: "gdns", label: `Dispatches (${doc.data!.gdns.filter((g) => g.status !== "CANCELLED").length})` },
               { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
             ]} />
             {tab === "history" && <AuditTimeline table="sales_orders" id={id} />}
             {tab === "files" && <AttachmentsPanel entityType="sales_orders" entityId={id} />}
+            {tab === "photos" && <SoPickingPhotos photos={pickPhotos.data ?? []} loading={pickPhotos.isLoading} />}
             {tab === "picking" && <SoPickingTab tasks={tasks.data ?? []} onOpen={(tid) => navigate(`/picking?view=${tid}`)} />}
             {tab === "gdns" && (
               <div className="flex flex-wrap gap-2">
@@ -243,6 +257,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
                                   <span className="tabular-nums font-medium">{qtyFmt(a.quantity)}</span>
                                   <span className="tabular-nums text-ink-muted">· {qtyFmt(a.delivered_quantity)} sent</span>
                                   {Number(a.reserved_quantity) > 0 && <Badge tone="info">{qtyFmt(a.reserved_quantity)} held</Badge>}
+                                  <AllocRollsNote rolls={allocRolls.data?.get(a.id)} />
                                 </span>
                               ))}
                             </div>

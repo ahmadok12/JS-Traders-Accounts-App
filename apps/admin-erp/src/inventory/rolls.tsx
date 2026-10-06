@@ -131,3 +131,32 @@ export function RollCutsEditor({ mode, cuts, onMode, onCuts, warehouseId, produc
     </div>
   );
 }
+
+export interface AllocRoll { allocation_id: string; unit_id: string; unit_no: string; qty: number; roll_remaining: number; label: string | null }
+/** Rolls chosen on sales-order lines that are still to be cut, by allocation (order line × warehouse). */
+export function useAllocRolls(allocationIds: (string | null | undefined)[]) {
+  const ids = [...new Set(allocationIds.filter((x): x is string => !!x))].sort();
+  return useQuery({
+    queryKey: ["alloc-rolls", ids],
+    enabled: ids.length > 0,
+    staleTime: 10_000,
+    queryFn: async () => {
+      const { data, error } = await sb().rpc("alloc_roll_picks", { p_alloc_ids: ids });
+      if (error) throw error;
+      const m = new Map<string, AllocRoll[]>();
+      for (const r of (data ?? []) as AllocRoll[]) m.set(r.allocation_id, [...(m.get(r.allocation_id) ?? []), r]);
+      return m;
+    },
+  });
+}
+
+/** "✂ R-00002 × 500 · R-00003 × 200" */
+export function AllocRollsNote({ rolls, uom, className }: { rolls: AllocRoll[] | undefined; uom?: string; className?: string }) {
+  if (!rolls?.length) return null;
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-1 text-2xs text-primary", className)} title="Rolls chosen on the sales order">
+      <Scissors className="h-3 w-3" />
+      {rolls.map((r) => <span key={r.unit_id} className="rounded bg-primary/10 px-1 font-mono">{r.unit_no} × {fmtQty(Number(r.qty))}{uom ? ` ${uom}` : ""}{r.label ? ` (${r.label})` : ""}</span>)}
+    </span>
+  );
+}

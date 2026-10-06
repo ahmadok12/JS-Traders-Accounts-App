@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- lets the app find the camera app on Android 11+ (photo capture for picking) -->
+    <queries>
+        <intent><action android:name="android.media.action.IMAGE_CAPTURE" /></intent>
+        <intent><action android:name="android.intent.action.GET_CONTENT" /><data android:mimeType="image/*" /></intent>
+    </queries>
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -49,6 +55,12 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Warehouse picking alarm: keeps checking for new picking tasks while the picker is on duty" />
         </service>
+
+        <provider
+            android:name=".PhotoProvider"
+            android:authorities="shop.jstradersokr.picking.photos"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

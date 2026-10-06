@@ -8,6 +8,7 @@ import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { formatDate, formatDateTime } from "@jst/utilities";
 import { Tabs } from "../entity/EntityDialog";
+import { AttachmentsPanel, useAttachments } from "../attachments/Attachments";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { n, qtyFmt, useWarehouses, type Wh } from "../sales/common";
 import { EVENT_LABEL, PICK_TONE, PickLineCard, PickProgress, PickerChips, SeenBadge, pickLabel, staffOf, usePickingStaff, usePickingTask, type PickLine, type StaffRow } from "./common";
@@ -299,6 +300,7 @@ function TaskDialog({ id, staff, names, onClose, onOpen }: { id: string; staff: 
   const [team, setTeam] = React.useState<string[]>([]);
   const [note, setNote] = React.useState("");
   const [decide, setDecide] = React.useState<PickLine | null>(null);
+  const photos = useAttachments("picking_tasks", id);
   const h = doc.data?.header;
   const status = String(h?.status ?? "");
   const lines = doc.data?.lines ?? [];
@@ -369,7 +371,8 @@ function TaskDialog({ id, staff, names, onClose, onOpen }: { id: string; staff: 
                 </div>
               )}
             </div>
-            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "history", label: "History" }]} />
+            <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "photos", label: `Photos (${photos.data?.length ?? 0})` }, { key: "history", label: "History" }]} />
+            {tab === "photos" && <AttachmentsPanel entityType="picking_tasks" entityId={id} />}
             {tab === "lines" && (
               <div className="space-y-2">
                 {open && <p className="text-xs text-ink-muted">Updates from the pickers' phones appear here instantly. You can also tick items on their behalf.</p>}

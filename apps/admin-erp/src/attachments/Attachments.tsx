@@ -10,14 +10,14 @@ import { formatDateTime } from "@jst/utilities";
 export type AttachmentEntity =
   | "journal_entries" | "sales_invoices" | "quotations" | "sales_orders" | "gdns" | "goods_receipts" | "stock_adjustments"
   | "stock_transfers" | "stock_counts" | "assembly_orders" | "reservation_orders" | "price_tasks" | "customers" | "suppliers" | "products" | "purchase_orders" | "supplier_bills" | "purchase_cost_tasks" | "shipments" | "landed_costs"
-  | "fx_payments" | "payment_agent_transactions" | "currency_conversions" | "pdc_records" | "bank_statement_imports";
+  | "fx_payments" | "payment_agent_transactions" | "currency_conversions" | "pdc_records" | "bank_statement_imports" | "picking_tasks";
 
 export interface Attachment {
   id: string; entity_type: string; entity_id: string; original_file_name: string; mime_type: string; file_size: number;
   description: string | null; uploaded_by: string | null; uploaded_at: string;
 }
 
-async function call<T>(body: Record<string, unknown>): Promise<T> {
+export async function call<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await sb().functions.invoke("attachments", { body });
   if (error) {
     // the function answers { error } with a 4xx — surface that text
@@ -67,7 +67,7 @@ export function useAttachments(entityType: AttachmentEntity, entityId: string | 
 export const filesLabel = (n: number | undefined) => `Files${n ? ` (${n})` : ""}`;
 
 const humanSize = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
-const isImage = (m: string) => m.startsWith("image/");
+export const isImage = (m: string) => m.startsWith("image/");
 
 /** Shrink phone photos before upload: longest side 1920 px, JPEG 82 %. Other files untouched. */
 async function shrink(file: File): Promise<File> {
@@ -87,6 +87,7 @@ async function shrink(file: File): Promise<File> {
   }
 }
 
+export { shrink };
 export async function uploadAttachment(entityType: AttachmentEntity, entityId: string, original: File, description?: string) {
   const file = await shrink(original);
   const mime = file.type || "application/octet-stream";
@@ -110,7 +111,7 @@ export async function openAttachment(id: string, download = false) {
   }
 }
 
-function Thumb({ a }: { a: Attachment }) {
+export function Thumb({ a }: { a: Pick<Attachment, "id" | "mime_type" | "original_file_name"> }) {
   const img = isImage(a.mime_type);
   const link = useQuery({
     queryKey: ["attachment-thumb", a.id],
