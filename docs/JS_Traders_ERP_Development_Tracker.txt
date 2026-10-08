@@ -20,7 +20,7 @@ Stage 8   Shipments and landed cost .................. [x]  (done 2026-10-04)
 Stage 9   Payments, multi-currency, payment agents ... [x]  (done 2026-10-05)
 Stage 10  PDC and bank reconciliation ................ [x]  (done 2026-10-05)
 Stage 11  Reporting, dashboards, exports ............. [x]  (done 2026-10-05)
-Stage 12  Configuration and document engine .......... [~]  (built 2026-10-09; migration to apply on live DB; workflow designer + per-role forms left)
+Stage 12  Configuration and document engine .......... [~]  (live 2026-10-09; workflow designer + per-role forms left)
 Stage 13  Interfaces (warehouse, owner, sales, mobile) [ ]
 Stage 14  Full-system integration .................... [ ]
 Stage 15  Full QA, security and performance .......... [ ]
@@ -628,8 +628,9 @@ Tests: SQL (rolled back) — photo required / added / finish / no add after done
        GDN 6000 + 1000 cut R-00003 2000 → R-00002 4000 → R-00002 1000. tests/unit/pdf.test.ts PASSED.
 NEXT: continue warehouse manager trial; Stage 12.
 
-=== 2026-10-09 — Stage 12 configuration and document engine (branch stage-12-config-engine) ===
-Migration: 20261014000100_stage12_config_engine (NOT yet applied to the live DB — apply, then merge to main).
+=== 2026-10-09 — Stage 12 configuration and document engine ===
+Migration: 20261014000100_stage12_config_engine — applied to the live DB by Ahmad in the Supabase SQL editor (so it is not listed in Supabase's migration history).
+Live test: tests/sql/stage12_config_engine.sql 38/38 ok on the live DB (salesperson steps skipped — no salesperson user yet), rolled back, nothing left behind.
 [x] Settings tabs: Numbering (editable), Documents (templates), Custom fields, Approvals, Notifications
 [x] Print / PDF engine reads templates (logo, header, terms, footer, columns); new Print on sales orders and vouchers
 [x] Custom fields on master records (form, view, list columns, filter by field)
@@ -637,4 +638,4 @@ Migration: 20261014000100_stage12_config_engine (NOT yet applied to the live DB 
 [x] Notification bell + 21 rules
 Tests: tests/sql/stage12_config_engine.sql 40/40 ok on a local rebuild of all migrations (other SQL tests unchanged vs. before);
        vitest 24/24 (11 new); typecheck + build ok.
-NEXT: apply migration, Ahmad tests on preview, merge; then remaining Stage 12 (workflow designer, per-role forms) or Stage 13.
+NEXT: Ahmad tests the new Settings tabs; then remaining Stage 12 (workflow designer, per-role forms) or Stage 13.

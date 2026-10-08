@@ -1,13 +1,11 @@
 # Handoff — where we stopped (9 Oct 2026)
 
-## Stage 12 — built 9 Oct 2026, waiting to go live
-Branch **stage-12-config-engine** (not merged). Migration `supabase/migrations/20261014000100_stage12_config_engine.sql`
-is **not applied** to the live database yet (the apply request was not approved during the session).
-To go live: apply the migration with the Supabase MCP (`apply_migration`, name `stage12_config_engine`), run
-`tests/sql/stage12_config_engine.sql` (expect 40 × ok), then merge the branch to `main` (Vercel deploys).
-The web code works without the migration (new settings tabs show an error, bell hidden, printing unchanged) but merge after applying.
+## Stage 12 — live 9 Oct 2026
+Migration `20261014000100_stage12_config_engine` applied to the live DB (via the Supabase SQL editor — it is not in
+Supabase's migration list; the Supabase MCP `apply_migration` was being cancelled from the Claude app). Live test 38/38 ok.
 New: Settings → Numbering (edit) / Documents (templates, logo) / Custom fields / Approvals / Notifications; bell in the top bar;
 Print on sales orders and vouchers; custom fields on master records with list columns + filter.
+Note: approval-limit roles must already hold the permission (e.g. Owner has no sales.approve / journals.post today).
 
 ## Earlier work (all live on -1fsw and in the database)
 1. **Picking photos** — staff app: Take photo / From gallery on each picking task; ≥1 photo required to finish
