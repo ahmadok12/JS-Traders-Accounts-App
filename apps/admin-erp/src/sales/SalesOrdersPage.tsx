@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, BellRing, CheckCircle2, ClipboardList, ExternalLink, Lock, Pencil, Plus, ShieldAlert, ShoppingCart, Truck } from "lucide-react";
+import { Ban, BellRing, CheckCircle2, ClipboardList, ExternalLink, Lock, Pencil, Plus, Printer, ShieldAlert, ShoppingCart, Truck } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, KeyValue, PageHeader, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -18,6 +18,8 @@ import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPick
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { SoPickingPhotos, useSoPickingPhotos } from "../picking/PickPhotos";
 import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
+import { printDocument } from "./print";
+import { ApprovalNotice } from "../documents/ApprovalNotice";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -178,6 +180,24 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
     seenPhotos.current = photoCount;
   }, [photoCount, pickPhotos.data]);
 
+  const print = () => {
+    if (!h) return;
+    const disc = Number(h.discount_amount ?? 0);
+    const ok = printDocument({
+      docType: "SALES_ORDER", company: "", title: "Sales Order", docNo: String(h.doc_no),
+      meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h.order_date as string)],
+        ["Customer ref.", (h.customer_reference as string) ?? ""], ["Status", soLabel(status)]],
+      columns: canPrices ? [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }] : [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }],
+      rows: lines.map((l) => {
+        const base = [String(l.line_no), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}`, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`];
+        return canPrices ? [...base, l.unit_price == null ? "Pending" : money(l.unit_price), l.unit_price == null ? "" : money(Number(l.quantity) * Number(l.unit_price))] : base;
+      }),
+      totals: canPrices ? [...(disc ? [["Subtotal", money(total)], ["Discount", `-${money(disc)}`]] as [string, string][] : []), [pending ? "Total (priced items)" : "Total", money(total - disc)]] : [],
+      notes: (h.notes as string) ?? null, signatures: ["Prepared by", "Approved by"],
+    });
+    if (!ok) toast.error("Allow pop-ups to print");
+  };
+
   return (
     <>
       <ErpDialog open onRequestClose={onClose} size="full" accent="order" icon={icon}
@@ -189,6 +209,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
             {dispatchable && can(P.salesManage) && lines.some((l) => Number(l.delivered_qty) > 0) && <Button variant="destructive-ghost" icon={<Lock className="h-3.5 w-3.5" />} onClick={() => setConfirm("close")}>Close order</Button>}
             <div className="flex-1" />
             {src && <Button icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => navigate(`/reservations?view=${h!.source_reservation_order_id}`)}>{src.doc_no}</Button>}
+            {h && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print</Button>}
             <Button onClick={onClose}>Close</Button>
             {(status === "DRAFT" ? can(P.salesManage) : ["APPROVED", "PARTIALLY_DELIVERED", "DELIVERED"].includes(status) && can(P.salesManage) && can(P.salesApprove)) &&
               <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
@@ -202,6 +223,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
       >
         {doc.isLoading ? <Skeleton className="h-40" /> : doc.error ? <p className="text-sm text-danger">{friendlyError(doc.error)}</p> : h && (
           <>
+            <ApprovalNotice docType="SALES_ORDER" id={id} enabled={status === "DRAFT"} />
             <dl className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-5">
               <KeyValue label="Customer">{cust?.name}</KeyValue>
               <KeyValue label="Order date">{formatDate(h.order_date as string)}</KeyValue>

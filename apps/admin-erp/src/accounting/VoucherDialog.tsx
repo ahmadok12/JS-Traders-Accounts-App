@@ -2,7 +2,7 @@ import { ReportShortcuts } from "../reports/Shortcuts";
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, BookOpenCheck, CheckCircle2, Landmark, Pencil, Plus, Save, Trash2, Undo2 } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Ban, BookOpenCheck, CheckCircle2, Landmark, Pencil, Plus, Printer, Save, Trash2, Undo2 } from "lucide-react";
 import { Badge, Button, ConfirmDialog, ErpDialog, Field, FormGrid, Input, KeyValue, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -13,6 +13,8 @@ import { Tabs } from "../entity/EntityDialog";
 import { STATUS_TONE } from "../inventory/docConfigs";
 import { ReceiptAllocationPanel } from "../sales/allocations";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { printDocument } from "../sales/print";
+import { ApprovalNotice } from "../documents/ApprovalNotice";
 import {
   AccountPicker, Amount, BankPicker, ENTRY_LABEL, PartyPicker, money, num, today, useAccountNames, useBanks, usePartyNames, useSystemAccounts,
   type EntryType, type PartyType,
@@ -89,6 +91,26 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
   });
   const title = String(data?.entry_no ?? "Voucher");
   const tDr = lines.reduce((a, l) => a + Number(l.debit), 0), tCr = lines.reduce((a, l) => a + Number(l.credit), 0);
+  const print = () => {
+    if (!data) return;
+    const docType = type === "RECEIPT" ? "RECEIPT_VOUCHER" : type === "PAYMENT" ? "PAYMENT_VOUCHER" : "JOURNAL_VOUCHER";
+    const party = data.party_name ? String(data.party_name) : "";
+    const meta: [string, string][] = type === "RECEIPT" || type === "PAYMENT"
+      ? [[type === "RECEIPT" ? "Received from" : "Paid to", party], ["Date", formatDate(data.entry_date as string)], ["Reference", String(data.reference ?? "")], ["Bank / cash", String(data.bank_name ?? "")]]
+      : [["Date", formatDate(data.entry_date as string)], ["Reference", String(data.reference ?? "")], ["Memo", String(data.memo ?? "")]];
+    const ok = printDocument({
+      docType, company: "", title: type === "RECEIPT" ? "Receipt Voucher" : type === "PAYMENT" ? "Payment Voucher" : ENTRY_LABEL[type], docNo: title, meta,
+      columns: [{ label: "Account" }, { label: "Description" }, { label: "Debit", align: "right" }, { label: "Credit", align: "right" }],
+      rows: lines.map((l) => [accts.data?.get(l.account_id) ?? "",
+        [l.party_id ? parties.data?.get(l.party_id) ?? "" : l.bank_account_id ? banks.data?.find((b) => b.id === l.bank_account_id)?.name ?? "" : "", l.description ?? "",
+          l.currency && l.currency !== "PKR" ? `${l.currency} ${money(l.fx_amount)}${l.fx_rate ? ` @ ${Number(l.fx_rate)}` : ""}` : ""].filter(Boolean).join(" — "),
+        Number(l.debit) ? money(l.debit) : "", Number(l.credit) ? money(l.credit) : ""]),
+      totals: type === "RECEIPT" || type === "PAYMENT" ? [["Amount", money((data.amount ?? data.total_debit) as number)]] : [["Total", money(tDr)]],
+      notes: type === "RECEIPT" || type === "PAYMENT" ? ((data.memo as string) || null) : null,
+      signatures: type === "PAYMENT" ? ["Prepared by", "Approved by", "Received by"] : type === "RECEIPT" ? ["Received by", "Approved by"] : ["Prepared by", "Approved by"],
+    });
+    if (!ok) toast.error("Allow pop-ups to print");
+  };
 
   return (
     <>
@@ -103,6 +125,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
             {status === "DRAFT" && can(P.journalsCreate) && <Button variant="destructive-ghost" icon={<Ban className="h-3.5 w-3.5" />} onClick={() => setConfirm("cancel")}>Cancel draft</Button>}
             {status === "POSTED" && !data?.source_type && can(P.journalsPost) && <Button variant="destructive-ghost" icon={<Undo2 className="h-3.5 w-3.5" />} onClick={() => setConfirm("reverse")}>Reverse</Button>}
             <div className="flex-1" />
+            {data && status !== "CANCELLED" && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print</Button>}
             <Button onClick={onClose}>Close</Button>
             {status === "DRAFT" && can(P.journalsCreate) && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
             {status === "DRAFT" && can(P.journalsPost) && <Button variant="primary" icon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => setConfirm("post")}>Post</Button>}
@@ -111,6 +134,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
       >
         {loading ? <Skeleton className="h-40" /> : error ? <p className="text-sm text-danger">{friendlyError(error)}</p> : data ? (
           <>
+            <ApprovalNotice docType="PAYMENT_VOUCHER" id={id} enabled={status === "DRAFT" && type === "PAYMENT"} action="post" />
             <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
               {data.party_name ? <KeyValue label={type === "RECEIPT" ? "Received from" : type === "PAYMENT" ? "Paid to" : "Party"}><span className="font-medium">{String(data.party_name)}</span></KeyValue> : null}
               {data.bank_name ? <KeyValue label={type === "RECEIPT" ? "Into" : "From"}>{String(data.bank_name)}</KeyValue> : null}

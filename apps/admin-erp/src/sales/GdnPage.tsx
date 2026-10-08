@@ -406,7 +406,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
       { name: string; legal_name: string | null; phone: string | null; email: string | null; address: string | null; ntn: string | null } | null,
   });
   const spec = (): PrintSpec & { companyLines: string[] } => ({
-    company: companyInfo.data?.legal_name || company?.company_name || "", title: "Delivery Note", docNo: String(h!.doc_no),
+    docType: "GDN", company: companyInfo.data?.legal_name || company?.company_name || "", title: "Delivery Note", docNo: String(h!.doc_no),
     companyLines: [companyInfo.data?.address ?? "", [companyInfo.data?.phone, companyInfo.data?.email].filter(Boolean).join(" · ")],
     meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h!.gdn_date as string)], ["Sales order", so?.doc_no ?? ""],
       ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h!.transport_details as string) ?? ""]],

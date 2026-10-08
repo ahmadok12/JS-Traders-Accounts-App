@@ -1,6 +1,6 @@
 JS TRADERS ERP — DEVELOPMENT TRACKER
 Source: JS_Traders_ERP_Master_Specification_OPTIMIZED.md (v2.0), section 27.2
-Last updated: 5 Oct 2026 (Stage 11 — reports, dashboards, exports)
+Last updated: 9 Oct 2026 (Stage 12 — configuration and document engine)
 
 Legend:  [x] done    [~] partly done    [ ] not started
 Status after each sprint is updated in this file.
@@ -20,7 +20,7 @@ Stage 8   Shipments and landed cost .................. [x]  (done 2026-10-04)
 Stage 9   Payments, multi-currency, payment agents ... [x]  (done 2026-10-05)
 Stage 10  PDC and bank reconciliation ................ [x]  (done 2026-10-05)
 Stage 11  Reporting, dashboards, exports ............. [x]  (done 2026-10-05)
-Stage 12  Configuration and document engine .......... [ ]  (custom fields may be moved earlier)
+Stage 12  Configuration and document engine .......... [~]  (built 2026-10-09; migration to apply on live DB; workflow designer + per-role forms left)
 Stage 13  Interfaces (warehouse, owner, sales, mobile) [ ]
 Stage 14  Full-system integration .................... [ ]
 Stage 15  Full QA, security and performance .......... [ ]
@@ -425,16 +425,47 @@ Test gate: tests/sql/reports_reconcile.sql — PASSED (10 checks: stock = balanc
            BS balances, P&L = BS profit, TB equal, cash/bank = ledgers …); tests/unit/reports.test.ts PASSED
 
 ======================================================================
-STAGE 12 — CONFIGURATION AND DOCUMENT ENGINE                   [ ]
+STAGE 12 — CONFIGURATION AND DOCUMENT ENGINE                   [~]
 ======================================================================
-[ ] Custom fields for any record type (text, number, date, dropdown,
-    multi-select, reference, file, formula, …) — typed, filterable
+Migration: supabase/migrations/20261014000100_stage12_config_engine.sql
+Test: tests/sql/stage12_config_engine.sql (40 checks) + tests/unit/templates.test.ts
+[x] Custom fields (Settings → Custom fields) for customers, suppliers, products,
+    warehouses, employees, customer groups, bank accounts, payment agents.
+    Types: text, long text, whole number, decimal, amount, percentage, date,
+    yes/no, dropdown, multi-select. Required / help text / list column / order /
+    deactivate. Typed storage (text / number / date / yes-no / choices) — filterable;
+    DB validates every value; type locked once used; audit history
+[x] Custom fields on records: "Additional fields" in add / edit / view;
+    optional list columns; "Filter by field" on list screens (kept in the URL)
+[ ] Reference / file / image / formula custom-field types (later)
+[ ] Custom fields on transactions (SO, invoice …) (later)
 [ ] Configurable forms / optional sections per role
-[ ] Workflow definitions, steps, transitions, approval limits
-[ ] Document templates (logo, columns, terms, signature, print/PDF)
-[ ] Numbering configuration screen (edit prefixes/padding)
-[ ] Notification rules and in-app notifications
-[ ] Configurable report shortcuts
+[~] Workflow: approval limits (Settings → Approvals) for sales orders, purchase
+    orders, supplier bills, payment vouchers and invoice discount %; tiers by
+    amount; enforced by DB triggers on approve / post; approver role must already
+    hold the permission; notice on the document; "needs your approval" bell item
+[ ] Configurable workflow statuses / steps / transitions designer
+[x] Document templates (Settings → Documents): company look (logo upload,
+    logo position/size, header name + lines, accent colour, text size, paper
+    A4/A5/Letter, footer, page numbers) + per document (title, rename / hide
+    columns, hide detail fields, terms & conditions, notes / totals / signature
+    on-off, custom signature boxes, own style). Live preview + sample PDF.
+    Applies to print AND PDF for: quotation, sales order (new Print), GDN,
+    invoice, sales/purchase returns, receipt / payment / journal vouchers (new
+    Print), PO, supplier bill, shipment, landed cost, payroll register.
+    Templates change layout only — document figures are never altered.
+[x] Numbering screen (Settings → Numbering): prefix, digits, next number,
+    year-in-number; preview; cannot lower the next number (no duplicates)
+    unless the prefix/format changes; direct table edits blocked (RPC only)
+[x] Notification rules (Settings → Notifications): 21 rules — approvals,
+    approval limits, adjustments/transfers/counts pending, low stock, price &
+    cost tasks, invoices/bills awaiting posting, payment received, shipment ETA,
+    PDC due / bounced, payroll, advances, leave, assembly labour. On/off, roles,
+    days-ahead. Receiver also needs the permission to act.
+[x] In-app notifications: bell in the top bar, unread count, popup on new,
+    click opens the document, mark read; items clear themselves when done
+[ ] E-mail / WhatsApp / SMS notification channels (later, spec §21)
+[x] Configurable report shortcuts (done in Stage 11 — Admin → Report shortcuts)
 
 ======================================================================
 STAGE 13 — INTERFACES                                          [ ]
@@ -596,3 +627,14 @@ Migrations: picking_photos, so_roll_selection (applied). Edge function attachmen
 Tests: SQL (rolled back) — photo required / added / finish / no add after done / other staff blocked / manager sees; roll plan over-roll rejected,
        GDN 6000 + 1000 cut R-00003 2000 → R-00002 4000 → R-00002 1000. tests/unit/pdf.test.ts PASSED.
 NEXT: continue warehouse manager trial; Stage 12.
+
+=== 2026-10-09 — Stage 12 configuration and document engine (branch stage-12-config-engine) ===
+Migration: 20261014000100_stage12_config_engine (NOT yet applied to the live DB — apply, then merge to main).
+[x] Settings tabs: Numbering (editable), Documents (templates), Custom fields, Approvals, Notifications
+[x] Print / PDF engine reads templates (logo, header, terms, footer, columns); new Print on sales orders and vouchers
+[x] Custom fields on master records (form, view, list columns, filter by field)
+[x] Approval limits enforced in the DB + notice on SO / PO / bill / invoice / payment voucher
+[x] Notification bell + 21 rules
+Tests: tests/sql/stage12_config_engine.sql 40/40 ok on a local rebuild of all migrations (other SQL tests unchanged vs. before);
+       vitest 24/24 (11 new); typecheck + build ok.
+NEXT: apply migration, Ahmad tests on preview, merge; then remaining Stage 12 (workflow designer, per-role forms) or Stage 13.

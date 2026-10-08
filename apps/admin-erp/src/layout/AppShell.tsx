@@ -9,6 +9,8 @@ import { NavigationGuard } from "../lib/unsaved";
 import { NAV } from "./nav";
 import { useFeatures } from "../lib/settings";
 import { ManagerAlerts } from "../picking/ManagerAlerts";
+import { NotificationBell } from "./NotificationBell";
+import { setTemplateCompany } from "../documents/template";
 
 function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { can } = useAccess();
@@ -88,6 +90,7 @@ export function AppShell() {
   });
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const loc = useLocation();
+  React.useEffect(() => setTemplateCompany(company?.company_id ?? null), [company?.company_id]);
 
   if (sessionLoading || (session && accessLoading)) {
     return (
@@ -181,6 +184,7 @@ export function AppShell() {
             <span className="text-sm font-medium text-ink">{company?.company_name}</span>
           )}
           <div className="flex-1" />
+          <NotificationBell />
           <DM.Root>
             <DM.Trigger asChild>
               <button className="flex items-center gap-2 rounded-control px-2 py-1 hover:bg-subtle">

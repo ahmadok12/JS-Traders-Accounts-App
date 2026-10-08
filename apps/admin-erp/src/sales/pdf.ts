@@ -3,47 +3,85 @@
  * jsPDF is loaded only when a PDF is made, so it does not slow down the app.
  */
 import type { PrintSpec } from "./print";
+import { applyTemplate, loadTemplate, templateCompany, type RenderedDoc } from "../documents/template";
 
-export interface PdfSpec extends PrintSpec {
-  /** extra lines under the company name (address, phone) */
-  companyLines?: string[];
-}
+export interface PdfSpec extends PrintSpec {}
 
 export const pdfFileName = (docNo: string, customer?: string | null) =>
   `${docNo}${customer ? ` - ${customer}` : ""}`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim() + ".pdf";
 
+const hexRgb = (hex: string): [number, number, number] => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+function imageSize(src: string): Promise<{ w: number; h: number } | null> {
+  return new Promise((res) => {
+    const img = new Image();
+    img.onload = () => res({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => res(null);
+    img.src = src;
+  });
+}
+
 export async function buildPdf(p: PdfSpec): Promise<Blob> {
+  const t = await loadTemplate(templateCompany(), p.docType);
+  return renderPdf(applyTemplate(p, t));
+}
+
+export async function renderPdf(d: RenderedDoc): Promise<Blob> {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({ unit: "mm", format: d.paper === "Letter" ? "letter" : d.paper === "A5" ? "a5" : "a4" });
   const W = doc.internal.pageSize.getWidth();
-  const M = 14;
+  const H = doc.internal.pageSize.getHeight();
+  const M = d.paper === "A5" ? 10 : 14;
+  const f = (pt: number) => pt * d.fontScale;
+  const accent = hexRgb(d.accent);
   let y = M + 2;
 
+  // logo
+  let logoW = 0;
+  const logoH = d.logoHeight;
+  if (d.logo) {
+    const sz = await imageSize(d.logo);
+    if (sz && sz.h > 0) {
+      logoW = Math.min(60, (sz.w / sz.h) * logoH);
+      const fmt = d.logo.startsWith("data:image/png") ? "PNG" : "JPEG";
+      try {
+        if (d.logoPosition === "left") doc.addImage(d.logo, fmt, M, M - 2, logoW, logoH);
+        else doc.addImage(d.logo, fmt, W - M - logoW, M - 2, logoW, logoH);
+      } catch { logoW = 0; }
+    }
+  }
+  const leftX = d.logo && logoW && d.logoPosition === "left" ? M + logoW + 4 : M;
+  const titleY = d.logo && logoW && d.logoPosition === "right" ? M + logoH + 4 : y;
+
   // header: company left, title right
-  doc.setFont("helvetica", "bold"); doc.setFontSize(14);
-  doc.text(p.company || "", M, y);
-  doc.setFontSize(18);
-  doc.text(p.title, W - M, y, { align: "right" });
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-  doc.text(p.docNo, W - M, y + 6, { align: "right" });
-  let cy = y + 5;
-  doc.setFontSize(9); doc.setTextColor(90);
-  for (const l of p.companyLines ?? []) { if (l) { doc.text(l, M, cy); cy += 4.2; } }
+  doc.setFont("helvetica", "bold"); doc.setFontSize(f(14));
+  doc.text(d.companyName || "", leftX, y);
+  doc.setFontSize(f(18)); doc.setTextColor(...accent);
+  doc.text(d.title, W - M, titleY, { align: "right" });
   doc.setTextColor(0);
-  y = Math.max(cy, y + 9) + 1;
-  doc.setLineWidth(0.6); doc.line(M, y, W - M, y);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(f(10));
+  doc.text(d.docNo, W - M, titleY + 6, { align: "right" });
+  let cy = y + 5;
+  doc.setFontSize(f(9)); doc.setTextColor(90);
+  for (const l of d.companyLines) { doc.text(l, leftX, cy); cy += 4.2; }
+  doc.setTextColor(0);
+  y = Math.max(cy, titleY + 9, d.logo && logoW ? M - 2 + logoH + 2 : 0) + 1;
+  doc.setDrawColor(...accent); doc.setLineWidth(0.6); doc.line(M, y, W - M, y); doc.setDrawColor(0);
   y += 6;
 
   // meta grid, 3 columns
   const colW = (W - 2 * M) / 3;
-  const meta = p.meta.filter(([, v]) => v != null);
+  const meta = d.meta.filter(([, v]) => v != null);
   for (let i = 0; i < meta.length; i += 3) {
     let rowH = 0;
     for (let j = 0; j < 3 && i + j < meta.length; j++) {
       const [k, v] = meta[i + j];
       const x = M + j * colW;
-      doc.setFontSize(7.5); doc.setTextColor(110); doc.text(k.toUpperCase(), x, y);
-      doc.setFontSize(10); doc.setTextColor(0);
+      doc.setFontSize(f(7.5)); doc.setTextColor(110); doc.text(k.toUpperCase(), x, y);
+      doc.setFontSize(f(10)); doc.setTextColor(0);
       const lines = doc.splitTextToSize(v || "—", colW - 4) as string[];
       doc.text(lines, x, y + 4.5);
       rowH = Math.max(rowH, 4.5 + lines.length * 4.4);
@@ -55,53 +93,59 @@ export async function buildPdf(p: PdfSpec): Promise<Blob> {
   autoTable(doc, {
     startY: y + 1,
     margin: { left: M, right: M },
-    head: [p.columns.map((c) => c.label)],
-    body: p.rows,
+    head: [d.columns.map((c) => c.label)],
+    body: d.rows,
     theme: "plain",
-    styles: { fontSize: 9.5, cellPadding: 1.8, lineColor: [221, 221, 221], lineWidth: { bottom: 0.2 } },
-    headStyles: { fontSize: 8, textColor: 60, fontStyle: "bold", lineColor: [17, 17, 17], lineWidth: { bottom: 0.4 } },
-    columnStyles: Object.fromEntries(p.columns.map((c, i) => [i, { halign: c.align ?? "left" }])),
-    didParseCell: (d) => { if (d.section === "head") d.cell.styles.halign = p.columns[d.column.index]?.align ?? "left"; },
+    styles: { fontSize: f(9.5), cellPadding: 1.8, lineColor: [221, 221, 221], lineWidth: { bottom: 0.2 } },
+    headStyles: { fontSize: f(8), textColor: 60, fontStyle: "bold", lineColor: accent, lineWidth: { bottom: 0.4 } },
+    columnStyles: Object.fromEntries(d.columns.map((c, i) => [i, { halign: c.align ?? "left" }])),
+    didParseCell: (c) => { if (c.section === "head") c.cell.styles.halign = d.columns[c.column.index]?.align ?? "left"; },
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   y = ((doc as any).lastAutoTable?.finalY ?? y) + 4;
 
-  if (p.totals?.length) {
+  if (d.totals.length) {
     autoTable(doc, {
       startY: y,
       margin: { left: W - M - 80, right: M },
-      body: p.totals,
+      body: d.totals,
       theme: "plain",
-      styles: { fontSize: 10, cellPadding: 1.3 },
+      styles: { fontSize: f(10), cellPadding: 1.3 },
       columnStyles: { 1: { halign: "right" } },
-      didParseCell: (d) => { if (d.row.index === p.totals!.length - 1) { d.cell.styles.fontStyle = "bold"; } },
+      didParseCell: (c) => { if (c.row.index === d.totals.length - 1) { c.cell.styles.fontStyle = "bold"; } },
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     y = ((doc as any).lastAutoTable?.finalY ?? y) + 4;
   }
 
-  if (p.notes) {
-    doc.setFontSize(9.5);
-    const lines = doc.splitTextToSize(`Notes: ${p.notes}`, W - 2 * M) as string[];
+  const para = (label: string | null, text: string, size: number) => {
+    doc.setFontSize(f(size));
+    const lines = doc.splitTextToSize(label ? `${label} ${text}` : text, W - 2 * M) as string[];
+    if (y + lines.length * 4.5 + 4 > H - M - 8) { doc.addPage(); y = M; }
     doc.text(lines, M, y + 2);
     y += lines.length * 4.5 + 4;
+  };
+  if (d.notes) para("Notes:", d.notes, 9.5);
+  if (d.terms) {
+    doc.setTextColor(90); doc.setFontSize(f(7.5)); doc.text("TERMS & CONDITIONS", M, y + 2); y += 4; doc.setTextColor(40);
+    para(null, d.terms, 8.5); doc.setTextColor(0);
   }
 
-  if (p.signatures?.length) {
-    const H = doc.internal.pageSize.getHeight();
-    if (y + 28 > H - M) { doc.addPage(); y = M; }
-    const sy = Math.max(y + 22, H - M - 12);
-    const n = p.signatures.length, gap = 10, sw = (W - 2 * M - gap * (n - 1)) / n;
-    doc.setFontSize(8.5); doc.setTextColor(70); doc.setLineWidth(0.3);
-    p.signatures.forEach((s, i) => { const x = M + i * (sw + gap); doc.line(x, sy, x + sw, sy); doc.text(s, x, sy + 4); });
+  if (d.signatures.length) {
+    if (y + 28 > H - M - (d.footer ? 8 : 0)) { doc.addPage(); y = M; }
+    const sy = Math.max(y + 22, H - M - 12 - (d.footer ? 8 : 0));
+    const n = d.signatures.length, gap = 10, sw = (W - 2 * M - gap * (n - 1)) / n;
+    doc.setFontSize(f(8.5)); doc.setTextColor(70); doc.setLineWidth(0.3);
+    d.signatures.forEach((s, i) => { const x = M + i * (sw + gap); doc.line(x, sy, x + sw, sy); doc.text(s, x, sy + 4); });
     doc.setTextColor(0);
   }
 
-  // footer page numbers
+  // footer text + page numbers on every page
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
-    doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(140);
-    doc.text(`${p.docNo} · page ${i} of ${pages}`, W - M, doc.internal.pageSize.getHeight() - 6, { align: "right" });
+    doc.setPage(i); doc.setFontSize(f(7.5)); doc.setTextColor(140);
+    if (d.footer) doc.text(doc.splitTextToSize(d.footer, W - 2 * M - 40) as string[], W / 2, H - 10, { align: "center" });
+    if (d.showPageNumbers) doc.text(`${d.docNo} · page ${i} of ${pages}`, W - M, H - 6, { align: "right" });
   }
   return doc.output("blob");
 }

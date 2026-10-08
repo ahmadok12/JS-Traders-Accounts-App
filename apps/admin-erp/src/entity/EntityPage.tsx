@@ -1,11 +1,12 @@
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, PowerOff, Search, ShieldAlert } from "lucide-react";
+import { Filter, Plus, PowerOff, Search, ShieldAlert, X } from "lucide-react";
 import { Button, Card, DataTable, EmptyState, Input, PageHeader, cn } from "@jst/ui";
 import { friendlyError, useAccess, useEntityList } from "@jst/data-access";
 import { EntityDialog } from "./EntityDialog";
 import type { EntityConfig } from "./types";
 import { useFeatures, useStorageLocations } from "../lib/settings";
+import { decodeCfFilter, encodeCfFilter, filterOps, formatCf, isCfEntity, useCfDefs, useCfFilterIds, useCfValues, type CfDef, type CfFilter } from "../lib/customFields";
 
 const PAGE_SIZE = 25;
 
@@ -55,6 +56,13 @@ export function EntityPage({ config }: { config: EntityConfig }) {
   const canView = viewPerms.some((p) => can(p));
   const canManage = can(config.perms.manage);
 
+  // custom fields: list columns + one filter (kept in the URL as ?cf=field~op~value)
+  const cfOn = isCfEntity(config.table);
+  const cfDefs = useCfDefs(cfOn ? config.table : null).data ?? [];
+  const cfFilter = decodeCfFilter(params.get("cf"));
+  const cfFilterDef = cfDefs.find((d) => d.id === cfFilter?.field);
+  const cfIds = useCfFilterIds(config.table, cfFilterDef ? cfFilter : null, cfFilterDef);
+
   const list = useEntityList<Record<string, unknown> & { id: string }>({
     table: config.table,
     select: config.listSelect,
@@ -65,8 +73,22 @@ export function EntityPage({ config }: { config: EntityConfig }) {
     orderBy: config.orderBy,
     page,
     pageSize: PAGE_SIZE,
-    enabled: canView,
+    enabled: canView && (!cfFilterDef || cfIds.isSuccess),
+    idIn: cfFilterDef ? cfIds.data?.ids ?? [] : null,
   });
+  const listCfDefs = cfDefs.filter((d) => d.show_in_list);
+  const pageIds = (list.data?.rows ?? []).map((r) => r.id);
+  const cfVals = useCfValues(config.table, pageIds, listCfDefs.length > 0);
+  const allColumns = React.useMemo(() => {
+    if (!listCfDefs.length) return columns;
+    const by = new Map((cfVals.data ?? []).map((v) => [`${v.field_id}:${v.record_id}`, v]));
+    return [...columns, ...listCfDefs.map((d) => ({
+      key: `cf_${d.id}`, header: d.label, hideBelow: "md" as const,
+      align: ["number", "decimal", "currency", "percentage"].includes(d.field_type) ? ("right" as const) : undefined,
+      cell: (r: Record<string, unknown> & { id: string }) => <span className="text-xs">{formatCf(d, by.get(`${d.id}:${r.id}`))}</span>,
+    }))];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns, listCfDefs.map((d) => d.id).join(), cfVals.data]);
 
   if (config.feature && !features.loading && !features.isOn(config.feature)) {
     return (
@@ -126,13 +148,16 @@ export function EntityPage({ config }: { config: EntityConfig }) {
               ))}
             </div>
           )}
+          {cfDefs.length > 0 && (
+            <CfFilterBar defs={cfDefs} value={cfFilter} onChange={(f) => update({ cf: f ? encodeCfFilter(f) : null, page: null })} capped={!!cfIds.data?.capped} />
+          )}
           {list.isFetching && !list.isLoading && <span className="text-2xs text-ink-faint">Refreshing…</span>}
         </div>
         {list.error ? (
           <div className="p-4 text-sm text-danger">{friendlyError(list.error)}</div>
         ) : (
           <DataTable
-            columns={columns}
+            columns={allColumns}
             rows={list.data?.rows ?? []}
             loading={list.isLoading}
             onView={(r) => update({ view: r.id, new: null })}
@@ -143,8 +168,8 @@ export function EntityPage({ config }: { config: EntityConfig }) {
             empty={
               <EmptyState
                 icon={config.icon}
-                title={q ? "No matches" : `No ${config.title.toLowerCase()} yet`}
-                description={q ? "Try a different search term." : canManage ? `Create the first ${config.singular.toLowerCase()} to get started.` : undefined}
+                title={q || cfFilterDef ? "No matches" : `No ${config.title.toLowerCase()} yet`}
+                description={q || cfFilterDef ? "Try a different search or filter." : canManage ? `Create the first ${config.singular.toLowerCase()} to get started.` : undefined}
               />
             }
           />
@@ -159,6 +184,50 @@ export function EntityPage({ config }: { config: EntityConfig }) {
           onCreated={(id) => update({ view: id, new: null })}
         />
       )}
+    </div>
+  );
+}
+
+const selCls = "h-control rounded-control border border-line bg-surface px-2 text-xs";
+
+/** One-condition filter on a custom field. */
+function CfFilterBar({ defs, value, onChange, capped }: { defs: CfDef[]; value: CfFilter | null; onChange: (f: CfFilter | null) => void; capped: boolean }) {
+  const [draft, setDraft] = React.useState<CfFilter | null>(value);
+  React.useEffect(() => setDraft(value), [value?.field, value?.op, value?.value]);
+  const def = defs.find((d) => d.id === draft?.field);
+  if (!draft) {
+    return (
+      <button onClick={() => setDraft({ field: defs[0].id, op: filterOps(defs[0].field_type)[0].value, value: "" })}
+        className="inline-flex h-control items-center gap-1.5 rounded-control border border-dashed border-line px-2.5 text-xs text-ink-muted hover:border-line-strong hover:text-ink">
+        <Filter className="h-3.5 w-3.5" /> Filter by field
+      </button>
+    );
+  }
+  const ops = def ? filterOps(def.field_type) : [];
+  const needsValue = !["empty", "yes", "no"].includes(draft.op);
+  const apply = (f: CfFilter) => (needsValue && !f.value.trim() && !["empty", "yes", "no"].includes(f.op) ? undefined : onChange(f));
+  return (
+    <div className="flex flex-wrap items-center gap-1 rounded-control border border-line bg-subtle p-0.5">
+      <Filter className="ml-1.5 h-3.5 w-3.5 text-ink-faint" />
+      <select className={selCls} value={draft.field} onChange={(e) => { const d = defs.find((x) => x.id === e.target.value)!; setDraft({ field: d.id, op: filterOps(d.field_type)[0].value, value: "" }); }}>
+        {defs.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+      </select>
+      <select className={selCls} value={draft.op} onChange={(e) => { const n = { ...draft, op: e.target.value as CfFilter["op"] }; setDraft(n); if (["empty", "yes", "no"].includes(n.op)) onChange(n); }}>
+        {ops.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {needsValue && def && (def.field_type === "dropdown" || def.field_type === "multi_select" ? (
+        <select className={selCls} value={draft.value} onChange={(e) => { const n = { ...draft, value: e.target.value }; setDraft(n); if (n.value) onChange(n); }}>
+          <option value="">Choose…</option>{def.options.map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      ) : (
+        <input className={cn(selCls, "w-32")} type={def.field_type === "date" ? "date" : ["number", "decimal", "currency", "percentage"].includes(def.field_type) ? "number" : "text"}
+          value={draft.value} placeholder="value" onChange={(e) => setDraft({ ...draft, value: e.target.value })}
+          onKeyDown={(e) => { if (e.key === "Enter") apply(draft); }} onBlur={() => apply(draft)} />
+      ))}
+      {capped && <span className="px-1 text-2xs text-warning">first 1,000 matches</span>}
+      <button aria-label="Clear filter" className="flex h-6 w-6 items-center justify-center rounded text-ink-faint hover:bg-field hover:text-ink" onClick={() => { setDraft(null); onChange(null); }}>
+        <X className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }

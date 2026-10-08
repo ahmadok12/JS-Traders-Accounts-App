@@ -15,6 +15,7 @@ import { printDocument } from "../sales/print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { CurrencyInput, PO_TONE, poLabel, rpc, useAction, useCan, useItemInfo } from "./common";
 import { ReportShortcuts } from "../reports/Shortcuts";
+import { ApprovalNotice } from "../documents/ApprovalNotice";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -137,7 +138,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
   const setLine = (i: number, p: Partial<PoLine>) => setLines((s) => s.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const print = () => {
     if (!h) return;
-    printDocument({
+    printDocument({ docType: "PURCHASE_ORDER",
       company: company?.company_name ?? "", title: "Purchase Order", docNo: String(h.doc_no),
       meta: [["Supplier", (h.supplier as { name: string }).name], ["Date", formatDate(h.order_date as string)], ["Expected", h.expected_date ? formatDate(h.expected_date as string) : ""],
         ["Currency", String(h.currency)], ["Supplier ref.", String(h.supplier_reference ?? "")]],
@@ -170,6 +171,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
         </>}>
         {id && po.isLoading ? <Skeleton className="h-40" /> : po.error ? <p className="text-sm text-danger">{friendlyError(po.error)}</p> : (
           <>
+            <ApprovalNotice docType="PURCHASE_ORDER" id={id} enabled={!!id && st === "DRAFT"} />
             <FormGrid cols={4} className="mb-3">
               <Field label="Supplier" required className="sm:col-span-2">
                 <LookupPicker value={head.supplier_id} onChange={(v) => setHead((s) => ({ ...s, supplier_id: v }))} disabled={!editable} clearable={false} placeholder="Supplier…"
