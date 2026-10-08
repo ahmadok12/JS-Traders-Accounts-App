@@ -337,7 +337,7 @@ function ReturnView({ cfg, id, onClose }: { cfg: Cfg; id: string; onClose: () =>
   const label = (l: Record<string, unknown>) => { const p = l.product as { name: string }; const v = l.variant as { name: string } | null; return `${p.name}${v ? ` · ${v.name}` : ""}`; };
   const print = () => {
     if (!h) return;
-    const ok = printDocument({
+    const ok = printDocument({ docType: cfg.kind === "sales" ? "SALES_RETURN" : "PURCHASE_RETURN",
       company: company?.company_name ?? "", title: cfg.kind === "sales" ? "Goods Return Note (from customer)" : "Goods Return Note (to supplier)", docNo: String(h.doc_no),
       meta: [[cfg.partyLabel, `${party?.name ?? ""}${party?.city ? `, ${party.city}` : ""}`], ["Date", formatDate(h.return_date as string)], [cfg.sourceLabel, src?.doc_no ?? ""], ["Reason", String(h.reason ?? "")]],
       columns: cfg.kind === "sales" ? [{ label: "#" }, { label: "Item" }, { label: "Into" }, { label: "Condition" }, { label: "Quantity", align: "right" }]

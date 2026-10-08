@@ -2,29 +2,49 @@ import * as React from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Boxes, Building2, Camera, Hash, RotateCcw, Save, Tag, TriangleAlert, Zap } from "lucide-react";
-import { Button, Card, Checkbox, ConfirmDialog, DataTable, Field, FormGrid, Input, PageHeader, SectionTitle, Skeleton, Textarea } from "@jst/ui";
+import { Boxes, Building2, Camera, RotateCcw, Save, Tag, TriangleAlert, Zap } from "lucide-react";
+import { Button, Card, Checkbox, ConfirmDialog, Field, FormGrid, Input, PageHeader, SectionTitle, Skeleton, Textarea } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
-import { diffObject, humanize } from "@jst/utilities";
+import { diffObject } from "@jst/utilities";
+import { useSearchParams } from "react-router-dom";
 import { useUnsavedGuard } from "../lib/unsaved";
 import { FEATURES, featureQueryKey, useFeature, useStorageLocations } from "../lib/settings";
 import { EntityPage } from "../entity/EntityPage";
 import { branches } from "../entities/config";
 import { Tabs } from "../entity/EntityDialog";
+import { NumberingSettings } from "../settings/NumberingSettings";
+import { clearTemplateCache } from "../documents/template";
+import { DocumentTemplates } from "../settings/DocumentTemplates";
+import { CustomFieldsSettings } from "../settings/CustomFieldsSettings";
+import { ApprovalSettings } from "../settings/ApprovalSettings";
+import { NotificationSettings } from "../settings/NotificationSettings";
 
 type Company = { id: string; code: string; name: string; legal_name: string | null; ntn: string | null; strn: string | null; phone: string | null; email: string | null; address: string | null; base_currency: string };
 
 export function SettingsPage() {
   const { roles } = useAccess();
-  const [tab, setTab] = React.useState("company");
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") ?? "company";
+  const setTab = (t: string) => { const p = new URLSearchParams(params); t === "company" ? p.delete("tab") : p.set("tab", t); setParams(p, { replace: true }); };
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="Settings" description="Company profile, branches, optional features and document numbering" />
-      <Tabs value={tab} onChange={setTab} tabs={[{ key: "company", label: "Company" }, { key: "branches", label: "Branches" }, { key: "features", label: "Features" }, { key: "numbering", label: "Numbering" }, ...(roles.includes("ADMINISTRATOR") ? [{ key: "trial", label: "Trial data" }] : [])]} />
+      <PageHeader title="Settings" description="Company profile, optional features, numbering, document layouts, custom fields, approvals and notifications" />
+      <div className="overflow-x-auto">
+        <Tabs value={tab} onChange={setTab} tabs={[
+          { key: "company", label: "Company" }, { key: "branches", label: "Branches" }, { key: "features", label: "Features" },
+          { key: "numbering", label: "Numbering" }, { key: "documents", label: "Documents" }, { key: "fields", label: "Custom fields" },
+          { key: "approvals", label: "Approvals" }, { key: "notifications", label: "Notifications" },
+          ...(roles.includes("ADMINISTRATOR") ? [{ key: "trial", label: "Trial data" }] : []),
+        ]} />
+      </div>
       {tab === "company" && <CompanyForm />}
       {tab === "branches" && <div className="min-h-0 flex-1"><EntityPage config={branches} /></div>}
       {tab === "features" && <FeatureSettings />}
-      {tab === "numbering" && <Numbering />}
+      {tab === "numbering" && <NumberingSettings />}
+      {tab === "documents" && <DocumentTemplates />}
+      {tab === "fields" && <CustomFieldsSettings />}
+      {tab === "approvals" && <ApprovalSettings />}
+      {tab === "notifications" && <NotificationSettings />}
       {tab === "trial" && <TrialReset />}
     </div>
   );
@@ -57,6 +77,7 @@ function CompanyForm() {
     },
     onSuccess: (_d, v) => {
       toast.success("Company saved");
+      clearTemplateCache();
       form.reset(v);
       qc.invalidateQueries({ queryKey: ["company", companyId] });
       qc.invalidateQueries({ queryKey: ["my_access"] });
@@ -90,36 +111,6 @@ function CompanyForm() {
         </div>
       </form>
       {dialog}
-    </Card>
-  );
-}
-
-function Numbering() {
-  const { companyId } = useAccess();
-  const q = useQuery({
-    queryKey: ["numbering", companyId],
-    enabled: !!companyId,
-    queryFn: async () => {
-      const { data, error } = await sb().from("numbering_sequences").select("id, doc_type, prefix, next_number, padding, reset_yearly").eq("company_id", companyId!).order("doc_type");
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-  return (
-    <Card className="max-w-4xl overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm text-ink-muted">
-        <Hash className="h-4 w-4" /> Numbers are issued by the database under a row lock — never by the browser — so they can't be duplicated.
-      </div>
-      <DataTable
-        loading={q.isLoading}
-        rows={q.data ?? []}
-        columns={[
-          { key: "d", header: "Document", cell: (r) => humanize(r.doc_type) },
-          { key: "p", header: "Prefix", cell: (r) => <span className="font-mono text-xs">{r.prefix}</span> },
-          { key: "n", header: "Next number", align: "right", cell: (r) => r.next_number },
-          { key: "x", header: "Next code", cell: (r) => <span className="font-mono text-xs">{r.prefix}{r.reset_yearly ? `${new Date().getFullYear()}-` : ""}{String(r.next_number).padStart(r.padding, "0")}</span> },
-        ]}
-      />
     </Card>
   );
 }

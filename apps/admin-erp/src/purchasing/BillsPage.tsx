@@ -18,6 +18,7 @@ import { BILL_TONE, CurrencyInput, rpc, useAction, useCan, useItemInfo, useSuppl
 import { ApplyEarlierFxDialog, FxPayDialog } from "../fx/FxPaymentsPage";
 import { FxDiff, PaySourceFields, emptySource, rateText, sourcePayload, type PaySource } from "../fx/common";
 import { ReportShortcuts } from "../reports/Shortcuts";
+import { ApprovalNotice } from "../documents/ApprovalNotice";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Receipt className="h-4 w-4" />;
@@ -193,7 +194,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const sup = h?.supplier as { name: string; code: string; city: string | null } | undefined;
   const print = () => {
     if (!h) return;
-    printDocument({ company: company?.company_name ?? "", title: "Supplier Bill", docNo: String(h.doc_no),
+    printDocument({ docType: "SUPPLIER_BILL", company: company?.company_name ?? "", title: "Supplier Bill", docNo: String(h.doc_no),
       meta: [["Supplier", sup?.name ?? ""], ["Bill date", formatDate(h.bill_date as string)], ["Supplier invoice", String(h.supplier_invoice_no ?? "")], ["Currency", `${h.currency}${h.currency !== "PKR" ? ` @ ${h.fx_rate}` : ""}`]],
       columns: [{ label: "#" }, { label: "Item / expense" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
       rows: lines.map((l, i) => [String(i + 1), l.kind === "ITEM" ? `${info.data?.products.get(l.product_id ?? "")?.name ?? ""}${l.receipt_no ? ` (${l.receipt_no})` : ""}` : l.description, l.quantity, money(num(l.unit_price)), money(num(l.quantity) * num(l.unit_price))]),
@@ -218,6 +219,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
         </>}>
         {q.isLoading ? <Skeleton className="h-40" /> : q.error ? <p className="text-sm text-danger">{friendlyError(q.error)}</p> : h && (
           <>
+            <ApprovalNotice docType="SUPPLIER_BILL" id={String(h.id)} enabled={st === "DRAFT"} action="post" />
             <FormGrid cols={4} className="mb-3">
               <Field label="Supplier's invoice no."><Input disabled={!editable} value={head.supplier_invoice_no} onChange={(e) => setHead((s) => ({ ...s, supplier_invoice_no: e.target.value }))} /></Field>
               <Field label="Bill date"><Input type="date" disabled={!editable} value={head.bill_date} onChange={(e) => setHead((s) => ({ ...s, bill_date: e.target.value }))} /></Field>

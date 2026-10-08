@@ -284,7 +284,7 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
   });
   const print = () => {
     if (!h) return;
-    const ok = printDocument({
+    const ok = printDocument({ docType: "QUOTATION",
       company: company?.company_name ?? "", title: "Quotation", docNo: String(h.doc_no),
       meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h.quote_date as string)], ["Valid until", h.valid_until ? formatDate(h.valid_until as string) : ""], ["Your reference", (h.customer_reference as string) ?? ""]],
       columns: [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],

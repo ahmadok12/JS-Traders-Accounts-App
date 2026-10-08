@@ -127,7 +127,7 @@ function RunDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const draft = st === "DRAFT";
   const print = () => {
     if (!h) return;
-    printDocument({
+    printDocument({ docType: "PAYROLL",
       company: company?.company_name ?? "", title: "Payroll Register", docNo: String(h.doc_no),
       meta: [["Month", monthLabel(h.period_month as string)], ["Status", LABEL[st] ?? st], ["Accounting date", formatDate(h.posting_date as string)]],
       columns: [{ label: "Employee" }, { label: "Salary", align: "right" }, { label: "Days", align: "right" }, { label: "Leave ded.", align: "right" }, { label: "Labour", align: "right" },

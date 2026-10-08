@@ -25,8 +25,12 @@ import { AuditTimeline } from "./AuditTimeline";
 import { FieldInput } from "./FieldInput";
 import { buildSchema, toDbValues, toFormValues } from "./schema";
 import type { EntityConfig, FieldDef } from "./types";
+import { CfFormSection, CfViewSection, isCfEntity, saveCfValues, useCfDefs, useCfForm, useCfValues, type CfDef, type CfValueRow } from "../lib/customFields";
 
 type Mode = "view" | "edit" | "create";
+const NO_DEFS: CfDef[] = [];
+const NO_IDS: string[] = [];
+const NO_ROWS: CfValueRow[] = [];
 type Row = Record<string, unknown>;
 
 export function EntityDialog({
@@ -105,16 +109,31 @@ export function EntityDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, rowKey]);
 
-  const dirty = mode !== "view" && form.formState.isDirty;
+  // custom fields (Settings → Custom fields)
+  const cfOn = isCfEntity(config.table);
+  const cfDefs = useCfDefs(cfOn ? config.table : null);
+  const defs = cfDefs.data ?? NO_DEFS;
+  const cfRows = useCfValues(config.table, id ? [id] : NO_IDS, cfOn && defs.length > 0);
+  const cf = useCfForm(defs, id ? cfRows.data : NO_ROWS, `${mode}:${id}`);
+
+  const dirty = mode !== "view" && (form.formState.isDirty || cf.dirty);
   const { guard, dialog: unsavedDialog } = useUnsavedGuard(open && dirty);
   const save = useEntitySave(config.table);
 
+  const saveCf = async (recordId: string) => {
+    if (!defs.length || (mode !== "create" && !cf.dirty)) return;
+    await saveCfValues(companyId!, config.table, recordId, defs, cf.values);
+    qc.invalidateQueries({ queryKey: ["cf-values", config.table] });
+  };
+
   const submit = form.handleSubmit(async (values) => {
     if (save.isPending) return; // submit lock — no duplicate records on double click
+    if (!cf.validate()) { toast.error("Check the additional fields"); return; }
     const db = toDbValues(fields, values);
     try {
       if (mode === "create") {
         const newId = await save.mutateAsync({ values: { ...db, company_id: companyId, ...(fixedValues ?? {}) } });
+        try { await saveCf(newId); } catch (e) { toast.error(`${config.singular} created, but the additional fields were not saved: ${friendlyError(e)}`); }
         toast.success(`${config.singular} created`);
         form.reset(values);
         onCreated(newId);
@@ -122,6 +141,7 @@ export function EntityDialog({
         const before = toDbValues(fields, toFormValues(fields, row));
         const changes = diffObject(before, db);
         await save.mutateAsync({ id, values: changes });
+        await saveCf(id!);
         qc.invalidateQueries({ queryKey: ["restricted", config.table, id] });
         toast.success("Changes saved");
         form.reset(values);
@@ -222,6 +242,7 @@ export function EntityDialog({
               ]}
             />
             {tab === "details" && <ViewDetails config={config} fields={fields} sections={sections} row={row} />}
+            {tab === "details" && defs.length > 0 && <div className="mt-4"><CfViewSection defs={defs} rows={cfRows.data ?? []} /></div>}
             {extraPanels.map(
               (p) => tab === p.key && <p.component key={p.key} record={row} canManage={canManage} />,
             )}
@@ -263,6 +284,7 @@ export function EntityDialog({
                 </ConditionalSection>
               );
             })}
+            <CfFormSection defs={defs} values={cf.values} errors={cf.errors} onChange={cf.set} />
             <button type="submit" className="hidden" />
           </form>
         )}

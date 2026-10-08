@@ -222,7 +222,7 @@ function LandedCostDialog({ id, shipmentId, onClose, onSaved }: { id: string | n
 
   const print = () => {
     if (!h) return;
-    printDocument({ company: company?.company_name ?? "", title: "Landed cost", docNo: String(h.doc_no),
+    printDocument({ docType: "LANDED_COST", company: company?.company_name ?? "", title: "Landed cost", docNo: String(h.doc_no),
       meta: [["Date", formatDate(h.doc_date as string)], ["Shipment", (h.shipment as { doc_no: string } | null)?.doc_no ?? ""], ["Status", st.toLowerCase()]],
       columns: [{ label: "Charge" }, { label: "Paid / owed to" }, { label: "Treatment" }, { label: "Split" }, { label: "PKR", align: "right" }],
       rows: (doc.data?.charges ?? []).map((k) => [`${compLabel(String(k.component))}${k.description ? ` — ${k.description}` : ""}`,

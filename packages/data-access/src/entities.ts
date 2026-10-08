@@ -15,6 +15,8 @@ export interface ListParams {
   page: number;
   pageSize: number;
   enabled?: boolean;
+  /** limit to these ids (e.g. records matching a custom-field filter); empty array = no rows */
+  idIn?: string[] | null;
 }
 
 /** Escape a user search term for a PostgREST or=() ilike filter. */
@@ -26,12 +28,14 @@ function ilikeTerm(s: string) {
 export function useEntityList<T = Record<string, unknown>>(p: ListParams) {
   const pageSize = Math.min(p.pageSize, MAX_PAGE_SIZE);
   return useQuery({
-    queryKey: ["list", p.table, p.companyId, p.select, p.search, p.filters, p.orderBy, p.page, pageSize],
+    queryKey: ["list", p.table, p.companyId, p.select, p.search, p.filters, p.orderBy, p.page, pageSize, p.idIn ?? null],
     enabled: !!p.companyId && p.enabled !== false,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
     queryFn: async () => {
+      if (p.idIn && p.idIn.length === 0) return { rows: [] as T[], total: 0 };
       let q = sb().from(p.table).select(p.select, { count: "exact" }).eq("company_id", p.companyId!);
+      if (p.idIn) q = q.in("id", p.idIn);
       for (const [k, v] of Object.entries(p.filters ?? {})) {
         if (v === undefined || v === "") continue;
         q = v === null ? q.is(k, null) : q.eq(k, v);
