@@ -23,7 +23,8 @@ grant execute on function public.my_role_codes(uuid) to authenticated;
 -- =====================================================================
 -- 1. NUMBERING
 -- =====================================================================
-drop policy if exists numbering_update on public.numbering_sequences;
+-- numbering is changed only through set_numbering_sequence below: the old direct-update policy now allows nothing
+alter policy numbering_update on public.numbering_sequences using (false) with check (false);
 
 create or replace function public.set_numbering_sequence(p_company uuid, p_doc_type text, p_prefix text, p_next_number bigint, p_padding int, p_reset_yearly boolean)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -317,7 +318,6 @@ begin
   return new;
 end $$;
 revoke execute on function public.tg_approval_rule_check() from public, anon, authenticated;
-drop trigger if exists check_roles on public.approval_rules;
 create trigger check_roles before insert or update on public.approval_rules for each row execute function public.tg_approval_rule_check();
 
 -- highest active tier that the amount reaches
@@ -403,11 +403,6 @@ begin
   return new;
 end $$;
 
-drop trigger if exists approval_limit on public.sales_orders;
-drop trigger if exists approval_limit on public.purchase_orders;
-drop trigger if exists approval_limit on public.supplier_bills;
-drop trigger if exists approval_limit on public.journal_entries;
-drop trigger if exists approval_limit on public.sales_invoices;
 create trigger approval_limit before update of status on public.sales_orders    for each row execute function public.tg_approval_limit();
 create trigger approval_limit before update of status on public.purchase_orders for each row execute function public.tg_approval_limit();
 create trigger approval_limit before update of status on public.supplier_bills  for each row execute function public.tg_approval_limit();
