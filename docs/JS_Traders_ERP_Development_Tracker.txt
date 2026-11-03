@@ -685,3 +685,5 @@ Import: Shipment (items added directly = the order; PO optional) → GRN → Sup
 [x] Also this day: GDN picking-photos tab + print preview / PDF ≤ 2 MB with photos; Download all photos (ZIP);
     custom fields choosable per document in Settings → Documents (all printouts); attach files before saving;
     pickers add photos after finishing; delete / deactivate custom fields
+[x] Shipments: an item with variants needs its variant when the shipment is saved (was only caught at receiving)
+    (migration 20261103000600_shipment_variant_check, live check 3/3)
