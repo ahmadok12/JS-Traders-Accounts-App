@@ -396,3 +396,30 @@ export function useCfFilterIds(entity: string, f: CfFilter | null, def: CfDef | 
     },
   });
 }
+
+// ------------------------------------------------------------------ document forms
+const NO_DOC_DEFS: CfDef[] = [];
+const NO_DOC_ROWS: CfValueRow[] = [];
+/**
+ * Custom fields inside a document's New / Edit form (sales order, GDN, PO …).
+ * Render `section`, include `dirty` in the form's unsaved check, and call `save(id)` right after the
+ * document itself is saved (before approve / post, so required fields are already there).
+ */
+export function useDocCf(entity: string, id: string | null) {
+  const { companyId } = useAccess();
+  const defs = useCfDefs(entity).data ?? NO_DOC_DEFS;
+  const rows = useCfValues(entity, id ? [id] : [], !!id && defs.length > 0);
+  const form = useCfForm(defs, id ? rows.data : NO_DOC_ROWS, `${entity}:${id ?? "new"}`);
+  return {
+    defs,
+    dirty: defs.length > 0 && form.dirty,
+    validate: form.validate,
+    save: async (recordId: string) => {
+      if (!defs.length || (id && !form.dirty)) return;
+      await saveCfValues(companyId!, entity, recordId, defs, form.values);
+    },
+    section: defs.length ? (
+      <CfFormSection title="Document fields" defs={defs} values={form.values} errors={form.errors} onChange={form.set} recordId={id} rows={rows.data} />
+    ) : null,
+  };
+}

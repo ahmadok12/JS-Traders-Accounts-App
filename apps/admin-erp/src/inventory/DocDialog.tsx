@@ -22,6 +22,7 @@ import {
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { formatDate, formatDateTime, formatNumber, humanize } from "@jst/utilities";
 import { useUnsavedGuard } from "../lib/unsaved";
+import { useDocCf } from "../lib/customFields";
 import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
 import { ADJUSTMENT_REASONS, STATUS_TONE, type InvDocConfig } from "./docConfigs";
@@ -421,7 +422,8 @@ function DocForm({
   const [lines, setLines] = React.useState<Line[]>(init.lines);
   const [showErrors, setShowErrors] = React.useState(false);
   const snapshot = React.useRef(JSON.stringify(init));
-  const dirty = JSON.stringify({ header, lines }) !== snapshot.current;
+  const docCf = useDocCf(cfg.table, id);
+  const dirty = JSON.stringify({ header, lines }) !== snapshot.current || docCf.dirty;
   const { guard, dialog } = useUnsavedGuard(dirty);
 
   const setH = (k: string, v: string | null) => setHeader((h) => ({ ...h, [k]: v }));
@@ -433,6 +435,7 @@ function DocForm({
 
   const save = useMutation({
     mutationFn: async (andPost: boolean) => {
+      if (!docCf.validate()) throw new Error("Check the document fields");
       const setMode = cfg.kind === "adjustment" && header.entry_mode === "SET";
       const payloadLines = lines
         .filter((l) => isUsed(l))
@@ -456,6 +459,7 @@ function DocForm({
       });
       if (error) throw error;
       const newId = data as string;
+      try { await docCf.save(newId); } catch (e) { throw Object.assign(e as Error, { savedId: newId }); }
       if (ROLL_DOCS.includes(cfg.type)) {
         const plan: Record<string, unknown[]> = {};
         lines.filter((l) => isUsed(l)).forEach((l, i) => {
@@ -630,6 +634,7 @@ function DocForm({
             </Field>
           </FormGrid>
         </ConditionalSection>
+        {docCf.section && <div className="mt-3">{docCf.section}</div>}
         {cfg.kind === "receipt" && (
           <p className="mt-3 text-xs text-ink-muted">
             Purchase cost is not entered here — the receipt stays <Badge tone="warning">Cost pending</Badge> until the cost workflow (Purchasing stage).

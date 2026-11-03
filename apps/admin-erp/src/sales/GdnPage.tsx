@@ -8,6 +8,7 @@ import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { formatDate, formatDateTime } from "@jst/utilities";
 import { useUnsavedGuard } from "../lib/unsaved";
+import { useDocCf } from "../lib/customFields";
 import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
@@ -208,7 +209,8 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
   const [showErrors, setShowErrors] = React.useState(false);
   const rows = useDispatchRows(soId);
   const allocRolls = useAllocRolls((rows.data ?? []).filter((r) => r.rolls).map((r) => r.allocation_id));
-  const { guard, dialog } = useUnsavedGuard(touched);
+  const docCf = useDocCf("gdns", id);
+  const { guard, dialog } = useUnsavedGuard(touched || docCf.dirty);
   const initFor = React.useRef<string | null>(null);
 
   // Fill the quantities once per order: the saved draft when editing, otherwise everything still to send.
@@ -236,6 +238,7 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
 
   const save = useMutation({
     mutationFn: async (post: boolean) => {
+      if (!docCf.validate()) throw new Error("Check the document fields");
       const { data, error } = await sb().rpc("save_gdn", {
         p_id: id,
         p_header: { company_id: companyId, sales_order_id: soId, gdn_date: date, transport_details: transport, notes },
@@ -244,6 +247,7 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
       });
       if (error) throw error;
       const nid = data as string;
+      try { await docCf.save(nid); } catch (e) { throw Object.assign(e as Error, { savedId: nid }); }
       if (post) {
         const r = await sb().rpc("post_gdn", { p_id: nid });
         if (r.error) throw Object.assign(r.error, { savedId: nid });
@@ -337,6 +341,7 @@ function GdnForm({ id, header, presetSo, onCancel, onClose, onSaved }: {
           )
         )}
         <Field label="Notes" className="mt-3"><Textarea rows={2} value={notes} onChange={(e) => { setTouched(true); setNotes(e.target.value); }} /></Field>
+        {docCf.section && <div className="mt-3">{docCf.section}</div>}
       </ErpDialog>
       {dialog}
     </>

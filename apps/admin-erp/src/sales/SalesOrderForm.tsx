@@ -6,6 +6,7 @@ import { Badge, Button, ConfirmDialog, ErpDialog, Field, FormGrid, Input, Textar
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { useUnsavedGuard } from "../lib/unsaved";
+import { useDocCf } from "../lib/customFields";
 import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "../inventory/pickers";
 import { money } from "../accounting/common";
 import { DiscountField, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
@@ -46,7 +47,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
   }), [initial, revise]);
   const [f, setF] = React.useState(init);
   const snapshot = React.useRef(JSON.stringify(init));
-  const dirty = JSON.stringify(f) !== snapshot.current;
+  const docCf = useDocCf("sales_orders", id);
+  const dirty = JSON.stringify(f) !== snapshot.current || docCf.dirty;
   const { guard, dialog } = useUnsavedGuard(dirty);
   const [showErrors, setShowErrors] = React.useState(false);
   const [pickers, setPickers] = React.useState<Record<string, string[]>>({});
@@ -118,9 +120,11 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
           allocations: Object.entries(l.alloc).filter(([, v]) => n(v) > 0).map(([warehouse_id, v]) => ({ warehouse_id, quantity: v.replace(/,/g, "") })),
         })),
       };
+      if (!docCf.validate()) throw new Error("Check the document fields");
       if (revise) {
         const r = await sb().rpc("revise_sales_order", { p_id: id, ...payload });
         if (r.error) throw r.error;
+        try { await docCf.save(id!); } catch (e) { throw Object.assign(e as Error, { savedId: id }); }
         await saveDiscount(id!);
         await saveRolls(id!);
         if (approve && sending) {
@@ -141,6 +145,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       });
       if (error) throw error;
       const nid = data as string;
+      try { await docCf.save(nid); } catch (e) { throw Object.assign(e as Error, { savedId: nid, cfFailed: true }); }
       await saveDiscount(nid);
       await saveRolls(nid);
       if (quotationId) {
@@ -163,7 +168,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       toast.success(tasks ? `${revise ? "Order updated" : "Approved"} — ${tasks} picking task${tasks > 1 ? "s" : ""} sent, pickers' phones are buzzing` : approve ? "Sales order approved — stock reserved" : revise ? "Order updated — reserved stock adjusted" : "Sales order saved"); qc.invalidateQueries(); onSaved(nid);
     },
     onError: (e: Error & { savedId?: string }) => {
-      if (e.savedId && (e as { rollsFailed?: boolean }).rollsFailed) { toast.error(`Order saved, but the roll choice was not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
+      if (e.savedId && (e as { cfFailed?: boolean }).cfFailed) { toast.error(`Order saved, but the document fields were not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
+      else if (e.savedId && (e as { rollsFailed?: boolean }).rollsFailed) { toast.error(`Order saved, but the roll choice was not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else if (e.savedId) { snapshot.current = JSON.stringify(f); toast.error(`Saved, but not ${sending ? "sent to pickers" : "approved"}: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else toast.error(friendlyError(e));
     },
@@ -259,6 +265,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
               </section>
             )}
             <section><Field label="Notes"><Textarea rows={showPickers ? 4 : 2} value={f.notes} onChange={(e) => setF((s) => ({ ...s, notes: e.target.value }))} /></Field></section>
+            {docCf.section && <section>{docCf.section}</section>}
           </div>
         </div>
       </ErpDialog>
