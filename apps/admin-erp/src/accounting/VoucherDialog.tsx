@@ -19,6 +19,7 @@ import {
   AccountPicker, Amount, BankPicker, ENTRY_LABEL, PartyPicker, money, num, today, useAccountNames, useBanks, usePartyNames, useSystemAccounts,
   type EntryType, type PartyType,
 } from "./common";
+import { DocExtras, voucherDocType } from "../documents/DocExtras";
 
 type Row = Record<string, unknown>;
 type DraftLine = { account_id: string; debit: number; credit: number; party_type: string | null; party_id: string | null; bank_account_id: string | null; description: string | null; currency?: string | null; fx_amount?: number | null; fx_rate?: number | null };
@@ -135,6 +136,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
         {loading ? <Skeleton className="h-40" /> : error ? <p className="text-sm text-danger">{friendlyError(error)}</p> : data ? (
           <>
             <ApprovalNotice docType="PAYMENT_VOUCHER" id={id} enabled={status === "DRAFT" && type === "PAYMENT"} action="post" />
+            <DocExtras docType={voucherDocType(type)} entity="journal_entries" id={id} />
             <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
               {data.party_name ? <KeyValue label={type === "RECEIPT" ? "Received from" : type === "PAYMENT" ? "Paid to" : "Party"}><span className="font-medium">{String(data.party_name)}</span></KeyValue> : null}
               {data.bank_name ? <KeyValue label={type === "RECEIPT" ? "Into" : "From"}>{String(data.bank_name)}</KeyValue> : null}

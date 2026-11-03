@@ -10,7 +10,7 @@ Ahmad — JS Traders, poultry equipment, Okara. After every sprint report: what 
 - GitHub: `ahmadok12/JS-Traders-Accounts-App` (PUBLIC repo — never commit secrets, keystores, tokens or service keys).
 - Web app: Vercel project **js-traders-accounts-app-1fsw** → https://js-traders-accounts-app-1fsw.vercel.app (deploys on push to `main`). Other Vercel projects are being deleted — ignore them.
 - Database: Supabase project **JS Traders ERP App**, ref `rjdjaujoilcunwtynaze` (ap-southeast-1). Migrations in `supabase/migrations` are applied to the live DB with the Supabase MCP (`apply_migration`) — keep the file and the live DB in step.
-- Edge functions: `attachments` (Cloudflare R2 bucket `jst-erp-files`, falls back to Supabase Storage bucket `attachments`), `warehouse-staff`. Secrets live in Supabase → Edge Functions → Secrets.
+- Edge functions: `attachments` (Cloudflare R2 bucket `jst-erp-files`, falls back to Supabase Storage bucket `attachments`), `warehouse-staff`, `notify-send` (e-mail/WhatsApp outbox; called by pg_cron job `jst-notifications` with a Vault secret). Secrets live in Supabase → Edge Functions → Secrets.
 - Android "JS Picking" app (`android/`): WebView of `/m`; built + released by `.github/workflows/android.yml` on pushes touching `android/**`; signing key is in GitHub Actions secrets (backup kept offline by Ahmad).
 - Commits: author `Claude <noreply@anthropic.com>`.
 

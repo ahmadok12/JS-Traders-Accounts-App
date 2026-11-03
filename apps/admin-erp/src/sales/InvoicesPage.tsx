@@ -20,6 +20,7 @@ import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { ApprovalNotice } from "../documents/ApprovalNotice";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { DRAFT: "warning", POSTED: "info", CANCELLED: "neutral", REVERSED: "danger" };
@@ -549,6 +550,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
           </>
         }>
         <ApprovalNotice docType="SALES_DISCOUNT" id={String(h.id)} enabled={status === "DRAFT"} action="post" />
+        <DocExtras docType="SALES_INVOICE" entity="sales_invoices" id={String(h.id)} />
         <dl className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-6">
           <KeyValue label="Invoice date">{formatDate(h.invoice_date as string)}</KeyValue>
           <KeyValue label="Due date">{h.due_date ? <span className={cn(overdue && "font-medium text-danger")}>{formatDate(h.due_date as string)}</span> : null}</KeyValue>

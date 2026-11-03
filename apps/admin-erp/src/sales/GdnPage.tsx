@@ -19,6 +19,7 @@ import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
 import { openWhatsApp, pdfFileName, savePdf, sendPdfToWhatsApp } from "./pdf";
 import { PricingStrip } from "../pricing/PricingPage";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 export const GDN_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { DRAFT: "warning", POSTED: "success", CANCELLED: "neutral", REVERSED: "danger" };
@@ -480,6 +481,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
               {h.reversal_reason ? <KeyValue label="Reversal reason" className="col-span-2">{String(h.reversal_reason)}</KeyValue> : null}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-5">{String(h.notes)}</KeyValue> : null}
             </dl>
+            <DocExtras docType="GDN" entity="gdns" id={id} />
             {status === "POSTED" && <PricingStrip sourceType="GDN" sourceId={id} docNo={String(h.doc_no)} customerName={cust?.name} />}
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${lines.length})` },

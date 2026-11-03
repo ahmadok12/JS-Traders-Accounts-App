@@ -19,6 +19,7 @@ import { ApplyEarlierFxDialog, FxPayDialog } from "../fx/FxPaymentsPage";
 import { FxDiff, PaySourceFields, emptySource, rateText, sourcePayload, type PaySource } from "../fx/common";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { ApprovalNotice } from "../documents/ApprovalNotice";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Receipt className="h-4 w-4" />;
@@ -220,6 +221,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
         {q.isLoading ? <Skeleton className="h-40" /> : q.error ? <p className="text-sm text-danger">{friendlyError(q.error)}</p> : h && (
           <>
             <ApprovalNotice docType="SUPPLIER_BILL" id={String(h.id)} enabled={st === "DRAFT"} action="post" />
+            <DocExtras docType="SUPPLIER_BILL" entity="supplier_bills" id={String(h.id)} />
             <FormGrid cols={4} className="mb-3">
               <Field label="Supplier's invoice no."><Input disabled={!editable} value={head.supplier_invoice_no} onChange={(e) => setHead((s) => ({ ...s, supplier_invoice_no: e.target.value }))} /></Field>
               <Field label="Bill date"><Input type="date" disabled={!editable} value={head.bill_date} onChange={(e) => setHead((s) => ({ ...s, bill_date: e.target.value }))} /></Field>

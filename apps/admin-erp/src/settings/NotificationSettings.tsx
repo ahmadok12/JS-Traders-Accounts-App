@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Bell } from "lucide-react";
+import { Bell, Mail, MessageCircle } from "lucide-react";
 import { Badge, Card, Input, Skeleton, cn } from "@jst/ui";
+import { DeliverySettings, useChannels } from "./NotificationDelivery";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { ROLE_LABELS } from "@jst/permissions";
 
@@ -36,12 +37,14 @@ export function NotificationSettings() {
     onError: (e) => { toast.error(friendlyError(e)); qc.invalidateQueries({ queryKey: ["notification-rules", companyId] }); },
   });
   const canEdit = can("settings.manage");
+  const ch = useChannels();
   if (q.isLoading) return <Skeleton className="h-96" />;
   if (q.error) return <Card className="p-4 text-sm text-danger">{friendlyError(q.error)}</Card>;
   const rows = q.data ?? [];
   const cats = [...new Set(rows.map((r) => r.category))];
   return (
     <div className="max-w-5xl space-y-3">
+      <DeliverySettings />
       <Card className="flex gap-3 p-3 text-sm text-ink-2">
         <Bell className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" />
         <div>Choose what shows in the bell at the top of the screen, and for which roles. A person only receives a notification if their role is ticked
@@ -66,7 +69,15 @@ export function NotificationSettings() {
                   {r.code === "PAYMENT_RECEIVED" ? "day(s)" : "day(s) ahead"}
                 </div>
               )}
-              {r.code === "APPROVAL_LIMIT" ? <Badge tone="info">Goes to the approvers set in each limit</Badge> : (
+              {(ch.data?.email_on || ch.data?.whatsapp_on) && (
+                <div className="flex gap-1">
+                  {ch.data?.email_on && <ChannelToggle icon={<Mail className="h-3 w-3" />} label="E-mail" on={r.params.email === true} disabled={!canEdit || !r.enabled}
+                    onClick={() => save.mutate({ ...r, params: { ...r.params, email: r.params.email !== true } })} />}
+                  {ch.data?.whatsapp_on && <ChannelToggle icon={<MessageCircle className="h-3 w-3" />} label="WhatsApp" on={r.params.whatsapp === true} disabled={!canEdit || !r.enabled}
+                    onClick={() => save.mutate({ ...r, params: { ...r.params, whatsapp: r.params.whatsapp !== true } })} />}
+                </div>
+              )}
+              {r.code === "APPROVAL_LIMIT" || r.code === "WORKFLOW_STEP" ? <Badge tone="info">{r.code === "APPROVAL_LIMIT" ? "Goes to the approvers set in each limit" : "Goes to the roles of each step"}</Badge> : (
                 <div className="flex flex-wrap gap-1">
                   {ROLES.map((x) => {
                     const on = r.roles.includes(x);
@@ -84,6 +95,15 @@ export function NotificationSettings() {
         </Card>
       ))}
     </div>
+  );
+}
+
+function ChannelToggle({ icon, label, on, disabled, onClick }: { icon: React.ReactNode; label: string; on: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} title={`${on ? "Also sent" : "Not sent"} by ${label}`}
+      className={cn("inline-flex h-6 items-center gap-1 rounded-full border px-2 text-2xs", on ? "border-success-line bg-success-soft text-success" : "border-line text-ink-faint hover:border-line-strong")}>
+      {icon}{label}
+    </button>
   );
 }
 

@@ -33,6 +33,7 @@ import { ReceiptCheckPanel } from "../picking/WarehouseJobs";
 import { ReceiptPurchasePanel } from "../purchasing/CostsPage";
 import { RollCutsEditor, RollLengthsEditor, newRoll, sumCuts, sumRolls, type CutMode, type Cuts, type RollEntry } from "./rolls";
 import { AttachmentsPanel, filesLabel, useAttachments, type AttachmentEntity } from "../attachments/Attachments";
+import { DocExtras, stockDocType } from "../documents/DocExtras";
 
 type Row = Record<string, unknown>;
 interface Line {
@@ -213,6 +214,7 @@ function ViewDoc({
           <p className="text-sm text-danger">{friendlyError(error)}</p>
         ) : h ? (
           <>
+            <DocExtras docType={stockDocType(cfg.table)} entity={cfg.table} id={id} />
             <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
               {cfg.kind === "transfer" ? (
                 <>

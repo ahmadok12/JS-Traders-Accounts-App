@@ -16,6 +16,7 @@ import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Att
 import { CurrencyInput, PO_TONE, poLabel, rpc, useAction, useCan, useItemInfo } from "./common";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { ApprovalNotice } from "../documents/ApprovalNotice";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -172,6 +173,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
         {id && po.isLoading ? <Skeleton className="h-40" /> : po.error ? <p className="text-sm text-danger">{friendlyError(po.error)}</p> : (
           <>
             <ApprovalNotice docType="PURCHASE_ORDER" id={id} enabled={!!id && st === "DRAFT"} />
+            <DocExtras docType="PURCHASE_ORDER" entity="purchase_orders" id={id} />
             <FormGrid cols={4} className="mb-3">
               <Field label="Supplier" required className="sm:col-span-2">
                 <LookupPicker value={head.supplier_id} onChange={(v) => setHead((s) => ({ ...s, supplier_id: v }))} disabled={!editable} clearable={false} placeholder="Supplier…"

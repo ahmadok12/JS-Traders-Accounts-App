@@ -20,6 +20,7 @@ import { SoPickingPhotos, useSoPickingPhotos } from "../picking/PickPhotos";
 import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
 import { printDocument } from "./print";
 import { ApprovalNotice } from "../documents/ApprovalNotice";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -224,6 +225,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
         {doc.isLoading ? <Skeleton className="h-40" /> : doc.error ? <p className="text-sm text-danger">{friendlyError(doc.error)}</p> : h && (
           <>
             <ApprovalNotice docType="SALES_ORDER" id={id} enabled={status === "DRAFT"} />
+            <DocExtras docType="SALES_ORDER" entity="sales_orders" id={id} />
             <dl className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-5">
               <KeyValue label="Customer">{cust?.name}</KeyValue>
               <KeyValue label="Order date">{formatDate(h.order_date as string)}</KeyValue>

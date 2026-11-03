@@ -1,4 +1,16 @@
-# Handoff — where we stopped (9 Oct 2026)
+# Handoff — where we stopped (3 Nov 2026)
+
+## Stage 12 finished — live 3 Nov 2026
+Migrations `20261103000100_stage12b_workflows_forms_channels` + `20261103000200_notify_schedule` applied with the Supabase MCP
+(the stored text matches the repo file). Live SQL test 42/42 (rolled back). Edge function `notify-send` deployed.
+New: Settings → Workflows (review steps before approve/post, 13 document types), Settings → Forms (per-role hidden/required
+fields and sections), custom fields on documents + reference/file/image/date-time/formula types, e-mail/WhatsApp delivery
+(pg_cron job `jst-notifications` every 5 min). Owner role got sales.approve, sales.invoice, journals.post.
+Still to do by Ahmad for e-mail/WhatsApp: Supabase secrets RESEND_API_KEY, NOTIFY_EMAIL_FROM, WHATSAPP_TOKEN,
+WHATSAPP_PHONE_NUMBER_ID; Meta template `erp_alert` with body "JS Traders ERP: {{1}} — {{2}}".
+Local DB testing: replay `supabase/migrations` on any Postgres 17 with small Supabase stubs (auth.uid, roles anon/authenticated/service_role).
+
+## Earlier: Stage 12 part 1 — 9 Oct 2026
 
 ## Stage 12 — live 9 Oct 2026
 Migration `20261014000100_stage12_config_engine` applied to the live DB (via the Supabase SQL editor — it is not in
@@ -22,7 +34,7 @@ Note: approval-limit roles must already hold the permission (e.g. Owner has no s
 ## In progress / next
 - Ahmad is running the **warehouse-manager trial** (sales order → pickers → photos → GDN → invoice, purchases, returns) and reporting issues with screenshots.
 - Possible follow-ups offered: Save as PDF / WhatsApp on invoices and quotations too.
-- Stage 12 remaining: workflow status designer, configurable forms per role, more custom-field types (reference/file/formula), e-mail/WhatsApp notifications.
+- Next: warehouse-trial fixes, Excel opening-stock import, PDF/WhatsApp on invoices & quotations, stock calculator, then Stage 13 (owner mobile app).
 
 ## Setting up the other laptop
 1. `git clone https://github.com/ahmadok12/JS-Traders-Accounts-App.git` (or connect the folder in Claude and ask Claude to clone it).
