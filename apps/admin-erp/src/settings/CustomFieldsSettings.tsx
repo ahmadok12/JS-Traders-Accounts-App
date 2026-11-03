@@ -1,8 +1,8 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, ListPlus, Plus, Save, SlidersHorizontal } from "lucide-react";
-import { ActiveBadge, Badge, Button, Card, Checkbox, EmptyState, ErpDialog, Field, FormGrid, Input, Skeleton, Textarea, cn } from "@jst/ui";
+import { ArrowDown, ArrowUp, EyeOff, ListPlus, Plus, RotateCcw, Save, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ActiveBadge, Badge, Button, Card, Checkbox, ConfirmDialog, EmptyState, ErpDialog, Field, FormGrid, Input, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { CF_DOC_ENTITIES, CF_ENTITIES, CF_FILE_ENTITIES, CF_REF_ENTITIES, CF_TYPES, CfInput, NUMBER_TYPES, isCfDocEntity, useCfDefs, type CfDef, type CfType, type CfValue } from "../lib/customFields";
 
@@ -17,6 +17,25 @@ export function CustomFieldsSettings() {
   const { companyId } = useAccess();
   const canEdit = can("settings.manage");
 
+  const [del, setDel] = React.useState<CfDef | null>(null);
+  const toggle = useMutation({
+    mutationFn: async (d: CfDef) => {
+      const { error } = await sb().rpc("save_custom_field_definition", { p_company: companyId, p_id: d.id, p_data: { ...d, is_active: !d.is_active } });
+      if (error) throw error;
+      return d;
+    },
+    onSuccess: (d) => { toast.success(d.is_active ? `"${d.label}" is now inactive — hidden, saved values kept` : `"${d.label}" is active again`); qc.invalidateQueries({ queryKey: ["cf-defs"] }); },
+    onError: (e) => toast.error(friendlyError(e)),
+  });
+  const remove = useMutation({
+    mutationFn: async (d: CfDef) => {
+      const { error } = await sb().rpc("delete_custom_field_definition", { p_company: companyId, p_id: d.id });
+      if (error) throw error;
+      return d;
+    },
+    onSuccess: (d) => { toast.success(`"${d.label}" deleted`); setDel(null); qc.invalidateQueries({ queryKey: ["cf-defs"] }); },
+    onError: (e) => { toast.error(friendlyError(e)); setDel(null); },
+  });
   const move = useMutation({
     mutationFn: async ({ from, to }: { from: number; to: number }) => {
       // swap two rows, then renumber 10, 20, 30 … saving only rows whose position changed
@@ -67,7 +86,7 @@ export function CustomFieldsSettings() {
         ) : (
           <table className="w-full text-sm">
             <thead><tr className="bg-subtle text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
-              <th className="h-8 px-3">Field</th><th className="px-3">Type</th><th className="hidden px-3 md:table-cell">Choices</th><th className="px-3">Options</th><th className="px-3">Status</th><th className="w-28 px-3" />
+              <th className="h-8 px-3">Field</th><th className="px-3">Type</th><th className="hidden px-3 md:table-cell">Choices</th><th className="px-3">Options</th><th className="px-3">Status</th><th className="w-44 px-3" />
             </tr></thead>
             <tbody>
               {list.map((d, i) => (
@@ -82,6 +101,9 @@ export function CustomFieldsSettings() {
                       <Button size="icon-sm" variant="ghost" aria-label="Move up" disabled={i === 0 || move.isPending} onClick={() => move.mutate({ from: i, to: i - 1 })}><ArrowUp className="h-3.5 w-3.5" /></Button>
                       <Button size="icon-sm" variant="ghost" aria-label="Move down" disabled={i === list.length - 1 || move.isPending} onClick={() => move.mutate({ from: i, to: i + 1 })}><ArrowDown className="h-3.5 w-3.5" /></Button>
                       <Button size="sm" onClick={() => setEdit(d)}>Edit</Button>
+                      <Button size="icon-sm" variant="ghost" aria-label={d.is_active ? "Make inactive" : "Make active"} title={d.is_active ? "Make inactive (hide, keep values)" : "Make active again"}
+                        disabled={toggle.isPending} onClick={() => toggle.mutate(d)}>{d.is_active ? <EyeOff className="h-3.5 w-3.5" /> : <RotateCcw className="h-3.5 w-3.5" />}</Button>
+                      <Button size="icon-sm" variant="ghost" aria-label="Delete field" title="Delete (only while nothing is saved in it)" onClick={() => setDel(d)}><Trash2 className="h-3.5 w-3.5 text-danger" /></Button>
                     </div>}
                   </td>
                 </tr>
@@ -90,6 +112,9 @@ export function CustomFieldsSettings() {
           </table>
         )}
       </Card>
+      <ConfirmDialog open={!!del} tone="destructive" title={`Delete "${del?.label ?? ""}"?`} confirmLabel="Delete field" loading={remove.isPending}
+        message="The field is removed for good. This only works while no record or document has a value in it — otherwise make it inactive instead (it is hidden and the saved values are kept)."
+        onCancel={() => setDel(null)} onConfirm={() => del && remove.mutate(del)} />
       {edit && <FieldDialog entity={entity} def={edit === "new" ? null : edit} onClose={() => setEdit(null)} />}
     </div>
   );
