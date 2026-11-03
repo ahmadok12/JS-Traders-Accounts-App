@@ -68,7 +68,8 @@ function PhotoTile({ p, onOpen, onRemove, caption }: { p: PhotoRow; onOpen: () =
 }
 
 /** Pickers: take photos with the camera or choose from the gallery (staff phone app). */
-export function PickPhotoCapture({ taskId, editable, userId }: { taskId: string; editable: boolean; userId: string }) {
+/** editable = task still open (add + remove own photos); canAdd = task finished, pickers may still add more photos (removing is for the manager) */
+export function PickPhotoCapture({ taskId, editable, userId, canAdd = false }: { taskId: string; editable: boolean; userId: string; canAdd?: boolean }) {
   const qc = useQueryClient();
   const files = useAttachments("picking_tasks", taskId);
   const required = useFeature(FEATURES.pickingPhotosRequired);
@@ -103,7 +104,7 @@ export function PickPhotoCapture({ taskId, editable, userId }: { taskId: string;
         <span className="text-sm font-semibold">Photos{photos.length ? ` (${photos.length})` : ""}</span>
         {editable && required.enabled && photos.length === 0 && <span className="text-xs text-warning">at least 1 needed to finish</span>}
       </div>
-      {editable && (
+      {(editable || canAdd) && (
         <div className="mb-2 grid grid-cols-2 gap-2">
           <Button className="h-12 text-base" variant="primary" icon={<Camera className="h-5 w-5" />} disabled={busy > 0} onClick={() => cam.current?.click()}>Take photo</Button>
           <Button className="h-12 text-base" icon={<ImagePlus className="h-5 w-5" />} disabled={busy > 0} onClick={() => gal.current?.click()}>From gallery</Button>
@@ -118,7 +119,8 @@ export function PickPhotoCapture({ taskId, editable, userId }: { taskId: string;
             <PhotoTile key={p.id} p={p} onOpen={() => setView(i)} onRemove={editable && p.uploaded_by === userId ? () => void remove(p.id) : undefined} />
           ))}
         </div>
-      ) : !editable && <p className="text-xs text-ink-muted">No photos.</p>}
+      ) : !editable && !canAdd && <p className="text-xs text-ink-muted">No photos.</p>}
+      {canAdd && !editable && <p className="mt-2 text-xs text-ink-muted">Picking is finished — you can still add photos; the manager sees them on the order.</p>}
       {view != null && <PhotoViewer photos={photos} index={view} onClose={() => setView(null)} />}
     </div>
   );

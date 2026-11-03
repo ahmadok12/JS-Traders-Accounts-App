@@ -217,7 +217,7 @@ function TaskList({ userId, onOpen, onJob }: { userId: string; onOpen: (id: stri
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
     queryFn: async () => {
-      const since = new Date(); since.setHours(0, 0, 0, 0);
+      const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - 2); // finished tasks of the last 3 days (to add photos later)
       const { data, error } = await sb().from("picking_tasks")
         .select("id, doc_no, so_doc_no, status, due_date, notes, completed_at, warehouse:warehouses(code, name), lines:picking_task_lines!picking_task_lines_task_id_fkey(qty_picked), team:picking_task_assignees!inner(user_id, removed_at)")
         .eq("team.user_id", userId).is("team.removed_at", null)
@@ -250,7 +250,7 @@ function TaskList({ userId, onOpen, onJob }: { userId: string; onOpen: (id: stri
       )}
       {done.length > 0 && (
         <>
-          <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Finished today</div>
+          <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Finished (last 3 days)</div>
           {done.map((t) => <TaskCard key={t.id} t={t} onOpen={() => onOpen(t.id)} />)}
         </>
       )}
@@ -312,7 +312,7 @@ function TaskScreen({ id, userId, onDone }: { id: string; userId: string; onDone
         {todo.map((l) => <PickLineCard key={l.id} line={l} editable={open && mine} big names={names} />)}
         {picked.length > 0 && <div className="pt-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">Picked ({picked.length})</div>}
         {picked.map((l) => <PickLineCard key={l.id} line={l} editable={open && mine} big names={names} />)}
-        <PickPhotoCapture taskId={id} editable={open && mine} userId={userId} />
+        <PickPhotoCapture taskId={id} editable={open && mine} canAdd={mine && status === "DONE"} userId={userId} />
       </main>
       {open && mine && (
         <div className="fixed inset-x-0 bottom-0 border-t border-line bg-surface p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
