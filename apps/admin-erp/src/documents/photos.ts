@@ -73,3 +73,11 @@ export async function encodePhotos(loaded: Loaded[], budgetBytes: number): Promi
   }
   return out;
 }
+
+/** photos for a print preview (same compression, a bit more room) */
+export async function photosForPrint(sources: PhotoSource[], maxBytes = 3_000_000) {
+  const { loaded, failed } = await loadPhotos(sources);
+  const photos = await encodePhotos(loaded, maxBytes);
+  loaded.forEach((l) => l.bmp.close());
+  return { photos, failed };
+}

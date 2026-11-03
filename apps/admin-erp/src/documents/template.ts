@@ -26,6 +26,10 @@ export interface PrintSpecBase {
   docType?: string;
   /** photos printed full-size on extra pages (already compressed JPEG data URLs) */
   photos?: PrintPhoto[];
+  /** photos to load for printing (attachment ids) — turned into `photos` by the printer / PDF builder */
+  photoSources?: { id: string; caption: string }[];
+  /** records whose custom fields belong on this document, e.g. the GDN and its sales order */
+  cfSources?: { entity: string; id: string | null | undefined }[];
   photosTitle?: string;
 }
 
@@ -48,6 +52,10 @@ export interface TemplateSettings {
   title?: string;
   columns?: Record<string, { hidden?: boolean; label?: string }>;
   hiddenMeta?: string[];
+  /** custom fields (ids) left off this document */
+  hiddenCf?: string[];
+  /** image custom fields (ids) whose picture is printed on the photo pages */
+  cfPictures?: string[];
   terms?: string;
   showNotes?: boolean;
   showSignatures?: boolean;

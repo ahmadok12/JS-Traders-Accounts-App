@@ -13,6 +13,8 @@ export interface DocTypeDef {
   signatures: string[];
   sampleRows: string[][];
   sampleTotals?: [string, string][];
+  /** records whose custom fields can print on this document (Settings → Custom fields) */
+  cfEntities?: { entity: string; label: string }[];
 }
 
 const item = ["#", "Item", "Qty", "Price", "Amount"] as const;
@@ -24,43 +26,43 @@ const pricedRows = [
 const pricedTotals: [string, string][] = [["Subtotal", "266,000.00"], ["Discount", "-6,000.00"], ["Total", "260,000.00"]];
 
 export const DOC_TYPES: DocTypeDef[] = [
-  { key: "QUOTATION", label: "Quotation", group: "Sales", title: "Quotation", columns: itemCols,
+  { key: "QUOTATION", cfEntities: [{ entity: "quotations", label: "Quotation fields" }], label: "Quotation", group: "Sales", title: "Quotation", columns: itemCols,
     meta: ["Customer", "Date", "Valid until", "Your reference"], signatures: ["Prepared by", "Accepted by (customer)"], sampleRows: pricedRows, sampleTotals: pricedTotals },
-  { key: "SALES_ORDER", label: "Sales order", group: "Sales", title: "Sales Order", columns: itemCols,
+  { key: "SALES_ORDER", cfEntities: [{ entity: "sales_orders", label: "Sales order fields" }], label: "Sales order", group: "Sales", title: "Sales Order", columns: itemCols,
     meta: ["Customer", "Date", "Customer ref.", "Status"], signatures: ["Prepared by", "Approved by"], sampleRows: pricedRows, sampleTotals: pricedTotals },
-  { key: "GDN", label: "Delivery note (GDN)", group: "Sales", title: "Delivery Note",
+  { key: "GDN", cfEntities: [{ entity: "sales_orders", label: "Sales order fields" }, { entity: "gdns", label: "GDN fields" }], label: "Delivery note (GDN)", group: "Sales", title: "Delivery Note",
     columns: [{ label: "#" }, { label: "Item" }, { label: "From" }, { label: "Quantity", align: "right" }],
     meta: ["Customer", "Date", "Sales order", "Customer ref.", "Transport"], signatures: ["Dispatched by", "Driver / transporter", "Received by (customer)"],
     sampleRows: [["1", "Nipple drinker line 3m · Red", "WH-01", "120 PCS"], ["2", "Feeder pan — automatic", "WH-02", "40 PCS"]] },
-  { key: "SALES_INVOICE", label: "Sales invoice", group: "Sales", title: "Sales Invoice", columns: itemCols,
+  { key: "SALES_INVOICE", cfEntities: [{ entity: "sales_invoices", label: "Invoice fields" }], label: "Sales invoice", group: "Sales", title: "Sales Invoice", columns: itemCols,
     meta: ["Customer", "Invoice date", "Due date", "Customer ref.", "Delivery notes"], signatures: ["Prepared by", "Customer signature"], sampleRows: pricedRows, sampleTotals: pricedTotals },
   { key: "SALES_RETURN", label: "Sales return", group: "Sales", title: "Goods Return Note (from customer)",
     columns: [{ label: "#" }, { label: "Item" }, { label: "Into" }, { label: "Condition" }, { label: "Quantity", align: "right" }],
     meta: ["Customer", "Date", "GDN", "Reason"], signatures: ["Received by (warehouse)", "Returned by (customer / driver)", "Checked by"],
     sampleRows: [["1", "Feeder pan — automatic", "WH-01", "Good", "4 PCS"]] },
-  { key: "RECEIPT_VOUCHER", label: "Receipt voucher", group: "Accounting", title: "Receipt Voucher",
+  { key: "RECEIPT_VOUCHER", cfEntities: [{ entity: "journal_entries", label: "Voucher fields" }], label: "Receipt voucher", group: "Accounting", title: "Receipt Voucher",
     columns: [{ label: "Account" }, { label: "Description" }, { label: "Debit", align: "right" }, { label: "Credit", align: "right" }],
     meta: ["Received from", "Date", "Reference", "Bank / cash"], signatures: ["Received by", "Approved by"],
     sampleRows: [["1010 · Meezan Current", "Cheque 004512", "150,000.00", ""], ["1200 · Accounts receivable", "Al-Noor Poultry Farm", "", "150,000.00"]],
     sampleTotals: [["Amount", "150,000.00"]] },
-  { key: "PAYMENT_VOUCHER", label: "Payment voucher", group: "Accounting", title: "Payment Voucher",
+  { key: "PAYMENT_VOUCHER", cfEntities: [{ entity: "journal_entries", label: "Voucher fields" }], label: "Payment voucher", group: "Accounting", title: "Payment Voucher",
     columns: [{ label: "Account" }, { label: "Description" }, { label: "Debit", align: "right" }, { label: "Credit", align: "right" }],
     meta: ["Paid to", "Date", "Reference", "Bank / cash"], signatures: ["Prepared by", "Approved by", "Received by"],
     sampleRows: [["5300 · Freight", "Loader rent", "8,500.00", ""], ["1000 · Cash in hand", "", "", "8,500.00"]], sampleTotals: [["Amount", "8,500.00"]] },
-  { key: "JOURNAL_VOUCHER", label: "Journal voucher", group: "Accounting", title: "Journal Voucher",
+  { key: "JOURNAL_VOUCHER", cfEntities: [{ entity: "journal_entries", label: "Voucher fields" }], label: "Journal voucher", group: "Accounting", title: "Journal Voucher",
     columns: [{ label: "Account" }, { label: "Description" }, { label: "Debit", align: "right" }, { label: "Credit", align: "right" }],
     meta: ["Date", "Reference", "Memo"], signatures: ["Prepared by", "Approved by"],
     sampleRows: [["5100 · Salaries", "", "45,000.00", ""], ["2100 · Salaries payable", "", "", "45,000.00"]], sampleTotals: [["Total", "45,000.00"]] },
-  { key: "PURCHASE_ORDER", label: "Purchase order", group: "Purchasing", title: "Purchase Order", columns: itemCols,
+  { key: "PURCHASE_ORDER", cfEntities: [{ entity: "purchase_orders", label: "Purchase order fields" }], label: "Purchase order", group: "Purchasing", title: "Purchase Order", columns: itemCols,
     meta: ["Supplier", "Date", "Expected", "Currency", "Supplier ref."], signatures: ["Prepared by", "Approved by"], sampleRows: pricedRows, sampleTotals: pricedTotals },
-  { key: "SUPPLIER_BILL", label: "Supplier bill", group: "Purchasing", title: "Supplier Bill",
+  { key: "SUPPLIER_BILL", cfEntities: [{ entity: "supplier_bills", label: "Supplier bill fields" }], label: "Supplier bill", group: "Purchasing", title: "Supplier Bill",
     columns: [{ label: "#" }, { label: "Item / expense" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
     meta: ["Supplier", "Bill date", "Supplier invoice", "Currency"], signatures: ["Checked by", "Approved by"], sampleRows: pricedRows, sampleTotals: pricedTotals },
   { key: "PURCHASE_RETURN", label: "Purchase return", group: "Purchasing", title: "Goods Return Note (to supplier)",
     columns: [{ label: "#" }, { label: "Item" }, { label: "Quantity", align: "right" }],
     meta: ["Supplier", "Date", "Goods receipt", "Reason"], signatures: ["Dispatched by (warehouse)", "Received by (supplier / transporter)", "Approved by"],
     sampleRows: [["1", "Nipple drinker line 3m · Red", "10 PCS"]] },
-  { key: "SHIPMENT", label: "Shipment / packing list", group: "Purchasing", title: "Shipment / Packing list",
+  { key: "SHIPMENT", cfEntities: [{ entity: "shipments", label: "Shipment fields" }], label: "Shipment / packing list", group: "Purchasing", title: "Shipment / Packing list",
     columns: [{ label: "#" }, { label: "Item" }, { label: "Container" }, { label: "Qty", align: "right" }, { label: "Pkgs", align: "right" }, { label: "Weight kg", align: "right" }, { label: "CBM", align: "right" }],
     meta: ["Supplier", "B/L / AWB", "Vessel / voyage", "From", "To", "ETD / ETA", "Containers", "Commercial invoice", "GD no."], signatures: [],
     sampleRows: [["1", "Feeder pan — automatic", "MSKU1234567", "400 PCS", "20", "820", "6.4"]], sampleTotals: [["Total weight kg", "820"], ["Total CBM", "6.4"]] },

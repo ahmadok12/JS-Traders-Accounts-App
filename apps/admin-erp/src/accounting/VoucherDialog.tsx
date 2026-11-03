@@ -100,7 +100,7 @@ function VoucherView({ id, data, loading, error, onEdit, onClose, onOpen }: {
       ? [[type === "RECEIPT" ? "Received from" : "Paid to", party], ["Date", formatDate(data.entry_date as string)], ["Reference", String(data.reference ?? "")], ["Bank / cash", String(data.bank_name ?? "")]]
       : [["Date", formatDate(data.entry_date as string)], ["Reference", String(data.reference ?? "")], ["Memo", String(data.memo ?? "")]];
     const ok = printDocument({
-      docType, company: "", title: type === "RECEIPT" ? "Receipt Voucher" : type === "PAYMENT" ? "Payment Voucher" : ENTRY_LABEL[type], docNo: title, meta,
+      docType, cfSources: [{ entity: "journal_entries", id: String(data.id) }], company: "", title: type === "RECEIPT" ? "Receipt Voucher" : type === "PAYMENT" ? "Payment Voucher" : ENTRY_LABEL[type], docNo: title, meta,
       columns: [{ label: "Account" }, { label: "Description" }, { label: "Debit", align: "right" }, { label: "Credit", align: "right" }],
       rows: lines.map((l) => [accts.data?.get(l.account_id) ?? "",
         [l.party_id ? parties.data?.get(l.party_id) ?? "" : l.bank_account_id ? banks.data?.find((b) => b.id === l.bank_account_id)?.name ?? "" : "", l.description ?? "",

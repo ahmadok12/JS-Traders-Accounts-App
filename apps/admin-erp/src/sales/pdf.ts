@@ -4,7 +4,8 @@
  */
 import type { PrintSpec } from "./print";
 import { applyTemplate, loadTemplate, templateCompany, type RenderedDoc } from "../documents/template";
-import { encodePhotos, loadPhotos, type PhotoSource } from "../documents/photos";
+import { encodePhotos, loadPhotos } from "../documents/photos";
+import { withCustomFields } from "../documents/customPrint";
 
 export interface PdfSpec extends PrintSpec {}
 
@@ -25,9 +26,29 @@ function imageSize(src: string): Promise<{ w: number; h: number } | null> {
   });
 }
 
-export async function buildPdf(p: PdfSpec): Promise<Blob> {
+/**
+ * The PDF of a document: template + custom fields (Settings → Documents) + photos.
+ * With photos the file is kept under maxBytes: photos share the space left after the document itself;
+ * if the result is still too big they are re-encoded smaller and the PDF rebuilt.
+ */
+export async function buildPdf(p: PdfSpec, opts: { maxBytes?: number; onPhotoFail?: (n: number) => void } = {}): Promise<Blob> {
+  const maxBytes = opts.maxBytes ?? 2_000_000;
   const t = await loadTemplate(templateCompany(), p.docType);
-  return renderPdf(applyTemplate(p, t));
+  const spec = await withCustomFields(p, t?.settings).catch(() => p);
+  const render = (photos: PdfSpec["photos"] = []) => renderPdf(applyTemplate({ ...spec, photos: [...(spec.photos ?? []), ...photos] }, t));
+  const base = await render();
+  if (!spec.photoSources?.length) return base;
+  const { loaded, failed } = await loadPhotos(spec.photoSources);
+  if (failed) opts.onPhotoFail?.(failed);
+  let budget = Math.max(150_000, maxBytes * 0.94 - base.size);
+  let blob = base;
+  for (let attempt = 0; attempt < 5 && loaded.length; attempt++) {
+    blob = await render(await encodePhotos(loaded, budget));
+    if (blob.size <= maxBytes) break;
+    budget = Math.max(60_000, budget * ((maxBytes * 0.92 - base.size) / Math.max(1, blob.size - base.size)));
+  }
+  loaded.forEach((l) => l.bmp.close());
+  return blob;
 }
 
 export async function renderPdf(d: RenderedDoc): Promise<Blob> {
@@ -180,36 +201,8 @@ export function downloadBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-/**
- * PDF with photos, kept under maxBytes: photos share the space left after the document itself;
- * if the result is still too big the photos are re-encoded smaller and the PDF rebuilt.
- */
-export async function buildPdfWithPhotos(p: PdfSpec, sources: PhotoSource[], maxBytes = 2_000_000): Promise<{ blob: Blob; failed: number }> {
-  if (!sources.length) return { blob: await buildPdf(p), failed: 0 };
-  const { loaded, failed } = await loadPhotos(sources);
-  const base = await buildPdf(p);
-  let budget = Math.max(150_000, maxBytes * 0.94 - base.size);
-  let blob = base;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const photos = await encodePhotos(loaded, budget);
-    blob = await buildPdf({ ...p, photos });
-    if (blob.size <= maxBytes) break;
-    budget = Math.max(60_000, budget * ((maxBytes * 0.92 - base.size) / Math.max(1, blob.size - base.size)));
-  }
-  loaded.forEach((l) => l.bmp.close());
-  return { blob, failed };
-}
-
-/** photos for a print preview (same compression, a bit more room) */
-export async function photosForPrint(sources: PhotoSource[], maxBytes = 3_000_000) {
-  const { loaded, failed } = await loadPhotos(sources);
-  const photos = await encodePhotos(loaded, maxBytes);
-  loaded.forEach((l) => l.bmp.close());
-  return { photos, failed };
-}
-
-export async function savePdf(p: PdfSpec, name: string) {
-  const blob = await buildPdf(p);
+export async function savePdf(p: PdfSpec, name: string, opts: { onPhotoFail?: (n: number) => void } = {}) {
+  const blob = await buildPdf(p, opts);
   downloadBlob(blob, name);
   return blob;
 }

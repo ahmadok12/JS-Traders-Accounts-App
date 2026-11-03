@@ -518,7 +518,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   const overdue = isOverdue({ due_date: h.due_date, outstanding });
 
   const print = () => {
-    const ok = printDocument({ docType: "SALES_INVOICE",
+    const ok = printDocument({ docType: "SALES_INVOICE", cfSources: [{ entity: "sales_invoices", id: String(h.id) }],
       company: company?.company_name ?? "", title: "Sales Invoice", docNo: String(h.doc_no),
       meta: [["Customer", `${cust.name}${cust.city ? `, ${cust.city}` : ""}`], ["Invoice date", formatDate(h.invoice_date as string)], ["Due date", h.due_date ? formatDate(h.due_date as string) : ""],
         ["Customer ref.", (h.customer_reference as string) ?? ""], ["Delivery notes", data.gdns.map((g) => g.doc_no).join(", ")]],

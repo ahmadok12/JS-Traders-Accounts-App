@@ -195,7 +195,7 @@ function BillDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const sup = h?.supplier as { name: string; code: string; city: string | null } | undefined;
   const print = () => {
     if (!h) return;
-    printDocument({ docType: "SUPPLIER_BILL", company: company?.company_name ?? "", title: "Supplier Bill", docNo: String(h.doc_no),
+    printDocument({ docType: "SUPPLIER_BILL", cfSources: [{ entity: "supplier_bills", id: String(h.id) }], company: company?.company_name ?? "", title: "Supplier Bill", docNo: String(h.doc_no),
       meta: [["Supplier", sup?.name ?? ""], ["Bill date", formatDate(h.bill_date as string)], ["Supplier invoice", String(h.supplier_invoice_no ?? "")], ["Currency", `${h.currency}${h.currency !== "PKR" ? ` @ ${h.fx_rate}` : ""}`]],
       columns: [{ label: "#" }, { label: "Item / expense" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
       rows: lines.map((l, i) => [String(i + 1), l.kind === "ITEM" ? `${info.data?.products.get(l.product_id ?? "")?.name ?? ""}${l.receipt_no ? ` (${l.receipt_no})` : ""}` : l.description, l.quantity, money(num(l.unit_price)), money(num(l.quantity) * num(l.unit_price))]),

@@ -184,7 +184,7 @@ function ShipmentDialog({ id, onClose, onSaved }: { id: string | null; onClose: 
 
   const print = () => {
     if (!h) return;
-    printDocument({ docType: "SHIPMENT",
+    printDocument({ docType: "SHIPMENT", cfSources: [{ entity: "shipments", id: String(h.id) }],
       company: company?.company_name ?? "", title: "Shipment / Packing list", docNo: String(h.doc_no),
       meta: [["Supplier", (h.supplier as { name: string }).name], ["B/L / AWB", s(h.bl_no)], ["Vessel / voyage", [h.vessel, h.voyage].filter(Boolean).join(" / ")],
         ["From", s(h.port_loading)], ["To", s(h.port_discharge)], ["ETD / ETA", `${h.etd ? formatDate(h.etd as string) : "—"} → ${h.eta ? formatDate(h.eta as string) : "—"}`],

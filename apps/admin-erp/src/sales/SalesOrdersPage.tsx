@@ -185,7 +185,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
     if (!h) return;
     const disc = Number(h.discount_amount ?? 0);
     const ok = printDocument({
-      docType: "SALES_ORDER", company: "", title: "Sales Order", docNo: String(h.doc_no),
+      docType: "SALES_ORDER", company: "", title: "Sales Order", docNo: String(h.doc_no), cfSources: [{ entity: "sales_orders", id: String(h.id) }],
       meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h.order_date as string)],
         ["Customer ref.", (h.customer_reference as string) ?? ""], ["Status", soLabel(status)]],
       columns: canPrices ? [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }] : [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }],

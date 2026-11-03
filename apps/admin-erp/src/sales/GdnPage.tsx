@@ -8,7 +8,7 @@ import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { formatDate, formatDateTime } from "@jst/utilities";
 import { useUnsavedGuard } from "../lib/unsaved";
-import { formatCf, useCfDefs, useCfValues, useDocCf, type CfDef, type CfValueRow } from "../lib/customFields";
+import { useDocCf } from "../lib/customFields";
 import { SoPickingPhotos, useSoPickingPhotos } from "../picking/PickPhotos";
 import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
@@ -18,7 +18,7 @@ import { money, today } from "../accounting/common";
 import { fetchGdnLinePrices, n, qtyFmt } from "./common";
 import { printDocument, type PrintSpec } from "./print";
 import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
-import { buildPdfWithPhotos, downloadBlob, openWhatsApp, pdfFileName, photosForPrint, sendPdfToWhatsApp } from "./pdf";
+import { buildPdf, downloadBlob, openWhatsApp, pdfFileName, sendPdfToWhatsApp } from "./pdf";
 import { PricingStrip } from "../pricing/PricingPage";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { DocExtras } from "../documents/DocExtras";
@@ -370,8 +370,6 @@ function useDraftPreview(items: DraftItem[] | undefined, enabled: boolean, soId:
   });
 }
 
-const NO_DEFS: CfDef[] = [];
-
 function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typeof useGdn>; onEdit: () => void; onClose: () => void }) {
   const { can, company } = useAccess();
   const qc = useQueryClient();
@@ -433,46 +431,26 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
   });
   const photoSources = photos.map((p) => ({ id: p.id, caption: [p.task_doc_no, p.warehouse_code, p.uploaded_by_name, formatDateTime(p.uploaded_at)].filter(Boolean).join(" · ") }));
 
-  // custom fields of the order and of this GDN go on the printout
-  const soDefs = useCfDefs("sales_orders").data ?? NO_DEFS;
-  const gdnDefs = useCfDefs("gdns").data ?? NO_DEFS;
-  const soVals = useCfValues("sales_orders", soId ? [soId] : [], !!soId && soDefs.length > 0);
-  const gdnVals = useCfValues("gdns", [id], gdnDefs.length > 0);
-  const cfMeta = (defs: CfDef[], rows: CfValueRow[] | undefined): [string, string][] => {
-    const by = new Map((rows ?? []).map((r) => [r.field_id, r]));
-    return defs.map((d) => [d.label, formatCf(d, by.get(d.id)) || "—"]);
-  };
-
   const spec = (): PrintSpec & { companyLines: string[] } => ({
     docType: "GDN", company: companyInfo.data?.legal_name || company?.company_name || "", title: "Delivery Note", docNo: String(h!.doc_no),
     companyLines: [companyInfo.data?.address ?? "", [companyInfo.data?.phone, companyInfo.data?.email].filter(Boolean).join(" · ")],
     meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h!.gdn_date as string)], ["Sales order", so?.doc_no ?? ""],
-      ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h!.transport_details as string) ?? ""],
-      ...cfMeta(soDefs, soVals.data), ...cfMeta(gdnDefs, gdnVals.data)],
-    photosTitle: "Picking photos",
+      ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h!.transport_details as string) ?? ""]],
+    // custom fields of the order and of this GDN (Settings → Documents decides which), picking photos
+    cfSources: [{ entity: "sales_orders", id: soId }, { entity: "gdns", id }],
+    photoSources: photoSources,
+    photosTitle: "Photos",
     columns: [{ label: "#" }, { label: "Item" }, { label: "From" }, { label: "Quantity", align: "right" }],
     rows: lines.map((l, i) => [String(i + 1), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}`, l.warehouse.code, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`]),
     notes: h!.notes as string | null, signatures: ["Dispatched by", "Driver / transporter", "Received by (customer)"],
   });
+  const photoFail = (n: number) => toast.error(`${n} photo${n > 1 ? "s" : ""} could not be loaded — the rest are included`);
   const print = () => {
     if (!h) return;
-    const base = spec();
-    const ok = printDocument(base, {
-      preview: true,
-      prepare: async () => {
-        if (!photoSources.length) return base;
-        const r = await photosForPrint(photoSources);
-        if (r.failed) toast.error(`${r.failed} photo${r.failed > 1 ? "s" : ""} could not be loaded`);
-        return { ...base, photos: r.photos };
-      },
-    });
+    const ok = printDocument(spec(), { preview: true, onPhotoFail: photoFail });
     if (!ok) toast.error("Allow pop-ups to print");
   };
-  const makePdf = async () => {
-    const r = await buildPdfWithPhotos(spec(), photoSources);
-    if (r.failed) toast.error(`${r.failed} photo${r.failed > 1 ? "s" : ""} could not be loaded — the PDF has the rest`);
-    return r.blob;
-  };
+  const makePdf = () => buildPdf(spec(), { onPhotoFail: photoFail });
   const mb = (b: Blob) => `${(b.size / 1048576).toFixed(b.size < 1048576 ? 2 : 1)} MB`;
   const [pdfBusy, setPdfBusy] = React.useState<null | "pdf" | "wa">(null);
   const fileName = h ? pdfFileName(String(h.doc_no), cust?.name) : "";

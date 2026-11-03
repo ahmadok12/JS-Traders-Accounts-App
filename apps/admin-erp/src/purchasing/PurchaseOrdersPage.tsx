@@ -139,7 +139,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
   const setLine = (i: number, p: Partial<PoLine>) => setLines((s) => s.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const print = () => {
     if (!h) return;
-    printDocument({ docType: "PURCHASE_ORDER",
+    printDocument({ docType: "PURCHASE_ORDER", cfSources: [{ entity: "purchase_orders", id: String(h.id) }],
       company: company?.company_name ?? "", title: "Purchase Order", docNo: String(h.doc_no),
       meta: [["Supplier", (h.supplier as { name: string }).name], ["Date", formatDate(h.order_date as string)], ["Expected", h.expected_date ? formatDate(h.expected_date as string) : ""],
         ["Currency", String(h.currency)], ["Supplier ref.", String(h.supplier_reference ?? "")]],

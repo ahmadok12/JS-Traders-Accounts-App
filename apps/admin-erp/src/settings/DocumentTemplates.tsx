@@ -8,6 +8,7 @@ import { useUnsavedGuard } from "../lib/unsaved";
 import { DOC_TYPES, docTypeDef, type DocTypeDef } from "../documents/registry";
 import { applyTemplate, autoHeaderLines, clearTemplateCache, mergeSettings, renderHtml, type CompanyInfo, type PrintSpecBase, type TemplateSettings } from "../documents/template";
 import { downloadBlob, renderPdf } from "../sales/pdf";
+import { useCfDefs, type CfDef } from "../lib/customFields";
 
 type Row = { doc_type: string; settings: TemplateSettings; logo: string | null; updated_at: string };
 
@@ -27,6 +28,21 @@ async function readLogo(file: File): Promise<string> {
   const out = png ? c.toDataURL("image/png") : c.toDataURL("image/jpeg", 0.88);
   if (out.length > 400_000) throw new Error("This logo is too large even after resizing — use a smaller image (PNG or JPG).");
   return out;
+}
+
+const NO_CF: CfDef[] = [];
+function sampleCf(d: CfDef): string {
+  switch (d.field_type) {
+    case "checkbox": return "Yes";
+    case "date": return "08 Oct 2026";
+    case "datetime": return "08 Oct 2026, 10:30";
+    case "number": case "decimal": case "currency": case "percentage": case "formula": return "1,250";
+    case "dropdown": case "multi_select": return d.options[0] ?? "Option";
+    case "file": return "bilty-scan.pdf";
+    case "image": return "photo.jpg";
+    case "reference": return "Al-Noor Poultry Farm";
+    default: return `(${d.label.toLowerCase()})`;
+  }
 }
 
 function sampleSpec(def: DocTypeDef): PrintSpecBase {
@@ -107,7 +123,15 @@ function TemplateEditor({ docType, rows, company, canEdit }: { docType: string; 
     logo: isDefault ? logo : defRow?.logo ?? null,
     company,
   };
-  const preview = applyTemplate(sampleSpec(def), bundle);
+  // custom fields that can print on this document (up to two record kinds, e.g. GDN + its sales order)
+  const cfA = useCfDefs(isDefault ? null : def.cfEntities?.[0]?.entity ?? null).data ?? NO_CF;
+  const cfB = useCfDefs(isDefault ? null : def.cfEntities?.[1]?.entity ?? null).data ?? NO_CF;
+  const cfGroups = (def.cfEntities ?? []).map((e, i) => ({ ...e, defs: i === 0 ? cfA : cfB })).filter((g) => g.defs.length);
+  const hiddenCf = new Set(s.hiddenCf ?? []);
+  const cfPictures = new Set(s.cfPictures ?? []);
+  const sample = sampleSpec(def);
+  const cfSample: [string, string][] = cfGroups.flatMap((g) => g.defs.filter((d) => !hiddenCf.has(d.id)).map((d) => [d.label, sampleCf(d)] as [string, string]));
+  const preview = applyTemplate({ ...sample, meta: [...sample.meta, ...cfSample] }, bundle);
   const html = renderHtml(preview);
 
   const save = useMutation({
@@ -220,6 +244,31 @@ function TemplateEditor({ docType, rows, company, canEdit }: { docType: string; 
                 ))}
               </div>
             </section>
+            {cfGroups.length > 0 && (
+              <section>
+                <SectionTitle>Custom fields</SectionTitle>
+                <p className="-mt-1 mb-2 text-2xs text-ink-muted">Printed in the details box with the value saved on each document. Pictures print full size on the photo pages.</p>
+                <div className="space-y-2">
+                  {cfGroups.map((g) => (
+                    <div key={g.entity}>
+                      {cfGroups.length > 1 && <div className="mb-1 text-2xs font-semibold uppercase tracking-wide text-ink-faint">{g.label}</div>}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                        {g.defs.map((d) => (
+                          <div key={d.id} className="flex items-center gap-3">
+                            <Checkbox checked={!hiddenCf.has(d.id)} label={d.label}
+                              onChange={(v) => { const n = new Set(hiddenCf); v ? n.delete(d.id) : n.add(d.id); set("hiddenCf", n.size ? [...n] : undefined); }} />
+                            {d.field_type === "image" && !hiddenCf.has(d.id) && (
+                              <Checkbox checked={cfPictures.has(d.id)} label="print the picture"
+                                onChange={(v) => { const n = new Set(cfPictures); v ? n.add(d.id) : n.delete(d.id); set("cfPictures", n.size ? [...n] : undefined); }} />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
             <section className="space-y-2">
               <SectionTitle>Totals, notes, terms and signatures</SectionTitle>
               <div className="flex flex-wrap gap-x-4 gap-y-1.5">
