@@ -18,6 +18,8 @@ export const FEATURES = {
   pricingTasks: "sales.pricing_tasks",
   /** Reserved orders: hold stock for a customer before a sales order (default off) */
   reservedOrders: "sales.reserved_orders",
+  /** Purchase cost tasks: cost received goods before the supplier bill (default off — the bill costs the goods) */
+  costTasks: "purchasing.cost_tasks",
 } as const;
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 

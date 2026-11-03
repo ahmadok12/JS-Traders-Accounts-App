@@ -169,6 +169,9 @@ function ShipmentDialog({ id, onClose, onSaved }: { id: string | null; onClose: 
   const totCbm = used.reduce((a, l) => a + (num(l.cbm) || 0), 0);
   const value = used.reduce((a, l) => a + (num(l.quantity) || 0) * (num(l.unit_price) || 0), 0);
 
+  const makeBill = useAction(() => rpc<string>("create_bill_from_receipts", {
+    p_company_id: companyId, p_receipt_ids: (doc.data?.receipts ?? []).filter((g) => g.status === "POSTED").map((g) => g.id),
+  }), "Draft supplier bill made from the received goods");
   const save = useAction(async () => {
     const nid = await rpc<string>("save_shipment", {
       p_id: id, p_header: { company_id: companyId, ...head, fx_rate: num(head.fx_rate) || 1 },
@@ -339,12 +342,18 @@ function ShipmentDialog({ id, onClose, onSaved }: { id: string | null; onClose: 
             )}
             {tab === "receipts" && (
               <div className="space-y-1.5">
+                {c.manage && c.costs && (doc.data?.receipts ?? []).some((g) => g.status === "POSTED" && g.cost_status !== "APPROVED") && (
+                  <div className="flex items-center gap-2 rounded-card border border-teal-200 bg-teal-50/40 px-3 py-2 text-sm">
+                    <span className="flex-1">Goods received — make the supplier's bill from them (quantities, shipment prices and currency are filled in).</span>
+                    <Button size="sm" variant="primary" loading={makeBill.isPending} onClick={() => makeBill.mutate(undefined, { onSuccess: (bid) => navigate(`/supplier-bills?view=${bid}`) })}>Make supplier bill</Button>
+                  </div>
+                )}
                 {(doc.data?.receipts ?? []).length === 0 ? <p className="text-sm text-ink-muted">Nothing received yet. Use “Receive goods” when the container reaches the warehouse.</p> : (doc.data?.receipts ?? []).map((g) => (
                   <button key={g.id} className="flex w-full items-center gap-3 rounded-card border border-line px-3 py-2 text-left text-sm hover:bg-subtle" onClick={() => navigate(`/goods-receipts?view=${g.id}`)}>
                     <span className="font-mono text-xs font-medium">{String(g.doc_no)}</span><span>{formatDate(g.doc_date as string)}</span>
                     <span className="font-mono text-xs text-ink-muted">{(g.warehouse as { code: string } | null)?.code}</span>
                     <span className="ml-auto flex gap-1.5"><Badge tone={g.status === "POSTED" ? "success" : g.status === "DRAFT" ? "warning" : "neutral"}>{g.status === "POSTED" ? "Received" : String(g.status).toLowerCase()}</Badge>
-                      {c.costs && g.status === "POSTED" && <Badge tone={g.cost_status === "APPROVED" ? "success" : "warning"}>{g.cost_status === "APPROVED" ? "Costed" : "Cost pending"}</Badge>}</span>
+                      {c.costs && g.status === "POSTED" && <Badge tone={g.cost_status === "APPROVED" ? "success" : "warning"}>{g.cost_status === "APPROVED" ? "Costed" : "Awaiting bill"}</Badge>}</span>
                   </button>
                 ))}
               </div>

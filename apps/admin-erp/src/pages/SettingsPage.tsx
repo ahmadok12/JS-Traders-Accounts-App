@@ -125,6 +125,7 @@ function FeatureSettings() {
       <InventorySettings />
       <ProductSettings />
       <SalesSettings />
+      <SalesSettings title="Purchasing" toggles={PURCHASING_TOGGLES} />
       <PickingSettings />
     </div>
   );
@@ -227,12 +228,17 @@ const SALES_TOGGLES: { key: FeatureKey; label: string; description: string; on: 
     description: "Shows Sales → Reserved Orders: hold stock for a customer before there is a sales order, then convert it to an order. When off, the menu item is hidden; nothing already reserved is released — turn it back on to manage old reservations." },
 ];
 
-function SalesSettings() {
+const PURCHASING_TOGGLES: typeof SALES_TOGGLES = [
+  { key: FEATURES.costTasks, label: "Purchase cost tasks (cost goods before the bill)", on: "Purchase cost tasks turned on", off: "Purchase cost tasks turned off",
+    description: "Normally the supplier bill gives received goods their value (PO / shipment → GRN → Supplier bill → Landed cost). Turn this on only if goods often arrive long before the bill and you want to value them earlier: it adds Purchasing → Purchase Costs and “Send for costing / Enter purchase cost now” on receipts. Turning it off hides them; costs already entered stay." },
+];
+
+function SalesSettings({ title = "Sales", toggles = SALES_TOGGLES }: { title?: string; toggles?: typeof SALES_TOGGLES }) {
   const { companyId } = useAccess();
   const qc = useQueryClient();
   const features = useFeatures();
   const save = useMutation({
-    mutationFn: async ({ t, enabled }: { t: (typeof SALES_TOGGLES)[number]; enabled: boolean }) => {
+    mutationFn: async ({ t, enabled }: { t: (typeof toggles)[number]; enabled: boolean }) => {
       const { error } = await sb()
         .from("system_settings")
         .upsert({ company_id: companyId!, key: t.key, value: enabled, description: t.label }, { onConflict: "company_id,key" });
@@ -249,10 +255,10 @@ function SalesSettings() {
   return (
     <Card className="p-4">
       <SectionTitle>
-        <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5" /> Sales</span>
+        <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5" /> {title}</span>
       </SectionTitle>
       <div className="flex flex-col gap-3">
-        {SALES_TOGGLES.map((t) => (
+        {toggles.map((t) => (
           <Checkbox key={t.key} checked={features.isOn(t.key)} disabled={save.isPending} onChange={(v) => save.mutate({ t, enabled: v })} label={t.label} description={t.description} />
         ))}
       </div>

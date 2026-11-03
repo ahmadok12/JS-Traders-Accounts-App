@@ -228,7 +228,7 @@ function ViewDoc({
               <KeyValue label="Date">{formatDate(h.doc_date as string)}</KeyValue>
               {cfg.kind === "receipt" && <KeyValue label="Supplier">{(h.supplier as { name: string } | null)?.name ?? null}</KeyValue>}
               {cfg.kind === "receipt" && <KeyValue label="Supplier ref.">{(h.supplier_reference as string) || null}</KeyValue>}
-              {cfg.kind === "receipt" && <KeyValue label="Cost"><Badge tone={h.cost_status === "PENDING" ? "warning" : "success"}>{h.cost_status === "PENDING" ? "Pending" : humanize(String(h.cost_status))}</Badge></KeyValue>}
+              {cfg.kind === "receipt" && <KeyValue label="Cost"><Badge tone={h.cost_status === "PENDING" ? "warning" : "success"}>{h.cost_status === "PENDING" ? "Awaiting bill" : humanize(String(h.cost_status))}</Badge></KeyValue>}
               {cfg.kind === "adjustment" && <KeyValue label="Reason">{ADJUSTMENT_REASONS.find((r) => r.value === h.reason)?.label ?? String(h.reason)}</KeyValue>}
               {cfg.kind !== "receipt" && <KeyValue label="Reference">{(h.reference as string) || null}</KeyValue>}
               {cfg.kind === "transfer" && <KeyValue label="Transport">{(h.transport_details as string) || null}</KeyValue>}
@@ -637,7 +637,7 @@ function DocForm({
         {docCf.section && <div className="mt-3">{docCf.section}</div>}
         {cfg.kind === "receipt" && (
           <p className="mt-3 text-xs text-ink-muted">
-            Purchase cost is not entered here — the receipt stays <Badge tone="warning">Cost pending</Badge> until the cost workflow (Purchasing stage).
+            Prices are not entered here — after posting, the receipt shows <Badge tone="warning">Awaiting bill</Badge> until its supplier bill (Purchasing → Supplier Bills, or “Make supplier bill” on the receipt) gives it its value.
           </p>
         )}
       </ErpDialog>

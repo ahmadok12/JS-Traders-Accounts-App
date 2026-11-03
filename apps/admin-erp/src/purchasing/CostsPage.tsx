@@ -12,6 +12,7 @@ import { money, num } from "../accounting/common";
 import { qtyFmt } from "../sales/common";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { COST_TONE, CurrencyInput, costLabel, rpc, useAction, useCan, useItemInfo } from "./common";
+import { FEATURES, useFeature } from "../lib/settings";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Calculator className="h-4 w-4" />;
@@ -301,6 +302,7 @@ export function CostTaskDialog({ id, onClose }: { id: string; onClose: () => voi
 interface LineCost { line_id: string; unit_cost: number | null; unit_cost_pkr: number | null; cost_source: string | null; billed_qty: number; currency: string | null; fx_rate: number | null }
 /** Shown on a goods receipt for purchasing users: PO link, costs, enter cost now / send for costing, make the bill. */
 export function ReceiptPurchasePanel({ receipt, lines }: { receipt: Row; lines: Row[] }) {
+  const costTasks = useFeature(FEATURES.costTasks).enabled;
   const { companyId } = useAccess();
   const c = useCan();
   const navigate = useNavigate();
@@ -341,10 +343,10 @@ export function ReceiptPurchasePanel({ receipt, lines }: { receipt: Row; lines: 
         {c.costs && st === "POSTED" && <Badge tone={COST_TONE[String(receipt.cost_status)]}>{costLabel(String(receipt.cost_status))}</Badge>}
         {task.data && <Button size="sm" onClick={() => navigate(`/purchase-costs?view=${task.data!.id}`)}>{task.data.doc_no} · {LABEL[task.data.status]}</Button>}
         <div className="flex-1" />
-        {c.costs && st === "POSTED" && uncosted.length > 0 && !task.data && <>
+        {costTasks && c.costs && st === "POSTED" && uncosted.length > 0 && !task.data && <>
           <Button size="sm" icon={<Send className="h-3.5 w-3.5" />} onClick={() => setAssign(true)}>Send for costing</Button>
           <Button size="sm" variant="primary" icon={<Calculator className="h-3.5 w-3.5" />} onClick={() => setEntering((x) => !x)}>Enter purchase cost now</Button></>}
-        {c.manage && c.costs && st === "POSTED" && !!receipt.supplier_id && !billedAll && <Button size="sm" icon={<FileText className="h-3.5 w-3.5" />} loading={bill.isPending}
+        {c.manage && c.costs && st === "POSTED" && !!receipt.supplier_id && !billedAll && <Button size="sm" variant={costTasks ? "secondary" : "primary"} icon={<FileText className="h-3.5 w-3.5" />} loading={bill.isPending}
           onClick={() => bill.mutate(undefined, { onSuccess: (bid) => navigate(`/supplier-bills?view=${bid}`) })}>Make supplier bill</Button>}
       </div>
       {c.costs && st === "POSTED" && (costs.data ?? []).some((x) => x.unit_cost != null) && !entering && (

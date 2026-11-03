@@ -11,7 +11,7 @@ export const poLabel = (s: string) =>
   ({ DRAFT: "Draft", APPROVED: "Approved — to receive", PARTIALLY_RECEIVED: "Part received", RECEIVED: "Received", CLOSED: "Closed", CANCELLED: "Cancelled" })[s] ?? s;
 export const BILL_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { DRAFT: "warning", POSTED: "success", CANCELLED: "neutral", REVERSED: "danger" };
 export const COST_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = { PENDING: "warning", ENTERED: "info", APPROVED: "success" };
-export const costLabel = (s: string | null | undefined) => ({ PENDING: "Cost pending", ENTERED: "Cost to approve", APPROVED: "Costed" })[s ?? ""] ?? "—";
+export const costLabel = (s: string | null | undefined) => ({ PENDING: "Awaiting bill", ENTERED: "Cost to approve", APPROVED: "Costed" })[s ?? ""] ?? "—";
 
 export async function rpc<T = unknown>(name: string, args: Record<string, unknown>) {
   const { data, error } = await sb().rpc(name, args);

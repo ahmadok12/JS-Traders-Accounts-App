@@ -227,7 +227,7 @@ function PoDialog({ id, onClose, onSaved }: { id: string | null; onClose: () => 
                     <span className="font-mono text-xs font-medium">{String(g.doc_no)}</span><span>{formatDate(g.doc_date as string)}</span>
                     <span className="font-mono text-xs text-ink-muted">{(g.warehouse as { code: string } | null)?.code}</span>
                     <span className="ml-auto flex gap-1.5"><Badge tone={g.status === "POSTED" ? "success" : g.status === "DRAFT" ? "warning" : "neutral"}>{g.status === "POSTED" ? "Received" : String(g.status).toLowerCase()}</Badge>
-                      {c.costs && g.status === "POSTED" && <Badge tone={g.cost_status === "APPROVED" ? "success" : "warning"}>{g.cost_status === "APPROVED" ? "Costed" : "Cost pending"}</Badge>}</span>
+                      {c.costs && g.status === "POSTED" && <Badge tone={g.cost_status === "APPROVED" ? "success" : "warning"}>{g.cost_status === "APPROVED" ? "Costed" : "Awaiting bill"}</Badge>}</span>
                   </button>
                 ))}
               </div>

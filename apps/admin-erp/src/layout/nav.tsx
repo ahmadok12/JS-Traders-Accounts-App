@@ -90,13 +90,13 @@ export const NAV: NavGroup[] = [
     label: "Purchasing",
     items: [
       { to: "/suppliers", label: "Suppliers", icon: Truck, perms: [P.suppliersView] },
-      { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList, perms: [P.purchasingView] },
-      { to: "/purchase-costs", label: "Purchase Costs", icon: Calculator, perms: [P.purchasingCosts] },
-      { to: "/purchase-returns", label: "Purchase Returns", icon: Undo2, perms: [P.purchasingReturn, P.purchasingView, P.inventoryView] },
+      { to: "/purchase-orders", label: "Purchase Orders (local)", icon: ClipboardList, perms: [P.purchasingView] },
+      { to: "/shipments", label: "Shipments (imports)", icon: Ship, perms: [P.purchasingView] },
       { to: "/supplier-bills", label: "Supplier Bills", icon: Receipt, perms: [P.purchasingCosts] },
-      { to: "/fx-payments", label: "Foreign Payments", icon: Globe2, perms: [P.purchasingCosts, P.journalsView] },
-      { to: "/shipments", label: "Shipments", icon: Ship, perms: [P.purchasingView] },
       { to: "/landed-costs", label: "Landed Cost", icon: Calculator, perms: [P.purchasingCosts] },
+      { to: "/purchase-returns", label: "Purchase Returns", icon: Undo2, perms: [P.purchasingReturn, P.purchasingView, P.inventoryView] },
+      { to: "/fx-payments", label: "Foreign Payments", icon: Globe2, perms: [P.purchasingCosts, P.journalsView] },
+      { to: "/purchase-costs", label: "Purchase Costs", icon: Calculator, perms: [P.purchasingCosts], feature: "purchasing.cost_tasks" },
     ],
   },
   {

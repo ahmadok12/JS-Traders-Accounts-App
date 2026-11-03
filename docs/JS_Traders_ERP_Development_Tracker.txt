@@ -674,3 +674,14 @@ NEXT: warehouse-trial fixes; Excel opening-stock import; PDF/WhatsApp on invoice
 === 2026-11-03 — Warehouse trial tweaks ===
 [x] Document fields (custom fields) in the New / Edit forms of sales orders, GDNs, GRNs, adjustments, transfers
 [x] Settings → Features → Sales: "Send for pricing (price tasks)" and "Reserved orders" switches (both off by default)
+
+=== 2026-11-03 — Simple purchase flows ===
+Local:  PO → GRN → Supplier bill → Landed cost (optional)
+Import: Shipment (items added directly = the order; PO optional) → GRN → Supplier bill → Landed cost
+[x] Supplier bill from receipts takes the shipment's currency / rate / prices when there is no PO, and links the shipment
+    (migration 20261103000500_bill_from_shipment_receipts; test tests/sql/purchase_simple_flow.sql 4/4)
+[x] Purchase cost tasks behind Settings → Features → Purchasing (off by default); receipts show "Awaiting bill"
+[x] Shipment → Receipts tab: "Make supplier bill"; Purchasing menu in flow order
+[x] Also this day: GDN picking-photos tab + print preview / PDF ≤ 2 MB with photos; Download all photos (ZIP);
+    custom fields choosable per document in Settings → Documents (all printouts); attach files before saving;
+    pickers add photos after finishing; delete / deactivate custom fields
