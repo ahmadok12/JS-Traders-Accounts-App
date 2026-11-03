@@ -17,6 +17,8 @@ import { SearchBox, StatusFilter, useUrlState } from "./DocPage";
 import { STATUS_TONE } from "./docConfigs";
 import { Availability, CustomerPicker, ProductPicker, VariantPicker, WarehousePicker, useProductMeta } from "./pickers";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { FEATURES, useFeature } from "../lib/settings";
+import { PowerOff } from "lucide-react";
 
 type Row = Record<string, unknown> & { id: string };
 const FILTERS = [
@@ -30,7 +32,21 @@ const today = () => new Date().toISOString().slice(0, 10);
 const isExpired = (r: Row) => r.status === "ACTIVE" && !!r.expires_on && String(r.expires_on) < today();
 const qty = (v: unknown) => formatNumber(Number(v), Number.isInteger(Number(v)) ? 0 : 2);
 
+/** Settings → Features → Reserved orders. While off the page shows a notice (an order's link to its old reservation still opens). */
 export function ReservationsPage() {
+  const f = useFeature(FEATURES.reservedOrders);
+  const viewing = new URLSearchParams(window.location.search).has("view");
+  if (!f.loading && !f.enabled && !viewing) {
+    return (
+      <Card>
+        <EmptyState icon={<PowerOff className="h-6 w-6" />} title="Reserved orders are turned off" description="An administrator can turn them on in Settings → Features → Sales." />
+      </Card>
+    );
+  }
+  return <ReservationsPageInner />;
+}
+
+function ReservationsPageInner() {
   const { can, companyId } = useAccess();
   const { params, update } = useUrlState();
   const q = params.get("q") ?? "";

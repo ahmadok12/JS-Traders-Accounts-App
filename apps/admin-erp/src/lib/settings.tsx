@@ -14,6 +14,10 @@ export const FEATURES = {
   quickInvoice: "sales.quick_invoice",
   /** pickers must add at least one photo before finishing a picking task (default on) */
   pickingPhotosRequired: "picking.photos_required",
+  /** "Send for pricing": price tasks for orders / GDNs dispatched without a price (default off) */
+  pricingTasks: "sales.pricing_tasks",
+  /** Reserved orders: hold stock for a customer before a sales order (default off) */
+  reservedOrders: "sales.reserved_orders",
 } as const;
 export type FeatureKey = (typeof FEATURES)[keyof typeof FEATURES];
 

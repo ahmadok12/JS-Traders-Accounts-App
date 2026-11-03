@@ -75,7 +75,7 @@ export const NAV: NavGroup[] = [
     items: [
       { to: "/customers", label: "Customers", icon: Users, perms: [P.customersView, P.customersViewAssigned] },
       { to: "/customer-groups", label: "Customer Groups", icon: UsersRound, perms: [P.customersView] },
-      { to: "/reservations", label: "Reserved Orders", icon: Bookmark, perms: [P.inventoryView, P.salesView] },
+      { to: "/reservations", label: "Reserved Orders", icon: Bookmark, perms: [P.inventoryView, P.salesView], feature: "sales.reserved_orders" },
       { to: "/quotations", label: "Quotations", icon: FileSignature, perms: [P.salesViewPrices] },
       { to: "/sales-orders", label: "Sales Orders", icon: ShoppingCart, perms: [P.salesView] },
       { to: "/picking", label: "Picking", icon: ListChecks, perms: [P.pickingManage] },

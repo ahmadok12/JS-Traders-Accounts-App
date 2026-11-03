@@ -8,7 +8,7 @@ import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { diffObject } from "@jst/utilities";
 import { useSearchParams } from "react-router-dom";
 import { useUnsavedGuard } from "../lib/unsaved";
-import { FEATURES, featureQueryKey, useFeature, useStorageLocations } from "../lib/settings";
+import { FEATURES, featureQueryKey, useFeature, useFeatures, useStorageLocations, type FeatureKey } from "../lib/settings";
 import { EntityPage } from "../entity/EntityPage";
 import { branches } from "../entities/config";
 import { Tabs } from "../entity/EntityDialog";
@@ -218,40 +218,44 @@ function ProductSettings() {
   );
 }
 
+const SALES_TOGGLES: { key: FeatureKey; label: string; description: string; on: string; off: string }[] = [
+  { key: FEATURES.quickInvoice, label: "Quick invoice (counter sale)", on: "Quick invoice turned on", off: "Quick invoice turned off",
+    description: "Adds a “Quick invoice” button on Sales Invoices: pick customer, items, warehouse, quantity and price, then post — the goods are dispatched from that warehouse automatically (a sales order and GDN are created and linked behind the scenes). Turning it off only hides the button; invoices already made stay as they are." },
+  { key: FEATURES.pricingTasks, label: "Send for pricing (price tasks)", on: "Send for pricing turned on", off: "Send for pricing turned off",
+    description: "When an order or GDN has items without a price, shows a “Send for pricing” button so someone enters the price and it is approved (Sales → Pricing). When off, the button is hidden — enter missing prices on the invoice instead. Price history and last-price suggestions keep working either way." },
+  { key: FEATURES.reservedOrders, label: "Reserved orders", on: "Reserved orders turned on", off: "Reserved orders turned off",
+    description: "Shows Sales → Reserved Orders: hold stock for a customer before there is a sales order, then convert it to an order. When off, the menu item is hidden; nothing already reserved is released — turn it back on to manage old reservations." },
+];
+
 function SalesSettings() {
   const { companyId } = useAccess();
   const qc = useQueryClient();
-  const quick = useFeature(FEATURES.quickInvoice);
+  const features = useFeatures();
   const save = useMutation({
-    mutationFn: async (enabled: boolean) => {
+    mutationFn: async ({ t, enabled }: { t: (typeof SALES_TOGGLES)[number]; enabled: boolean }) => {
       const { error } = await sb()
         .from("system_settings")
-        .upsert(
-          { company_id: companyId!, key: FEATURES.quickInvoice, value: enabled, description: "Quick invoice: invoice and dispatch from the chosen warehouse in one step" },
-          { onConflict: "company_id,key" },
-        );
+        .upsert({ company_id: companyId!, key: t.key, value: enabled, description: t.label }, { onConflict: "company_id,key" });
       if (error) throw error;
-      return enabled;
+      return { t, enabled };
     },
-    onSuccess: (enabled) => {
-      toast.success(enabled ? "Quick invoice turned on" : "Quick invoice turned off");
+    onSuccess: ({ t, enabled }) => {
+      toast.success(enabled ? t.on : t.off);
       qc.invalidateQueries({ queryKey: featureQueryKey(companyId) });
     },
     onError: (e) => toast.error(friendlyError(e)),
   });
-  if (quick.loading) return <Skeleton className="h-24" />;
+  if (features.loading) return <Skeleton className="h-24" />;
   return (
     <Card className="p-4">
       <SectionTitle>
         <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5" /> Sales</span>
       </SectionTitle>
-      <Checkbox
-        checked={quick.enabled}
-        disabled={save.isPending}
-        onChange={(v) => save.mutate(v)}
-        label="Quick invoice (counter sale)"
-        description="Adds a “Quick invoice” button on Sales Invoices: pick customer, items, warehouse, quantity and price, then post — the goods are dispatched from that warehouse automatically (a sales order and GDN are created and linked behind the scenes). Turning it off only hides the button; invoices already made stay as they are."
-      />
+      <div className="flex flex-col gap-3">
+        {SALES_TOGGLES.map((t) => (
+          <Checkbox key={t.key} checked={features.isOn(t.key)} disabled={save.isPending} onChange={(v) => save.mutate({ t, enabled: v })} label={t.label} description={t.description} />
+        ))}
+      </div>
     </Card>
   );
 }

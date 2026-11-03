@@ -13,6 +13,7 @@ import { CustomerPicker, ProductPicker } from "../inventory/pickers";
 import { money } from "../accounting/common";
 import { n, qtyFmt } from "../sales/common";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
+import { FEATURES, useFeature } from "../lib/settings";
 
 type Row = Record<string, unknown> & { id: string };
 export const PRICE_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -471,10 +472,13 @@ export function PricingStrip({ sourceType, sourceId, docNo, customerName }: { so
   const { can } = useAccess();
   const navigate = useNavigate();
   const pending = usePendingPrices();
+  const tasksOn = useFeature(FEATURES.pricingTasks).enabled;
   const [open, setOpen] = React.useState(false);
   if (!can(P.salesViewPrices)) return null;
   const row = (pending.data ?? []).find((p) => p.source_type === sourceType && p.source_id === sourceId);
   if (!row) return null;
+  // Settings → Features → "Send for pricing" off: nothing to do here (prices are entered on the invoice) unless a task is already open
+  if (!tasksOn && !row.open_task_id) return null;
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-card border border-rose-200 bg-rose-50/60 px-3 py-2 text-sm">
       <Tag className="h-4 w-4 text-rose-600" />
