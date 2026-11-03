@@ -1,5 +1,10 @@
 # Handoff — where we stopped (3 Nov 2026)
 
+## Warehouse trial fixes — 3 Nov 2026 (after Stage 12)
+Latest: picker "not accepted" alert (`20261103000700_picking_accept_alert`, pg_cron `jst-picking-unaccepted` every 30 s,
+setting `picking.accept_alert_minutes`, default 2, 0 = off, Settings → Features → Picking). Pop-up kinds NOT_ACCEPTED /
+ACCEPTED_LATE go to the person who sent the task (else the warehouse's picking managers). See the tracker for the other fixes.
+
 ## Stage 12 finished — live 3 Nov 2026
 Migrations `20261103000100_stage12b_workflows_forms_channels` + `20261103000200_notify_schedule` applied with the Supabase MCP
 (the stored text matches the repo file). Live SQL test 42/42 (rolled back). Edge function `notify-send` deployed.

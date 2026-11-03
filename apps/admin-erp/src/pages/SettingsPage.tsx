@@ -300,7 +300,55 @@ function PickingSettings() {
         label="Photo required before finishing picking"
         description="Pickers must take or upload at least one photo of the picked goods in the staff app before they can finish a task. Photos show instantly in the sales order (Picking photos tab). When off, photos are optional. Managers finishing a task themselves are never asked for a photo."
       />
+      <AcceptAlertSetting />
     </Card>
+  );
+}
+
+/** "Picker hasn't accepted" alert: minutes after sending (0 = off, default 2). */
+function AcceptAlertSetting() {
+  const { companyId } = useAccess();
+  const qc = useQueryClient();
+  const key = ["picking-accept-alert", companyId];
+  const q = useQuery({
+    queryKey: key, enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await sb().from("system_settings").select("value").eq("company_id", companyId!).eq("key", "picking.accept_alert_minutes").maybeSingle();
+      if (error) throw error;
+      return data ? Number(data.value) : 2;
+    },
+  });
+  const [mins, setMins] = React.useState("");
+  React.useEffect(() => { if (q.data != null) setMins(String(q.data)); }, [q.data]);
+  const save = useMutation({
+    mutationFn: async (n: number) => {
+      const { error } = await sb().rpc("set_picking_accept_alert", { p_company: companyId, p_minutes: n });
+      if (error) throw error;
+      return n;
+    },
+    onSuccess: (n) => {
+      toast.success(n === 0 ? "Not-accepted alerts turned off" : `You'll be alerted if a picker hasn't accepted within ${n} min`);
+      qc.invalidateQueries({ queryKey: key });
+    },
+    onError: (e) => toast.error(friendlyError(e)),
+  });
+  const n = Number(mins);
+  const valid = mins.trim() !== "" && Number.isInteger(n) && n >= 0 && n <= 60;
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="text-sm font-medium">Alert me if a picker hasn't accepted</div>
+      <p className="mb-2 text-xs text-muted-foreground">
+        When a picker doesn't press ACCEPT within this many minutes of being sent a task, the person who sent it gets a pop-up with the picker's phone number so they can call. You're told again once the picker accepts. 0 = off.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number" min={0} max={60} step={1} value={mins} disabled={q.isLoading || save.isPending}
+          onChange={(e) => setMins(e.target.value)} className="w-20"
+        />
+        <span className="text-sm text-muted-foreground">minutes</span>
+        <Button size="sm" variant="secondary" disabled={!valid || n === q.data || save.isPending} onClick={() => save.mutate(n)}>Save</Button>
+      </div>
+    </div>
   );
 }
 

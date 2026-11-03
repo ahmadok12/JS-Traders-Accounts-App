@@ -687,3 +687,7 @@ Import: Shipment (items added directly = the order; PO optional) → GRN → Sup
     pickers add photos after finishing; delete / deactivate custom fields
 [x] Shipments: an item with variants needs its variant when the shipment is saved (was only caught at receiving)
     (migration 20261103000600_shipment_variant_check, live check 3/3)
+[x] Picking: picker has not pressed ACCEPT within N minutes (default 2) -> the sender gets a sticky pop-up with the picker's
+    phone number; a second pop-up when the picker accepts late. Settings -> Features -> Picking (0 = off). pg_cron
+    job jst-picking-unaccepted every 30 s. (migration 20261103000700_picking_accept_alert, live check: not-yet/alert-once/
+    no-repeat/accepted-late/off/10-min all correct, rolled back)
