@@ -182,8 +182,25 @@ export function cfPayload(defs: CfDef[], values: Record<string, CfValue>) {
   return out;
 }
 
+/**
+ * Files chosen before the record exists: kept here and uploaded right after the record is saved.
+ * The field's form value is "pending:<key>" until then.
+ */
+const pendingFiles = new Map<string, File>();
+const PENDING = "pending:";
+export const isPendingFile = (v: CfValue) => typeof v === "string" && v.startsWith(PENDING);
+
 export async function saveCfValues(companyId: string, entity: string, recordId: string, defs: CfDef[], values: Record<string, CfValue>) {
   if (!defs.length) return;
+  values = { ...values };
+  for (const d of defs) {
+    const v = values[d.id];
+    if ((d.field_type === "file" || d.field_type === "image") && isPendingFile(v)) {
+      const f = pendingFiles.get(String(v));
+      values[d.id] = f ? await uploadAttachment(entity as AttachmentEntity, recordId, f, d.label) : null;
+      pendingFiles.delete(String(v));
+    }
+  }
   const { error } = await sb().rpc("save_custom_field_values", { p_company: companyId, p_entity: entity, p_record: recordId, p_values: cfPayload(defs, values) });
   if (error) throw error;
 }
@@ -254,10 +271,20 @@ function CfFileInput({ def, id, value, recordId, fileName, onChange }: { def: Cf
   const [busy, setBusy] = React.useState(false);
   const [name, setName] = React.useState<string | null>(fileName);
   React.useEffect(() => setName(fileName), [fileName]);
-  if (!recordId) return <p className="flex h-control items-center text-xs text-ink-faint">Save first, then attach the {def.field_type === "image" ? "photo" : "file"}.</p>;
+  const pending = isPendingFile(value) ? pendingFiles.get(value) ?? null : null;
+  const preview = React.useMemo(() => (pending && pending.type.startsWith("image/") ? URL.createObjectURL(pending) : null), [pending]);
+  React.useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   const pick = async (f: File | undefined) => {
     if (!f) return;
     if (def.field_type === "image" && !f.type.startsWith("image/")) { toast.error("Choose a photo or image"); return; }
+    if (!recordId) {
+      // not saved yet: keep the file, it is uploaded together with the save
+      const key = `${PENDING}${crypto.randomUUID()}`;
+      pendingFiles.set(key, f);
+      if (isPendingFile(value)) pendingFiles.delete(value);
+      onChange(key);
+      return;
+    }
     setBusy(true);
     try {
       const aid = await uploadAttachment(def.entity as AttachmentEntity, recordId, f, def.label);
@@ -265,15 +292,21 @@ function CfFileInput({ def, id, value, recordId, fileName, onChange }: { def: Cf
       onChange(aid);
     } catch (e) { toast.error(friendlyError(e)); } finally { setBusy(false); }
   };
+  const clear = () => { if (isPendingFile(value)) pendingFiles.delete(value); onChange(""); };
   return (
     <div className="flex h-control items-center gap-2">
-      <label className={cn("inline-flex h-control-sm cursor-pointer items-center gap-1 rounded-control border border-line px-2 text-xs hover:border-line-strong", busy && "opacity-60")}>
+      <label className={cn("inline-flex h-control-sm shrink-0 cursor-pointer items-center gap-1 rounded-control border border-line px-2 text-xs hover:border-line-strong", busy && "opacity-60")}>
         <Paperclip className="h-3.5 w-3.5" />{busy ? "Uploading…" : value ? "Replace" : def.field_type === "image" ? "Add photo" : "Attach file"}
-        <input id={id} type="file" className="hidden" disabled={busy} accept={def.field_type === "image" ? "image/*" : undefined} capture={def.field_type === "image" ? "environment" : undefined}
+        <input id={id} type="file" className="hidden" disabled={busy} accept={def.field_type === "image" ? "image/*" : "image/*,application/pdf,.doc,.docx,.xls,.xlsx"}
           onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
       </label>
-      {value && <button type="button" className="min-w-0 truncate text-xs text-primary hover:underline" onClick={() => void openAttachment(value)}>{name ?? "Open"}</button>}
-      {value && <Button size="sm" variant="ghost" onClick={() => onChange("")}>Remove</Button>}
+      {pending ? (
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-2" title="Uploaded when you save">
+          {preview && <img src={preview} alt="" className="h-7 w-7 shrink-0 rounded object-cover" />}
+          <span className="truncate">{pending.name}</span><span className="shrink-0 text-ink-faint">· uploads on save</span>
+        </span>
+      ) : value ? <button type="button" className="min-w-0 truncate text-xs text-primary hover:underline" onClick={() => void openAttachment(value)}>{name ?? "Open"}</button> : null}
+      {value && <Button size="sm" variant="ghost" onClick={clear}>Remove</Button>}
     </div>
   );
 }
