@@ -670,3 +670,7 @@ Tests: local replay of all migrations (embedded Postgres) — 21 older SQL test 
 NEXT: warehouse-trial fixes; Excel opening-stock import; PDF/WhatsApp on invoices & quotations;
       stock calculator; then Stage 13 (owner mobile app).
 
+
+=== 2026-11-03 — Warehouse trial tweaks ===
+[x] Document fields (custom fields) in the New / Edit forms of sales orders, GDNs, GRNs, adjustments, transfers
+[x] Settings → Features → Sales: "Send for pricing (price tasks)" and "Reserved orders" switches (both off by default)
