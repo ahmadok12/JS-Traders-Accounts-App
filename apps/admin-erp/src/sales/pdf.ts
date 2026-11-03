@@ -4,6 +4,7 @@
  */
 import type { PrintSpec } from "./print";
 import { applyTemplate, loadTemplate, templateCompany, type RenderedDoc } from "../documents/template";
+import { encodePhotos, loadPhotos, type PhotoSource } from "../documents/photos";
 
 export interface PdfSpec extends PrintSpec {}
 
@@ -31,7 +32,7 @@ export async function buildPdf(p: PdfSpec): Promise<Blob> {
 
 export async function renderPdf(d: RenderedDoc): Promise<Blob> {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-  const doc = new jsPDF({ unit: "mm", format: d.paper === "Letter" ? "letter" : d.paper === "A5" ? "a5" : "a4" });
+  const doc = new jsPDF({ unit: "mm", format: d.paper === "Letter" ? "letter" : d.paper === "A5" ? "a5" : "a4", compress: true });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = d.paper === "A5" ? 10 : 14;
@@ -140,6 +141,27 @@ export async function renderPdf(d: RenderedDoc): Promise<Blob> {
     doc.setTextColor(0);
   }
 
+  // photos: full width, two per page, each with its caption
+  if ((d.photos?.length ?? 0)) {
+    doc.addPage(); y = M;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(f(13)); doc.setTextColor(...accent);
+    doc.text(`${d.photosTitle} (${(d.photos?.length ?? 0)})`, M, y + 4); doc.setTextColor(0); doc.setFont("helvetica", "normal");
+    y += 10;
+    const avail = W - 2 * M;
+    const slot = (H - 2 * M - 10 - 14) / 2;
+    (d.photos ?? []).forEach((ph, i) => {
+      const maxH = slot - 8;
+      const r = Math.min(avail / ph.w, maxH / ph.h);
+      const dw = ph.w * r, dh = ph.h * r;
+      if (y + dh + 8 > H - M - 8) { doc.addPage(); y = M; }
+      try { doc.addImage(ph.src, "JPEG", M + (avail - dw) / 2, y, dw, dh, `ph${i}`, "NONE"); } catch { /* skip a broken image */ }
+      doc.setFontSize(f(8.5)); doc.setTextColor(90);
+      doc.text(doc.splitTextToSize(ph.caption, avail) as string[], W / 2, y + dh + 4, { align: "center" });
+      doc.setTextColor(0);
+      y += dh + 11;
+    });
+  }
+
   // footer text + page numbers on every page
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
@@ -156,6 +178,34 @@ export function downloadBlob(blob: Blob, name: string) {
   a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/**
+ * PDF with photos, kept under maxBytes: photos share the space left after the document itself;
+ * if the result is still too big the photos are re-encoded smaller and the PDF rebuilt.
+ */
+export async function buildPdfWithPhotos(p: PdfSpec, sources: PhotoSource[], maxBytes = 2_000_000): Promise<{ blob: Blob; failed: number }> {
+  if (!sources.length) return { blob: await buildPdf(p), failed: 0 };
+  const { loaded, failed } = await loadPhotos(sources);
+  const base = await buildPdf(p);
+  let budget = Math.max(150_000, maxBytes * 0.94 - base.size);
+  let blob = base;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const photos = await encodePhotos(loaded, budget);
+    blob = await buildPdf({ ...p, photos });
+    if (blob.size <= maxBytes) break;
+    budget = Math.max(60_000, budget * ((maxBytes * 0.92 - base.size) / Math.max(1, blob.size - base.size)));
+  }
+  loaded.forEach((l) => l.bmp.close());
+  return { blob, failed };
+}
+
+/** photos for a print preview (same compression, a bit more room) */
+export async function photosForPrint(sources: PhotoSource[], maxBytes = 3_000_000) {
+  const { loaded, failed } = await loadPhotos(sources);
+  const photos = await encodePhotos(loaded, maxBytes);
+  loaded.forEach((l) => l.bmp.close());
+  return { photos, failed };
 }
 
 export async function savePdf(p: PdfSpec, name: string) {
@@ -185,8 +235,8 @@ export type WaResult = "shared" | "opened" | "cancelled";
  * PC: the PDF is saved to Downloads and WhatsApp (desktop app) opens on the customer's chat with a message
  *     typed in — drag the PDF into the chat (or click the paper-clip) and send.
  */
-export async function sendPdfToWhatsApp(p: PdfSpec, name: string, phone: string | null, message: string, useWeb = false): Promise<WaResult> {
-  const blob = await buildPdf(p);
+export async function sendPdfToWhatsApp(p: PdfSpec, name: string, phone: string | null, message: string, useWeb = false, prebuilt?: Blob): Promise<WaResult> {
+  const blob = prebuilt ?? await buildPdf(p);
   const file = new File([blob], name, { type: "application/pdf" });
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (isPhone() && nav.canShare?.({ files: [file] })) {

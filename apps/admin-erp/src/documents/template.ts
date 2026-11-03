@@ -24,7 +24,12 @@ export interface PrintSpecBase {
   companyLines?: string[];
   /** template to apply (registry key) */
   docType?: string;
+  /** photos printed full-size on extra pages (already compressed JPEG data URLs) */
+  photos?: PrintPhoto[];
+  photosTitle?: string;
 }
+
+export interface PrintPhoto { src: string; w: number; h: number; caption: string }
 
 export interface TemplateSettings {
   // look (company-wide, can be overridden per document)
@@ -114,6 +119,8 @@ export interface RenderedDoc {
   fontScale: number;
   paper: "A4" | "A5" | "Letter";
   showPageNumbers: boolean;
+  photos: PrintPhoto[];
+  photosTitle: string;
 }
 
 /** Pure: screen spec + template → what is printed. */
@@ -154,6 +161,8 @@ export function applyTemplate(p: PrintSpecBase, t: TemplateBundle | null): Rende
     fontScale: s.fontSize === "small" ? 0.9 : s.fontSize === "large" ? 1.12 : 1,
     paper: s.paper,
     showPageNumbers: s.showPageNumbers !== false,
+    photos: p.photos ?? [],
+    photosTitle: p.photosTitle ?? "Photos",
   };
 }
 
@@ -161,7 +170,7 @@ const esc = (v: unknown) => String(v ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "
 const nl = (v: string) => esc(v).replace(/\n/g, "<br>");
 
 /** Pure: printable HTML (also used for the live preview in Settings). */
-export function renderHtml(d: RenderedDoc, opts: { autoPrint?: boolean } = {}): string {
+export function renderHtml(d: RenderedDoc, opts: { autoPrint?: boolean; toolbar?: boolean } = {}): string {
   const fs = (px: number) => `${Math.round(px * d.fontScale * 10) / 10}px`;
   const th = d.columns.map((c) => `<th style="text-align:${c.align ?? "left"}">${esc(c.label)}</th>`).join("");
   const body = d.rows.map((r) => `<tr>${r.map((v, i) => `<td style="text-align:${d.columns[i]?.align ?? "left"}">${esc(v)}</td>`).join("")}</tr>`).join("");
@@ -182,8 +191,16 @@ export function renderHtml(d: RenderedDoc, opts: { autoPrint?: boolean } = {}): 
     .grand td{font-weight:700;border-top:1px solid ${d.accent}}.sig{display:flex;gap:40px;margin-top:56px}.sig div{flex:1;border-top:1px solid #111;padding-top:4px;font-size:${fs(11)};color:#444}
     .terms{margin-top:16px;font-size:${fs(11.5)};color:#333;white-space:normal}.terms b{display:block;font-size:${fs(10)};text-transform:uppercase;color:#666;margin-bottom:2px}
     .foot{margin-top:28px;border-top:1px solid #ddd;padding-top:6px;font-size:${fs(10)};color:#666;text-align:center}
+    .ph{page-break-before:always;break-before:page;margin-top:40px;padding-top:16px;border-top:1px dashed #ccc}@media print{.ph{margin-top:0;padding-top:0;border-top:0}}.ph h2{font-size:${fs(15)};margin:0 0 10px;color:${d.accent}}
+    .ph figure{margin:0 0 14px;page-break-inside:avoid;break-inside:avoid;text-align:center}
+    .ph img{max-width:100%;max-height:118mm;object-fit:contain;border:1px solid #ddd}
+    .ph figcaption{font-size:${fs(10.5)};color:#555;margin-top:3px}
+    .tb{position:sticky;top:0;display:flex;gap:8px;align-items:center;background:#111827;color:#fff;margin:-28px -28px 20px;padding:10px 16px;font-size:13px;z-index:5}
+    .tb button{background:#fff;color:#111;border:0;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer}.tb span{flex:1}
+    @media print{.tb{display:none}}
     @page{size:${page};margin:14mm}
   </style></head><body>
+  ${opts.toolbar ? `<div class="tb"><span>Print preview · ${esc(d.docNo)}${(d.photos?.length ?? 0) ? ` · ${(d.photos?.length ?? 0)} photo${(d.photos?.length ?? 0) > 1 ? "s" : ""}` : ""}</span><button onclick="window.print()">Print</button><button onclick="window.close()">Close</button></div>` : ""}
   <div class="top">${co}${ttl}</div>
   <div class="meta">${d.meta.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join("")}</div>
   <table class="l"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table>
@@ -192,6 +209,7 @@ export function renderHtml(d: RenderedDoc, opts: { autoPrint?: boolean } = {}): 
   ${d.terms ? `<div class="terms"><b>Terms &amp; conditions</b>${nl(d.terms)}</div>` : ""}
   ${d.signatures.length ? `<div class="sig">${d.signatures.map((s) => `<div>${esc(s)}</div>`).join("")}</div>` : ""}
   ${d.footer ? `<div class="foot">${nl(d.footer)}</div>` : ""}
+  ${(d.photos?.length ?? 0) ? `<div class="ph"><h2>${esc(d.photosTitle)} (${(d.photos?.length ?? 0)})</h2>${(d.photos ?? []).map((ph) => `<figure><img src="${esc(ph.src)}" alt=""><figcaption>${esc(ph.caption)}</figcaption></figure>`).join("")}</div>` : ""}
   ${opts.autoPrint ? "<script>window.onload=function(){setTimeout(function(){window.print()},150)}</script>" : ""}</body></html>`;
 }
 

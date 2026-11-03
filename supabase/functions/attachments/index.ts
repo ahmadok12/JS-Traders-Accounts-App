@@ -4,6 +4,7 @@
 //   POST { action: "confirm", id }                                    → { ok }
 //   POST { action: "open", id, download? }                            → { url, name, mime }                 (10-minute link)
 //   POST { action: "remove", id, reason? }                            → { ok }
+//   POST { action: "bytes", id }                                      → the image itself (for photos drawn into PDFs; images only)
 // Every permission check happens in the database as the signed-in user (attachment_* functions).
 // Secrets (Supabase → Edge Functions → Secrets): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
 // Until the R2 keys are set, files go to the private Supabase Storage bucket "attachments" (stored as bucket "sb:attachments").
@@ -125,6 +126,24 @@ Deno.serve(async (req) => {
       if (!r2) return json(503, { error: "Cloudflare R2 keys are missing" });
       const url = await presign("GET", a.bucket, a.key, { "response-content-disposition": disp, "response-content-type": a.mime });
       return json(200, { url, name: a.name, mime: a.mime });
+    }
+
+    if (action === "bytes") {
+      // the image itself, through this function (CORS-safe) — used to put photos into PDFs / print previews
+      const { data, error } = await db.rpc("attachment_locate", { p_id: body.id });
+      if (error) return json(404, { error: error.message });
+      const a = data as { bucket: string; key: string; name: string; mime: string };
+      if (!String(a.mime ?? "").startsWith("image/")) return json(400, { error: "Only images can be fetched this way" });
+      const head = { ...cors, "Content-Type": "application/octet-stream", "X-File-Mime": a.mime, "Cache-Control": "private, max-age=600" };
+      if (isSb(a.bucket)) {
+        const { data: f, error: e } = await admin.storage.from(sbBucket(a.bucket)).download(a.key);
+        if (e || !f) return json(404, { error: e?.message ?? "File not found in storage" });
+        return new Response(f, { headers: head });
+      }
+      if (!r2) return json(503, { error: "Cloudflare R2 keys are missing" });
+      const res = await r2.fetch(objectUrl(a.bucket, a.key));
+      if (!res.ok || !res.body) return json(404, { error: "File not found in storage" });
+      return new Response(res.body, { headers: head });
     }
 
     if (action === "remove") {

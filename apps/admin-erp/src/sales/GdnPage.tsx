@@ -8,7 +8,8 @@ import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
 import { formatDate, formatDateTime } from "@jst/utilities";
 import { useUnsavedGuard } from "../lib/unsaved";
-import { useDocCf } from "../lib/customFields";
+import { formatCf, useCfDefs, useCfValues, useDocCf, type CfDef, type CfValueRow } from "../lib/customFields";
+import { SoPickingPhotos, useSoPickingPhotos } from "../picking/PickPhotos";
 import { AuditTimeline } from "../entity/AuditTimeline";
 import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
@@ -17,7 +18,7 @@ import { money, today } from "../accounting/common";
 import { fetchGdnLinePrices, n, qtyFmt } from "./common";
 import { printDocument, type PrintSpec } from "./print";
 import { AllocRollsNote, useAllocRolls } from "../inventory/rolls";
-import { openWhatsApp, pdfFileName, savePdf, sendPdfToWhatsApp } from "./pdf";
+import { buildPdfWithPhotos, downloadBlob, openWhatsApp, pdfFileName, photosForPrint, sendPdfToWhatsApp } from "./pdf";
 import { PricingStrip } from "../pricing/PricingPage";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { DocExtras } from "../documents/DocExtras";
@@ -369,6 +370,8 @@ function useDraftPreview(items: DraftItem[] | undefined, enabled: boolean, soId:
   });
 }
 
+const NO_DEFS: CfDef[] = [];
+
 function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typeof useGdn>; onEdit: () => void; onClose: () => void }) {
   const { can, company } = useAccess();
   const qc = useQueryClient();
@@ -411,20 +414,66 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
     queryFn: async () => (await sb().from("companies").select("name, legal_name, phone, email, address, ntn").eq("id", company!.company_id).single()).data as
       { name: string; legal_name: string | null; phone: string | null; email: string | null; address: string | null; ntn: string | null } | null,
   });
+  // picking photos of this dispatch: tasks turned into this GDN, or (GDN made by hand) the order's tasks in the same warehouses
+  const soId = (h?.sales_order_id as string | undefined) ?? null;
+  const soPhotos = useSoPickingPhotos(can(P.pickingManage) || can(P.salesView) ? soId : null);
+  const taskGdn = useQuery({
+    queryKey: ["so-task-gdn", soId],
+    enabled: !!soId,
+    queryFn: async () => {
+      const { data, error } = await sb().from("picking_tasks").select("id, gdn_id").eq("sales_order_id", soId!);
+      if (error) return new Map<string, string | null>();
+      return new Map(((data ?? []) as { id: string; gdn_id: string | null }[]).map((t) => [t.id, t.gdn_id]));
+    },
+  });
+  const gdnWh = new Set(lines.map((l) => l.warehouse.code));
+  const photos = (soPhotos.data ?? []).filter((p) => {
+    const g = taskGdn.data?.get(p.task_id ?? "");
+    return g ? g === id : gdnWh.has(p.warehouse_code ?? "");
+  });
+  const photoSources = photos.map((p) => ({ id: p.id, caption: [p.task_doc_no, p.warehouse_code, p.uploaded_by_name, formatDateTime(p.uploaded_at)].filter(Boolean).join(" · ") }));
+
+  // custom fields of the order and of this GDN go on the printout
+  const soDefs = useCfDefs("sales_orders").data ?? NO_DEFS;
+  const gdnDefs = useCfDefs("gdns").data ?? NO_DEFS;
+  const soVals = useCfValues("sales_orders", soId ? [soId] : [], !!soId && soDefs.length > 0);
+  const gdnVals = useCfValues("gdns", [id], gdnDefs.length > 0);
+  const cfMeta = (defs: CfDef[], rows: CfValueRow[] | undefined): [string, string][] => {
+    const by = new Map((rows ?? []).map((r) => [r.field_id, r]));
+    return defs.map((d) => [d.label, formatCf(d, by.get(d.id)) || "—"]);
+  };
+
   const spec = (): PrintSpec & { companyLines: string[] } => ({
     docType: "GDN", company: companyInfo.data?.legal_name || company?.company_name || "", title: "Delivery Note", docNo: String(h!.doc_no),
     companyLines: [companyInfo.data?.address ?? "", [companyInfo.data?.phone, companyInfo.data?.email].filter(Boolean).join(" · ")],
     meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h!.gdn_date as string)], ["Sales order", so?.doc_no ?? ""],
-      ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h!.transport_details as string) ?? ""]],
+      ["Customer ref.", so?.customer_reference ?? ""], ["Transport", (h!.transport_details as string) ?? ""],
+      ...cfMeta(soDefs, soVals.data), ...cfMeta(gdnDefs, gdnVals.data)],
+    photosTitle: "Picking photos",
     columns: [{ label: "#" }, { label: "Item" }, { label: "From" }, { label: "Quantity", align: "right" }],
     rows: lines.map((l, i) => [String(i + 1), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}`, l.warehouse.code, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`]),
     notes: h!.notes as string | null, signatures: ["Dispatched by", "Driver / transporter", "Received by (customer)"],
   });
   const print = () => {
     if (!h) return;
-    const ok = printDocument(spec());
+    const base = spec();
+    const ok = printDocument(base, {
+      preview: true,
+      prepare: async () => {
+        if (!photoSources.length) return base;
+        const r = await photosForPrint(photoSources);
+        if (r.failed) toast.error(`${r.failed} photo${r.failed > 1 ? "s" : ""} could not be loaded`);
+        return { ...base, photos: r.photos };
+      },
+    });
     if (!ok) toast.error("Allow pop-ups to print");
   };
+  const makePdf = async () => {
+    const r = await buildPdfWithPhotos(spec(), photoSources);
+    if (r.failed) toast.error(`${r.failed} photo${r.failed > 1 ? "s" : ""} could not be loaded — the PDF has the rest`);
+    return r.blob;
+  };
+  const mb = (b: Blob) => `${(b.size / 1048576).toFixed(b.size < 1048576 ? 2 : 1)} MB`;
   const [pdfBusy, setPdfBusy] = React.useState<null | "pdf" | "wa">(null);
   const fileName = h ? pdfFileName(String(h.doc_no), cust?.name) : "";
   const custPhone = (cust?.whatsapp || cust?.phone) ?? null;
@@ -432,7 +481,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
   const toPdf = async () => {
     if (!h) return;
     setPdfBusy("pdf");
-    try { await savePdf(spec(), fileName); toast.success(`Saved ${fileName} to your Downloads`); }
+    try { const blob = await makePdf(); downloadBlob(blob, fileName); toast.success(`Saved ${fileName} (${mb(blob)}${photoSources.length ? `, ${photoSources.length} photo${photoSources.length > 1 ? "s" : ""}` : ""}) to your Downloads`); }
     catch (e) { toast.error(friendlyError(e)); }
     finally { setPdfBusy(null); }
   };
@@ -440,7 +489,8 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
     if (!h) return;
     setPdfBusy("wa");
     try {
-      const r = await sendPdfToWhatsApp(spec(), fileName, custPhone, waMessage);
+      const blob = await makePdf();
+      const r = await sendPdfToWhatsApp(spec(), fileName, custPhone, waMessage, false, blob);
       if (r === "opened") {
         toast.success(`PDF saved to Downloads (${fileName}). WhatsApp is opening${custPhone ? ` on ${cust?.name}'s chat` : ""} — drag the PDF into the chat or attach it with the 📎, then send.`, {
           duration: 12000,
@@ -463,7 +513,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
             {status === "POSTED" && can(P.salesDispatch) && <Button variant="destructive-ghost" icon={<RotateCcw className="h-3.5 w-3.5" />} onClick={() => setConfirm(invoicedAny ? "blocked" : "reverse")}>Reverse</Button>}
             <div className="flex-1" />
             {so && <Button icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => navigate(`/sales-orders?view=${h!.sales_order_id}`)}>{so.doc_no}</Button>}
-            {h && status !== "CANCELLED" && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print</Button>}
+            {h && status !== "CANCELLED" && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print preview</Button>}
             {h && status !== "CANCELLED" && <Button icon={pdfBusy === "pdf" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />} disabled={!!pdfBusy || (status === "DRAFT" && draft.isLoading)} onClick={() => void toPdf()}>Save as PDF</Button>}
             {h && status !== "CANCELLED" && <Button className="border-[#25D366] text-[#128C7E] hover:bg-[#25D366]/10" title={custPhone ? `Send to ${cust?.name} (${custPhone}) on WhatsApp` : "Send on WhatsApp"} icon={pdfBusy === "wa" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />} disabled={!!pdfBusy || (status === "DRAFT" && draft.isLoading)} onClick={() => void toWhatsApp()}>WhatsApp</Button>}
             <Button onClick={onClose}>Close</Button>
@@ -491,8 +541,10 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${lines.length})` },
               ...(status !== "DRAFT" && status !== "CANCELLED" ? [{ key: "moves", label: "Stock movements" }] : []),
+              ...(can(P.pickingManage) || can(P.salesView) ? [{ key: "photos", label: `Picking photos (${photos.length})` }] : []),
               { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
             ]} />
+            {tab === "photos" && <SoPickingPhotos photos={photos} loading={soPhotos.isLoading} />}
             {tab === "history" && <AuditTimeline table="gdns" id={id} />}
             {tab === "files" && <AttachmentsPanel entityType="gdns" entityId={id} />}
             {tab === "moves" && <MovementsTable sourceId={id} />}
