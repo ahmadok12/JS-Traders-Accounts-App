@@ -15,6 +15,7 @@ import { printDocument } from "../sales/print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { CurrencyInput, rpc, useAction, useCan, useItemInfo } from "./common";
 import { ImportCostsPanel } from "./ImportCosts";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 const icon = <Ship className="h-4 w-4" />;
@@ -251,6 +252,7 @@ function ShipmentDialog({ id, onClose, onSaved }: { id: string | null; onClose: 
               {c.costs && <Field label="Invoice currency"><CurrencyInput currency={head.currency} rate={head.fx_rate} disabled={!editable} onCurrency={(v) => setHead((x) => ({ ...x, currency: v }))} onRate={(v) => setHead((x) => ({ ...x, fx_rate: v }))} /></Field>}
               <Field label="GD no. (customs)"><Input disabled={!editable} value={head.gd_no} onChange={(e) => setHead((x) => ({ ...x, gd_no: e.target.value }))} /></Field>
             </FormGrid>
+            <DocExtras docType={null} entity="shipments" id={id} className="mt-3" />
             <Tabs value={tab} onChange={setTab} tabs={[
               { key: "lines", label: `Items (${used.length})` }, { key: "containers", label: `Containers (${conts.length})` },
               ...(id ? [{ key: "tracking", label: "Tracking" }, { key: "receipts", label: `Receipts (${doc.data?.receipts.length ?? 0})` },

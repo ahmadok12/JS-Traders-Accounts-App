@@ -25,6 +25,7 @@ import { AuditTimeline } from "./AuditTimeline";
 import { FieldInput } from "./FieldInput";
 import { buildSchema, toDbValues, toFormValues } from "./schema";
 import type { EntityConfig, FieldDef } from "./types";
+import { useMyFormLayout } from "../lib/formLayouts";
 import { CfFormSection, CfViewSection, isCfEntity, saveCfValues, useCfDefs, useCfForm, useCfValues, type CfDef, type CfValueRow } from "../lib/customFields";
 
 type Mode = "view" | "edit" | "create";
@@ -67,12 +68,16 @@ export function EntityDialog({
   const record = useEntityRecord<Row>(config.table, id, config.recordSelect);
 
   // Fields & sections the user may see (DB enforces; this only avoids empty/forbidden UI)
-  const sections = (config.sections ?? []).filter((s) => !s.permission || can(s.permission));
+  // Settings → Forms: per-role hidden / required fields and sections (required is also checked by the database)
+  const layout = useMyFormLayout(config.table);
+  const sections = (config.sections ?? []).filter((s) => (!s.permission || can(s.permission))
+    && !(layout.hiddenSections.has(s.code) && !config.fields.some((f) => f.section === s.code && (f.required || layout.required.has(f.name)))));
   const allowedSections = new Set(["basic", ...sections.map((s) => s.code)]);
   const features = useFeatures();
-  const fields = config.fields.filter(
-    (f) => allowedSections.has(f.section ?? "basic") && (!f.restricted || can(f.restricted.permission)) && features.isOn(f.feature),
-  );
+  const fields = config.fields
+    .filter((f) => allowedSections.has(f.section ?? "basic") && (!f.restricted || can(f.restricted.permission)) && features.isOn(f.feature)
+      && (f.required || !layout.hidden.has(f.name)))
+    .map((f) => (layout.required.has(f.name) && !f.required ? { ...f, required: true, autoCode: false } : f));
 
   // Privilege-restricted columns are fetched through definer RPCs
   const restrictedRpcs = Array.from(
@@ -274,7 +279,7 @@ export function EntityDialog({
                   label={s.label}
                   description={s.description}
                   populated={populated}
-                  defaultOpen={hasError}
+                  defaultOpen={hasError || layout.openSections.has(s.code) || sf.some((f) => layout.required.has(f.name))}
                 >
                   <FormGrid cols={3}>
                     {sf.map((f) => (
@@ -284,7 +289,7 @@ export function EntityDialog({
                 </ConditionalSection>
               );
             })}
-            <CfFormSection defs={defs} values={cf.values} errors={cf.errors} onChange={cf.set} />
+            <CfFormSection defs={defs} values={cf.values} errors={cf.errors} onChange={cf.set} recordId={id} rows={cfRows.data} />
             <button type="submit" className="hidden" />
           </form>
         )}

@@ -1,6 +1,6 @@
 JS TRADERS ERP — DEVELOPMENT TRACKER
 Source: JS_Traders_ERP_Master_Specification_OPTIMIZED.md (v2.0), section 27.2
-Last updated: 9 Oct 2026 (Stage 12 — configuration and document engine)
+Last updated: 3 Nov 2026 (Stage 12 finished — workflows, forms per role, new field types, e-mail/WhatsApp)
 
 Legend:  [x] done    [~] partly done    [ ] not started
 Status after each sprint is updated in this file.
@@ -20,7 +20,7 @@ Stage 8   Shipments and landed cost .................. [x]  (done 2026-10-04)
 Stage 9   Payments, multi-currency, payment agents ... [x]  (done 2026-10-05)
 Stage 10  PDC and bank reconciliation ................ [x]  (done 2026-10-05)
 Stage 11  Reporting, dashboards, exports ............. [x]  (done 2026-10-05)
-Stage 12  Configuration and document engine .......... [~]  (live 2026-10-09; workflow designer + per-role forms left)
+Stage 12  Configuration and document engine .......... [x]  (done 2026-11-03)
 Stage 13  Interfaces (warehouse, owner, sales, mobile) [ ]
 Stage 14  Full-system integration .................... [ ]
 Stage 15  Full QA, security and performance .......... [ ]
@@ -425,10 +425,11 @@ Test gate: tests/sql/reports_reconcile.sql — PASSED (10 checks: stock = balanc
            BS balances, P&L = BS profit, TB equal, cash/bank = ledgers …); tests/unit/reports.test.ts PASSED
 
 ======================================================================
-STAGE 12 — CONFIGURATION AND DOCUMENT ENGINE                   [~]
+STAGE 12 — CONFIGURATION AND DOCUMENT ENGINE                   [x]
 ======================================================================
 Migration: supabase/migrations/20261014000100_stage12_config_engine.sql
 Test: tests/sql/stage12_config_engine.sql (40 checks) + tests/unit/templates.test.ts
+Test: tests/sql/stage12b_workflows_forms_channels.sql (42 checks, live 42/42) + tests/unit/formsWorkflow.test.ts
 [x] Custom fields (Settings → Custom fields) for customers, suppliers, products,
     warehouses, employees, customer groups, bank accounts, payment agents.
     Types: text, long text, whole number, decimal, amount, percentage, date,
@@ -437,14 +438,25 @@ Test: tests/sql/stage12_config_engine.sql (40 checks) + tests/unit/templates.tes
     DB validates every value; type locked once used; audit history
 [x] Custom fields on records: "Additional fields" in add / edit / view;
     optional list columns; "Filter by field" on list screens (kept in the URL)
-[ ] Reference / file / image / formula custom-field types (later)
-[ ] Custom fields on transactions (SO, invoice …) (later)
-[ ] Configurable forms / optional sections per role
-[~] Workflow: approval limits (Settings → Approvals) for sales orders, purchase
+[x] Reference (customer/supplier/product/warehouse/employee), file, image, date & time and formula
+    custom-field types (3 Nov 2026). Formula = {other number fields} + - * / ( ), calculated by the DB on save
+[x] Custom fields on documents: quotations, sales orders, GDNs, invoices, POs, GRNs, supplier bills,
+    shipments, vouchers, adjustments, transfers — "Document fields" panel on the document, edit in place;
+    a required document field must be filled before approve / post (DB trigger)
+[x] Configurable forms per role (Settings → Forms): hide fields, make fields required, hide / open
+    sections on master-record forms; required-for-role also checked by the DB (new records; values
+    can't be cleared). Two roles → most open form
+[x] Workflow: approval limits (Settings → Approvals) for sales orders, purchase
     orders, supplier bills, payment vouchers and invoice discount %; tiers by
     amount; enforced by DB triggers on approve / post; approver role must already
     hold the permission; notice on the document; "needs your approval" bell item
-[ ] Configurable workflow statuses / steps / transitions designer
+[x] Workflow designer (Settings → Workflows), 13 document types: review steps (who acts, fields /
+    files needed before passing), actions between steps (standard pass on + send back with comment,
+    or custom), on/off, "also hold one-step entries". Bar on each document: steps, Waiting for …,
+    action buttons, review history. DB trigger refuses approve / post / dispatch / send until the
+    steps are done; WORKFLOW_STEP notification to the step's roles. Documents made before the
+    workflow was turned on are not held
+[x] Owner can be named as approver: Owner now has sales.approve, sales.invoice, journals.post
 [x] Document templates (Settings → Documents): company look (logo upload,
     logo position/size, header name + lines, accent colour, text size, paper
     A4/A5/Letter, footer, page numbers) + per document (title, rename / hide
@@ -464,7 +476,14 @@ Test: tests/sql/stage12_config_engine.sql (40 checks) + tests/unit/templates.tes
     days-ahead. Receiver also needs the permission to act.
 [x] In-app notifications: bell in the top bar, unread count, popup on new,
     click opens the document, mark read; items clear themselves when done
-[ ] E-mail / WhatsApp / SMS notification channels (later, spec §21)
+[x] E-mail (Resend) + WhatsApp (Meta Cloud API template) delivery (Settings → Notifications →
+    E-mail & WhatsApp delivery): company switches, per-rule E-mail / WhatsApp chips, per-person
+    opt-in + contact (03xx → 92…), test buttons, recent messages. Outbox in DB; pg_cron every
+    5 min sweeps rules for opted-in people + calls edge function notify-send (Vault secret)
+    [!] Ahmad: add secrets RESEND_API_KEY + NOTIFY_EMAIL_FROM and/or WHATSAPP_TOKEN +
+        WHATSAPP_PHONE_NUMBER_ID; create Meta template "erp_alert" (2 variables)
+[ ] SMS channel — not needed yet
+[ ] Configurable forms for document entry screens (SO, invoice …) — master forms only for now
 [x] Configurable report shortcuts (done in Stage 11 — Admin → Report shortcuts)
 
 ======================================================================
@@ -639,3 +658,15 @@ Live test: tests/sql/stage12_config_engine.sql 38/38 ok on the live DB (salesper
 Tests: tests/sql/stage12_config_engine.sql 40/40 ok on a local rebuild of all migrations (other SQL tests unchanged vs. before);
        vitest 24/24 (11 new); typecheck + build ok.
 NEXT: Ahmad tests the new Settings tabs; then remaining Stage 12 (workflow designer, per-role forms) or Stage 13.
+
+
+=== 2026-11-03 — Stage 12 finished: workflows, forms per role, new field types, e-mail/WhatsApp ===
+Migrations: 20261103000100_stage12b_workflows_forms_channels, 20261103000200_notify_schedule (applied to live;
+            stored migration text checksum = repo file). Edge function notify-send v1 (verify_jwt off, own auth).
+New screens: Settings → Workflows, Settings → Forms; Custom fields: Documents group + 5 new types;
+             Notifications: delivery card + E-mail / WhatsApp chips; Document fields + review bar on documents.
+Tests: local replay of all migrations (embedded Postgres) — 21 older SQL test files give identical output;
+       new test 42/42 locally and on live (rolled back); vitest 30/30; build ok.
+NEXT: warehouse-trial fixes; Excel opening-stock import; PDF/WhatsApp on invoices & quotations;
+      stock calculator; then Stage 13 (owner mobile app).
+

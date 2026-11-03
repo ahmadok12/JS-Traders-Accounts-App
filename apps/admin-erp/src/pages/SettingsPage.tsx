@@ -13,6 +13,8 @@ import { EntityPage } from "../entity/EntityPage";
 import { branches } from "../entities/config";
 import { Tabs } from "../entity/EntityDialog";
 import { NumberingSettings } from "../settings/NumberingSettings";
+import { WorkflowSettings } from "../settings/WorkflowSettings";
+import { FormSettings } from "../settings/FormSettings";
 import { clearTemplateCache } from "../documents/template";
 import { DocumentTemplates } from "../settings/DocumentTemplates";
 import { CustomFieldsSettings } from "../settings/CustomFieldsSettings";
@@ -33,7 +35,7 @@ export function SettingsPage() {
         <Tabs value={tab} onChange={setTab} tabs={[
           { key: "company", label: "Company" }, { key: "branches", label: "Branches" }, { key: "features", label: "Features" },
           { key: "numbering", label: "Numbering" }, { key: "documents", label: "Documents" }, { key: "fields", label: "Custom fields" },
-          { key: "approvals", label: "Approvals" }, { key: "notifications", label: "Notifications" },
+          { key: "forms", label: "Forms" }, { key: "workflows", label: "Workflows" }, { key: "approvals", label: "Approvals" }, { key: "notifications", label: "Notifications" },
           ...(roles.includes("ADMINISTRATOR") ? [{ key: "trial", label: "Trial data" }] : []),
         ]} />
       </div>
@@ -43,6 +45,8 @@ export function SettingsPage() {
       {tab === "numbering" && <NumberingSettings />}
       {tab === "documents" && <DocumentTemplates />}
       {tab === "fields" && <CustomFieldsSettings />}
+      {tab === "forms" && <FormSettings />}
+      {tab === "workflows" && <WorkflowSettings />}
       {tab === "approvals" && <ApprovalSettings />}
       {tab === "notifications" && <NotificationSettings />}
       {tab === "trial" && <TrialReset />}

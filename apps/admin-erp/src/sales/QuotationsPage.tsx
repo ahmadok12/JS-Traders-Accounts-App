@@ -18,6 +18,7 @@ import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
 import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { ReportShortcuts } from "../reports/Shortcuts";
+import { DocExtras } from "../documents/DocExtras";
 
 type Row = Record<string, unknown> & { id: string };
 const Q_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
@@ -327,6 +328,7 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
               {h.terms ? <KeyValue label="Terms" className="col-span-2 md:col-span-5">{String(h.terms)}</KeyValue> : null}
               {h.notes ? <KeyValue label="Notes" className="col-span-2 md:col-span-5">{String(h.notes)}</KeyValue> : null}
             </dl>
+            <DocExtras docType="QUOTATION" entity="quotations" id={id} />
             <Tabs value={tab} onChange={setTab} tabs={[{ key: "lines", label: `Items (${lines.length})` }, { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : [])]} />
             {tab === "history" && <AuditTimeline table="quotations" id={id} />}
             {tab === "files" && <AttachmentsPanel entityType="quotations" entityId={id} />}

@@ -5,9 +5,12 @@
  */
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Checkbox, Field, FormGrid, Input, KeyValue, Textarea, cn } from "@jst/ui";
-import { sb, useAccess } from "@jst/data-access";
-import { formatDate, formatNumber } from "@jst/utilities";
+import { toast } from "sonner";
+import { Paperclip, Sigma } from "lucide-react";
+import { Badge, Button, Checkbox, Field, FormGrid, Input, KeyValue, SearchableSelect, Textarea, cn } from "@jst/ui";
+import { friendlyError, makeLookupLoader, sb, useAccess, type LookupSpec } from "@jst/data-access";
+import { formatDate, formatDateTime, formatNumber } from "@jst/utilities";
+import { openAttachment, uploadAttachment, type AttachmentEntity } from "../attachments/Attachments";
 
 export const CF_ENTITIES: { key: string; label: string }[] = [
   { key: "customers", label: "Customers" },
@@ -19,9 +22,37 @@ export const CF_ENTITIES: { key: string; label: string }[] = [
   { key: "bank_accounts", label: "Bank & cash accounts" },
   { key: "payment_agents", label: "Payment agents" },
 ];
-export const isCfEntity = (table: string) => CF_ENTITIES.some((e) => e.key === table);
+/** Documents: custom fields show on the document; required ones are checked when it is approved / posted. */
+export const CF_DOC_ENTITIES: { key: string; label: string }[] = [
+  { key: "quotations", label: "Quotations" },
+  { key: "sales_orders", label: "Sales orders" },
+  { key: "gdns", label: "Dispatch notes (GDN)" },
+  { key: "sales_invoices", label: "Sales invoices" },
+  { key: "purchase_orders", label: "Purchase orders" },
+  { key: "goods_receipts", label: "Goods receipts" },
+  { key: "supplier_bills", label: "Supplier bills" },
+  { key: "shipments", label: "Shipments" },
+  { key: "journal_entries", label: "Vouchers" },
+  { key: "stock_adjustments", label: "Stock adjustments" },
+  { key: "stock_transfers", label: "Stock transfers" },
+];
+export const isCfEntity = (table: string) => CF_ENTITIES.some((e) => e.key === table) || CF_DOC_ENTITIES.some((e) => e.key === table);
+export const isCfDocEntity = (table: string) => CF_DOC_ENTITIES.some((e) => e.key === table);
+/** records that can hold files (same list as the attachments service) */
+export const CF_FILE_ENTITIES = ["customers", "suppliers", "products", "quotations", "sales_orders", "gdns", "sales_invoices", "purchase_orders",
+  "goods_receipts", "supplier_bills", "shipments", "journal_entries", "stock_adjustments", "stock_transfers"];
 
-export type CfType = "text" | "long_text" | "number" | "decimal" | "currency" | "percentage" | "date" | "checkbox" | "dropdown" | "multi_select";
+export const CF_REF_ENTITIES: { key: string; label: string; lookup: LookupSpec }[] = [
+  { key: "customers", label: "Customer", lookup: { table: "customers", label: "name", secondary: "code", filters: { is_active: true } } },
+  { key: "suppliers", label: "Supplier", lookup: { table: "suppliers", label: "name", secondary: "code", filters: { is_active: true } } },
+  { key: "products", label: "Product", lookup: { table: "products", label: "name", secondary: "sku", filters: { is_active: true } } },
+  { key: "warehouses", label: "Warehouse", lookup: { table: "warehouses", label: "name", secondary: "code", filters: { is_active: true } } },
+  { key: "employees", label: "Employee", lookup: { table: "employees", label: "full_name", secondary: "code" } },
+];
+export const NUMBER_TYPES: CfType[] = ["number", "decimal", "currency", "percentage", "formula"];
+
+export type CfType = "text" | "long_text" | "number" | "decimal" | "currency" | "percentage" | "date" | "datetime" | "checkbox" | "dropdown" | "multi_select"
+  | "reference" | "file" | "image" | "formula";
 export const CF_TYPES: { value: CfType; label: string }[] = [
   { value: "text", label: "Text" },
   { value: "long_text", label: "Long text" },
@@ -30,17 +61,24 @@ export const CF_TYPES: { value: CfType; label: string }[] = [
   { value: "currency", label: "Amount (PKR)" },
   { value: "percentage", label: "Percentage" },
   { value: "date", label: "Date" },
+  { value: "datetime", label: "Date & time" },
   { value: "checkbox", label: "Yes / no" },
   { value: "dropdown", label: "Dropdown (one choice)" },
   { value: "multi_select", label: "Multi-select (several choices)" },
+  { value: "reference", label: "Link to a record (customer, product …)" },
+  { value: "file", label: "File" },
+  { value: "image", label: "Image / photo" },
+  { value: "formula", label: "Formula (calculated)" },
 ];
 
 export interface CfDef {
   id: string; entity: string; code: string; label: string; field_type: CfType; options: string[]; required: boolean;
   help_text: string | null; show_in_list: boolean; sort_order: number; is_active: boolean;
+  ref_entity?: string | null; formula?: string | null; decimals?: number | null;
 }
 export interface CfValueRow {
   field_id: string; record_id: string; value_text: string | null; value_number: number | null; value_date: string | null; value_bool: boolean | null; value_options: string[] | null;
+  value_ts?: string | null; value_ref?: string | null;
 }
 /** form value: string for text/number/date inputs, boolean for yes/no, string[] for multi-select */
 export type CfValue = string | boolean | string[] | null;
@@ -52,7 +90,7 @@ export function useCfDefs(entity: string | null, opts: { includeInactive?: boole
     enabled: !!companyId && !!entity && isCfEntity(entity),
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      let q = sb().from("custom_field_definitions").select("id, entity, code, label, field_type, options, required, help_text, show_in_list, sort_order, is_active")
+      let q = sb().from("custom_field_definitions").select("id, entity, code, label, field_type, options, required, help_text, show_in_list, sort_order, is_active, ref_entity, formula, decimals")
         .eq("company_id", companyId!).eq("entity", entity!).order("sort_order").order("label");
       if (!opts.includeInactive) q = q.eq("is_active", true);
       const { data, error } = await q;
@@ -69,7 +107,7 @@ export function useCfValues(entity: string, recordIds: string[], enabled = true)
     enabled: enabled && recordIds.length > 0,
     staleTime: 30_000,
     queryFn: async () => {
-      const { data, error } = await sb().from("custom_field_values").select("field_id, record_id, value_text, value_number, value_date, value_bool, value_options")
+      const { data, error } = await sb().from("custom_field_values").select("field_id, record_id, value_text, value_number, value_date, value_bool, value_options, value_ts, value_ref")
         .eq("entity", entity).in("record_id", recordIds);
       if (error) return [] as CfValueRow[];
       return (data ?? []) as CfValueRow[];
@@ -82,10 +120,21 @@ export function rowToForm(d: CfDef, r: CfValueRow | undefined): CfValue {
   switch (d.field_type) {
     case "number": case "decimal": case "currency": case "percentage": return r.value_number == null ? "" : String(r.value_number);
     case "date": return r.value_date ?? "";
+    case "datetime": return r.value_ts ? toLocalInput(r.value_ts) : "";
     case "checkbox": return !!r.value_bool;
     case "multi_select": return r.value_options ?? [];
+    case "reference": case "file": case "image": return r.value_ref ?? "";
+    case "formula": return r.value_number == null ? "" : String(r.value_number);
     default: return r.value_text ?? "";
   }
+}
+
+/** ISO time → value for <input type="datetime-local"> in the browser's time zone */
+function toLocalInput(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 export function formatCf(d: CfDef, r: CfValueRow | undefined): string {
@@ -96,6 +145,8 @@ export function formatCf(d: CfDef, r: CfValueRow | undefined): string {
     case "currency": return r.value_number == null ? "" : formatNumber(r.value_number, 2);
     case "percentage": return r.value_number == null ? "" : `${Number(r.value_number)}%`;
     case "date": return r.value_date ? formatDate(r.value_date) : "";
+    case "datetime": return r.value_ts ? formatDateTime(r.value_ts) : "";
+    case "formula": return r.value_number == null ? "" : formatNumber(r.value_number, d.decimals ?? 2);
     case "checkbox": return r.value_bool ? "Yes" : "No";
     case "multi_select": return (r.value_options ?? []).join(", ");
     default: return r.value_text ?? "";
@@ -108,8 +159,9 @@ const isEmpty = (v: CfValue) => v == null || v === "" || (Array.isArray(v) && v.
 export function validateCf(defs: CfDef[], values: Record<string, CfValue>): Record<string, string> {
   const err: Record<string, string> = {};
   for (const d of defs) {
+    if (d.field_type === "formula") continue;
     const v = values[d.id];
-    if (d.required && d.field_type !== "checkbox" && isEmpty(v)) { err[d.id] = "Required"; continue; }
+    if (d.required && d.field_type !== "checkbox" && isEmpty(v) && !isCfDocEntity(d.entity)) { err[d.id] = "Required"; continue; }
     if (isEmpty(v)) continue;
     if (["number", "decimal", "currency", "percentage"].includes(d.field_type) && !Number.isFinite(Number(v))) err[d.id] = "Enter a number";
     if (d.field_type === "dropdown" && !d.options.includes(String(v))) err[d.id] = "Choose from the list";
@@ -121,9 +173,11 @@ export function validateCf(defs: CfDef[], values: Record<string, CfValue>): Reco
 export function cfPayload(defs: CfDef[], values: Record<string, CfValue>) {
   const out: Record<string, unknown> = {};
   for (const d of defs) {
+    if (d.field_type === "formula") continue; // calculated by the database
     const v = values[d.id];
     if (isEmpty(v)) { out[d.id] = d.field_type === "checkbox" ? false : null; continue; }
-    out[d.id] = ["number", "decimal", "currency", "percentage"].includes(d.field_type) ? Number(v) : v;
+    out[d.id] = ["number", "decimal", "currency", "percentage"].includes(d.field_type) ? Number(v)
+      : d.field_type === "datetime" ? new Date(String(v)).toISOString() : v;
   }
   return out;
 }
@@ -136,10 +190,26 @@ export async function saveCfValues(companyId: string, entity: string, recordId: 
 
 const selectCls = "h-control w-full rounded-control border border-transparent bg-field px-2 text-sm hover:border-line focus:border-line-strong focus:bg-surface focus:outline-none";
 
-export function CfInput({ def, value, onChange, error }: { def: CfDef; value: CfValue; onChange: (v: CfValue) => void; error?: string }) {
+export function CfInput({ def, value, onChange, error, recordId, label: shownLabel }: {
+  def: CfDef; value: CfValue; onChange: (v: CfValue) => void; error?: string;
+  /** the record being edited — needed to attach files (not available while creating) */
+  recordId?: string | null; label?: string | null;
+}) {
   const id = `cf-${def.id}`;
   const label = def.label;
   switch (def.field_type) {
+    case "formula":
+      return <Field label={label} hint={def.help_text ?? `= ${def.formula ?? ""}`} htmlFor={id}>
+        <div id={id} className="flex h-control items-center gap-1.5 rounded-control bg-subtle px-2 text-sm tabular-nums text-ink-2">
+          <Sigma className="h-3.5 w-3.5 text-ink-faint" />{value === "" || value == null ? <span className="text-ink-faint">calculated on save</span> : formatNumber(Number(value), def.decimals ?? 2)}
+        </div></Field>;
+    case "datetime":
+      return <Field label={label} required={def.required} error={error} hint={def.help_text} htmlFor={id}><Input id={id} type="datetime-local" invalid={!!error} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)} /></Field>;
+    case "reference":
+      return <Field label={label} required={def.required} error={error} hint={def.help_text} htmlFor={id}><CfRefSelect def={def} id={id} value={String(value ?? "")} invalid={!!error} onChange={onChange} /></Field>;
+    case "file": case "image":
+      return <Field label={label} required={def.required} error={error} hint={def.help_text} htmlFor={id}>
+        <CfFileInput def={def} id={id} value={String(value ?? "")} recordId={recordId ?? null} fileName={shownLabel ?? null} onChange={onChange} /></Field>;
     case "checkbox":
       return <div className="flex items-end pb-5"><Checkbox id={id} checked={value === true} onChange={(v) => onChange(v)} label={label} description={def.help_text ?? undefined} /></div>;
     case "long_text":
@@ -172,27 +242,66 @@ export function CfInput({ def, value, onChange, error }: { def: CfDef; value: Cf
   }
 }
 
-export function CfFormSection({ defs, values, onChange, errors }: {
+function CfRefSelect({ def, id, value, invalid, onChange }: { def: CfDef; id: string; value: string; invalid: boolean; onChange: (v: CfValue) => void }) {
+  const { companyId } = useAccess();
+  const spec = CF_REF_ENTITIES.find((e) => e.key === def.ref_entity)?.lookup;
+  const loader = React.useMemo(() => (spec ? makeLookupLoader(spec, companyId) : null), [spec, companyId]);
+  if (!loader) return <p className="text-xs text-ink-faint">—</p>;
+  return <SearchableSelect id={id} value={value || null} invalid={invalid} onChange={(v) => onChange(v ?? "")} loadOptions={loader.load} resolveOption={loader.resolve} placeholder="Search…" clearable={!def.required} />;
+}
+
+function CfFileInput({ def, id, value, recordId, fileName, onChange }: { def: CfDef; id: string; value: string; recordId: string | null; fileName: string | null; onChange: (v: CfValue) => void }) {
+  const [busy, setBusy] = React.useState(false);
+  const [name, setName] = React.useState<string | null>(fileName);
+  React.useEffect(() => setName(fileName), [fileName]);
+  if (!recordId) return <p className="flex h-control items-center text-xs text-ink-faint">Save first, then attach the {def.field_type === "image" ? "photo" : "file"}.</p>;
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    if (def.field_type === "image" && !f.type.startsWith("image/")) { toast.error("Choose a photo or image"); return; }
+    setBusy(true);
+    try {
+      const aid = await uploadAttachment(def.entity as AttachmentEntity, recordId, f, def.label);
+      setName(f.name);
+      onChange(aid);
+    } catch (e) { toast.error(friendlyError(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="flex h-control items-center gap-2">
+      <label className={cn("inline-flex h-control-sm cursor-pointer items-center gap-1 rounded-control border border-line px-2 text-xs hover:border-line-strong", busy && "opacity-60")}>
+        <Paperclip className="h-3.5 w-3.5" />{busy ? "Uploading…" : value ? "Replace" : def.field_type === "image" ? "Add photo" : "Attach file"}
+        <input id={id} type="file" className="hidden" disabled={busy} accept={def.field_type === "image" ? "image/*" : undefined} capture={def.field_type === "image" ? "environment" : undefined}
+          onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }} />
+      </label>
+      {value && <button type="button" className="min-w-0 truncate text-xs text-primary hover:underline" onClick={() => void openAttachment(value)}>{name ?? "Open"}</button>}
+      {value && <Button size="sm" variant="ghost" onClick={() => onChange("")}>Remove</Button>}
+    </div>
+  );
+}
+
+export function CfFormSection({ defs, values, onChange, errors, recordId, rows, title = "Additional fields" }: {
   defs: CfDef[]; values: Record<string, CfValue>; onChange: (id: string, v: CfValue) => void; errors: Record<string, string>;
+  recordId?: string | null; rows?: CfValueRow[]; title?: string;
 }) {
   if (!defs.length) return null;
+  const by = new Map((rows ?? []).map((r) => [r.field_id, r]));
   return (
     <div className="rounded-card border border-line p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Additional fields</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">{title}</div>
       <FormGrid cols={3}>
-        {defs.map((d) => <CfInput key={d.id} def={d} value={values[d.id] ?? null} error={errors[d.id]} onChange={(v) => onChange(d.id, v)} />)}
+        {defs.map((d) => <CfInput key={d.id} def={d} value={values[d.id] ?? null} error={errors[d.id]} onChange={(v) => onChange(d.id, v)}
+          recordId={recordId} label={by.get(d.id)?.value_text ?? null} />)}
       </FormGrid>
     </div>
   );
 }
 
-export function CfViewSection({ defs, rows }: { defs: CfDef[]; rows: CfValueRow[] }) {
+export function CfViewSection({ defs, rows, title = "Additional fields", action }: { defs: CfDef[]; rows: CfValueRow[]; title?: string; action?: React.ReactNode }) {
   if (!defs.length) return null;
   const by = new Map(rows.map((r) => [r.field_id, r]));
   const any = defs.some((d) => by.has(d.id));
   return (
     <div className="rounded-card border border-line p-3">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Additional fields</div>
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-muted"><span className="flex-1">{title}</span>{action}</div>
       {any ? (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
           {defs.map((d) => {
@@ -202,6 +311,8 @@ export function CfViewSection({ defs, rows }: { defs: CfDef[]; rows: CfValueRow[
               <KeyValue key={d.id} label={d.label} className={d.field_type === "long_text" ? "col-span-2 md:col-span-3 lg:col-span-4" : undefined}>
                 {d.field_type === "multi_select" && r?.value_options?.length
                   ? <span className="flex flex-wrap gap-1">{r.value_options.map((o) => <Badge key={o}>{o}</Badge>)}</span>
+                  : (d.field_type === "file" || d.field_type === "image") && r?.value_ref
+                    ? <button type="button" className="inline-flex items-center gap-1 text-primary hover:underline" onClick={() => void openAttachment(r.value_ref!)}><Paperclip className="h-3.5 w-3.5" />{txt || "Open"}</button>
                   : txt ? <span className="whitespace-pre-wrap">{txt}</span> : <span className="text-ink-faint">—</span>}
               </KeyValue>
             );
@@ -237,7 +348,8 @@ export const filterOps = (t: CfType): { value: CfFilter["op"]; label: string }[]
   t === "checkbox" ? [{ value: "yes", label: "is Yes" }, { value: "no", label: "is No" }]
   : t === "dropdown" ? [{ value: "eq", label: "is" }, { value: "empty", label: "is empty" }]
   : t === "multi_select" ? [{ value: "any", label: "includes" }, { value: "empty", label: "is empty" }]
-  : ["number", "decimal", "currency", "percentage", "date"].includes(t) ? [{ value: "eq", label: "=" }, { value: "gte", label: "≥" }, { value: "lte", label: "≤" }, { value: "empty", label: "is empty" }]
+  : t === "reference" || t === "file" || t === "image" ? [{ value: "contains", label: "contains" }, { value: "empty", label: "is empty" }]
+  : ["number", "decimal", "currency", "percentage", "formula", "date", "datetime"].includes(t) ? [{ value: "eq", label: "=" }, { value: "gte", label: "≥" }, { value: "lte", label: "≤" }, { value: "empty", label: "is empty" }]
   : [{ value: "contains", label: "contains" }, { value: "eq", label: "is exactly" }, { value: "empty", label: "is empty" }];
 
 export const encodeCfFilter = (f: CfFilter) => [f.field, f.op, f.value].map(encodeURIComponent).join("~");
@@ -258,7 +370,7 @@ export function useCfFilterIds(entity: string, f: CfFilter | null, def: CfDef | 
     staleTime: 15_000,
     queryFn: async () => {
       const d = def!; const flt = f!;
-      const col = ["number", "decimal", "currency", "percentage"].includes(d.field_type) ? "value_number" : d.field_type === "date" ? "value_date" : d.field_type === "checkbox" ? "value_bool" : "value_text";
+      const col = ["number", "decimal", "currency", "percentage", "formula"].includes(d.field_type) ? "value_number" : d.field_type === "date" || d.field_type === "datetime" ? "value_date" : d.field_type === "checkbox" ? "value_bool" : "value_text";
       if (flt.op === "empty" || flt.op === "no") {
         // records WITHOUT a value: everything except those that have one
         const has = await sb().from("custom_field_values").select("record_id").eq("field_id", d.id).limit(5000);
