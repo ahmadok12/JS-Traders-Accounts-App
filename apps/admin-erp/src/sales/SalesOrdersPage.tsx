@@ -247,7 +247,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
             ]} />
             {tab === "history" && <AuditTimeline table="sales_orders" id={id} />}
             {tab === "files" && <AttachmentsPanel entityType="sales_orders" entityId={id} />}
-            {tab === "photos" && <SoPickingPhotos photos={pickPhotos.data ?? []} loading={pickPhotos.isLoading} />}
+            {tab === "photos" && <SoPickingPhotos photos={pickPhotos.data ?? []} loading={pickPhotos.isLoading} zipName={h ? String(h.doc_no) : undefined} />}
             {tab === "picking" && <SoPickingTab tasks={tasks.data ?? []} onOpen={(tid) => navigate(`/picking?view=${tid}`)} />}
             {tab === "gdns" && (
               <div className="flex flex-wrap gap-2">

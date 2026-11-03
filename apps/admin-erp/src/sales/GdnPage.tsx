@@ -544,7 +544,7 @@ function GdnView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<typ
               ...(can(P.pickingManage) || can(P.salesView) ? [{ key: "photos", label: `Picking photos (${photos.length})` }] : []),
               { key: "files", label: filesLabel(files.data?.length) }, ...(can("audit.view") ? [{ key: "history", label: "History" }] : []),
             ]} />
-            {tab === "photos" && <SoPickingPhotos photos={photos} loading={soPhotos.isLoading} />}
+            {tab === "photos" && <SoPickingPhotos photos={photos} loading={soPhotos.isLoading} zipName={h ? String(h.doc_no) : undefined} />}
             {tab === "history" && <AuditTimeline table="gdns" id={id} />}
             {tab === "files" && <AttachmentsPanel entityType="gdns" entityId={id} />}
             {tab === "moves" && <MovementsTable sourceId={id} />}

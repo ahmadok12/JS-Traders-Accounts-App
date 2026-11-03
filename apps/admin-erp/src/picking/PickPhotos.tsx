@@ -149,8 +149,46 @@ export function useSoPickingPhotos(soId: string | null) {
   return q;
 }
 
-export function SoPickingPhotos({ photos, loading }: { photos: PhotoRow[]; loading?: boolean }) {
+/** All photos (originals) in one ZIP: <task>_<warehouse>_<nn>_<picker>.jpg */
+async function downloadAllPhotos(photos: PhotoRow[], zipBase: string, onProgress: (done: number) => void) {
+  const { zipSync } = await import("fflate");
+  const files: Record<string, [Uint8Array, { level: 0 }]> = {};
+  const safe = (v: string | null | undefined) => (v ?? "").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+  let done = 0, failed = 0;
+  const one = async (p: PhotoRow, i: number) => {
+    try {
+      const { data, error } = await sb().functions.invoke("attachments", { body: { action: "bytes", id: p.id } });
+      if (error || !(data instanceof Blob)) throw error ?? new Error("not a file");
+      const ext = (p.original_file_name?.match(/\.([a-z0-9]{2,5})$/i)?.[1] ?? "jpg").toLowerCase();
+      let name = [safe(p.task_doc_no), safe(p.warehouse_code), String(i + 1).padStart(2, "0"), safe(p.uploaded_by_name)].filter(Boolean).join("_") + "." + ext;
+      while (files[name]) name = name.replace(/(\.[a-z0-9]+)$/i, "-1$1");
+      files[name] = [new Uint8Array(await data.arrayBuffer()), { level: 0 }]; // photos are already compressed — just store them
+    } catch { failed++; }
+    onProgress(++done);
+  };
+  for (let i = 0; i < photos.length; i += 4) await Promise.all(photos.slice(i, i + 4).map((p, k) => one(p, i + k)));
+  if (!Object.keys(files).length) throw new Error("The photos could not be downloaded — check the connection and try again");
+  const zip = zipSync(files);
+  const url = URL.createObjectURL(new Blob([zip], { type: "application/zip" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = `${safe(zipBase) || "picking"} - picking photos.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { count: Object.keys(files).length, failed, mb: zip.byteLength / 1048576 };
+}
+
+export function SoPickingPhotos({ photos, loading, zipName }: { photos: PhotoRow[]; loading?: boolean; /** document no. used for the ZIP file name */ zipName?: string }) {
   const [view, setView] = React.useState<number | null>(null);
+  const [progress, setProgress] = React.useState<number | null>(null);
+  const downloadAll = async () => {
+    setProgress(0);
+    try {
+      const r = await downloadAllPhotos(photos, zipName ?? "picking", setProgress);
+      toast.success(`Downloaded ${r.count} photo${r.count > 1 ? "s" : ""} (${r.mb.toFixed(1)} MB zip)`);
+      if (r.failed) toast.error(`${r.failed} photo${r.failed > 1 ? "s" : ""} could not be downloaded`);
+    } catch (e) { toast.error(friendlyError(e)); }
+    finally { setProgress(null); }
+  };
   if (loading) return <p className="text-sm text-ink-muted">Loading photos…</p>;
   if (!photos.length) return <p className="rounded-card border border-line px-4 py-6 text-center text-sm text-ink-muted">No picking photos yet — they appear here the moment a picker adds them.</p>;
   const groups: { key: string; title: string; items: { p: PhotoRow; i: number }[] }[] = [];
@@ -162,6 +200,12 @@ export function SoPickingPhotos({ photos, loading }: { photos: PhotoRow[]; loadi
   });
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-xs text-ink-muted">{photos.length} photo{photos.length > 1 ? "s" : ""}</span>
+        <Button size="sm" icon={progress != null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} disabled={progress != null} onClick={() => void downloadAll()}>
+          {progress != null ? `Downloading ${progress}/${photos.length}…` : `Download all (${photos.length})`}
+        </Button>
+      </div>
       {groups.map((g) => (
         <div key={g.key}>
           <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">{g.title} · {g.items.length} photo{g.items.length > 1 ? "s" : ""}</div>
