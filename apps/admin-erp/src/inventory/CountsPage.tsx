@@ -1,7 +1,9 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, CheckCircle2, ClipboardCheck, Lock, Plus, Save, ShieldAlert, Trash2 } from "lucide-react";
+import { Ban, CheckCircle2, ClipboardCheck, Download, FileSpreadsheet, Lock, Plus, Save, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { matchRows, type CatalogItem, type ImportRow } from "./stockImport";
+import { readStatementFile } from "../banking/statementParse";
 import {
   Badge, Button, Card, Checkbox, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, FormGrid, Input,
   KeyValue, PageHeader, SearchableSelect, SectionTitle, Skeleton, Textarea, cn,
@@ -61,7 +63,10 @@ export function CountsPage() {
         title="Stock Counts"
         icon={icon}
         description="Progressive physical counting: count some items today, more tomorrow. Each approved line adjusts stock to what was counted."
-        actions={can(P.inventoryCount) && <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => update({ new: "1" })}>New Count</Button>}
+        actions={can(P.inventoryCount) && <div className="flex gap-2">
+          <Button icon={<FileSpreadsheet className="h-4 w-4" />} onClick={() => update({ import: "1" })}>Import from Excel</Button>
+          <Button variant="primary" icon={<Plus className="h-4 w-4" />} onClick={() => update({ new: "1" })}>New Count</Button>
+        </div>}
       />
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
@@ -92,6 +97,7 @@ export function CountsPage() {
       </Card>
       {creating && <NewCountDialog onClose={() => update({ new: null })} onCreated={(id) => update({ new: null, view: id })} />}
       {viewId && <CountDialog id={viewId} onClose={() => update({ view: null })} />}
+      {params.get("import") === "1" && <ImportCountDialog onClose={() => update({ import: null })} onCreated={(id) => update({ import: null, view: id })} />}
     </div>
   );
 }
@@ -372,5 +378,128 @@ function CountDialog({ id, onClose }: { id: string; onClose: () => void }) {
       <ConfirmDialog open={confirm === "close"} title="Close this count?" message="No more lines can be added or approved." confirmLabel="Close count" loading={action.isPending} onCancel={() => setConfirm(null)} onConfirm={() => action.mutate("close")} />
       <ConfirmDialog open={confirm === "cancel"} title="Cancel this count?" message="Nothing has been approved yet, so stock is not affected." tone="destructive" confirmLabel="Cancel count" cancelLabel="Keep count" loading={action.isPending} onCancel={() => setConfirm(null)} onConfirm={() => action.mutate("cancel")} />
     </>
+  );
+}
+
+
+/** Counted stock from an Excel / CSV sheet → one stock count per warehouse, lines already counted. Review, then post. */
+function ImportCountDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const { companyId } = useAccess();
+  const qc = useQueryClient();
+  const [wh, setWh] = React.useState<string | null>(null);
+  const [type, setType] = React.useState<string | null>("INITIAL_COUNT");
+  const [file, setFile] = React.useState<File | null>(null);
+  const [rows, setRows] = React.useState<ImportRow[] | null>(null);
+  const [problem, setProblem] = React.useState<string | null>(null);
+  const catalog = useQuery({
+    queryKey: ["import-catalog", companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await sb().from("products").select("id, sku, name, has_variants, tracking_type, uom:units_of_measure!products_base_uom_id_fkey(code), variants:product_variants(id, sku, name, is_active)")
+        .eq("company_id", companyId!).eq("is_active", true).order("sku");
+      if (error) throw error;
+      const out: CatalogItem[] = [];
+      for (const p of (data ?? []) as unknown as { id: string; sku: string; name: string; has_variants: boolean; tracking_type: string; uom: { code: string } | null; variants: { id: string; sku: string; name: string; is_active: boolean }[] }[]) {
+        const vs = (p.variants ?? []).filter((v) => v.is_active).sort((a, b) => a.sku.localeCompare(b.sku));
+        if (p.has_variants && vs.length) for (const v of vs) out.push({ product_id: p.id, variant_id: v.id, sku: v.sku, product: p.name, variant: v.name, uom: p.uom?.code ?? "", rolls: p.tracking_type === "PHYSICAL_UNIT" });
+        else out.push({ product_id: p.id, variant_id: null, sku: p.sku, product: p.name, variant: null, uom: p.uom?.code ?? "", rolls: p.tracking_type === "PHYSICAL_UNIT" });
+      }
+      return out;
+    },
+  });
+  const whs = useQuery({
+    queryKey: ["import-warehouses", companyId],
+    enabled: !!companyId,
+    queryFn: async () => { const { data, error } = await sb().from("warehouses").select("id, code, name").eq("company_id", companyId!).eq("is_active", true).order("code"); if (error) throw error; return data as { id: string; code: string; name: string }[]; },
+  });
+
+  const template = async () => {
+    const { default: writeXlsxFile } = await import("write-excel-file");
+    const head = ["SKU", "Product", "Variant", "Unit", "Counted qty"].map((v) => ({ value: v, fontWeight: "bold" as const, backgroundColor: "#F3F4F6" }));
+    const body = (catalog.data ?? []).map((c) => [{ value: c.sku }, { value: c.product }, { value: c.variant ?? "" }, { value: c.uom + (c.rolls ? " (roll: total feet)" : "") }, null]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (writeXlsxFile as any)([head, ...body], { fileName: "JS Traders stock count sheet.xlsx", columns: [{ width: 14 }, { width: 34 }, { width: 16 }, { width: 22 }, { width: 14 }] });
+  };
+  const read = async (f: File | null) => {
+    setFile(f); setRows(null); setProblem(null);
+    if (!f) return;
+    try {
+      const grid = await readStatementFile(f);
+      const r = matchRows(grid, catalog.data ?? [], whs.data ?? [], wh);
+      setRows(r.rows); setProblem(r.problem);
+    } catch (e) { setProblem((e as Error).message); }
+  };
+  React.useEffect(() => { if (file) void read(file); /* re-match when the warehouse changes */ // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wh, catalog.data]);
+  const good = (rows ?? []).filter((r) => !r.error && r.product_id && r.warehouse_id);
+  const bad = (rows ?? []).filter((r) => r.error);
+  const byWh = Array.from(new Set(good.map((r) => r.warehouse_id!)));
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const ids: string[] = [];
+      for (const w of byWh) {
+        const { data, error } = await sb().rpc("create_stock_count", { p_company_id: companyId, p_warehouse_id: w, p_count_type: type, p_notes: `Imported from ${file?.name ?? "sheet"}`, p_load_stocked_items: false });
+        if (error) throw error;
+        const cid = data as string; ids.push(cid);
+        const lines = good.filter((r) => r.warehouse_id === w).map((r) => ({ product_id: r.product_id, variant_id: r.variant_id, location_id: null, counted_qty: String(r.qty) }));
+        for (let i = 0; i < lines.length; i += 200) {
+          const res = await sb().rpc("save_stock_count_lines", { p_count_id: cid, p_lines: lines.slice(i, i + 200) });
+          if (res.error) throw res.error;
+        }
+      }
+      return ids;
+    },
+    onSuccess: (ids) => {
+      toast.success(`${ids.length} count${ids.length > 1 ? "s" : ""} created with ${good.length} counted item${good.length === 1 ? "" : "s"} — check them, then Approve & post`);
+      qc.invalidateQueries({ queryKey: ["list", "stock_counts"] }); onCreated(ids[0]);
+    },
+    onError: (e) => toast.error(friendlyError(e)),
+  });
+
+  return (
+    <ErpDialog open onRequestClose={onClose} title="Import counted stock" icon={<FileSpreadsheet className="h-4 w-4" />} size="xl"
+      footer={<>
+        {rows && <span className="text-xs text-ink-muted">{good.length} ready{bad.length ? ` · ${bad.length} with problems (skipped)` : ""}</span>}
+        <div className="flex-1" /><Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" icon={<Upload className="h-3.5 w-3.5" />} disabled={!good.length} loading={create.isPending} onClick={() => create.mutate()}>
+          Create count{byWh.length > 1 ? `s (${byWh.length} warehouses)` : ""}
+        </Button>
+      </>}>
+      <ol className="mb-3 list-decimal space-y-1 pl-5 text-sm text-ink-muted">
+        <li>Download the sheet — it lists every product and variant. Fill <b>Counted qty</b> for what you counted (leave the rest empty; 0 means none). Roll items: total feet.</li>
+        <li>Choose the warehouse (or add a <b>Warehouse</b> column with the code, e.g. WH-01) and upload the file (.xlsx or .csv).</li>
+        <li>A stock count is created with these quantities. Open it, check, and <b>Approve &amp; post</b> — stock (also negative stock) is set to what you counted.</li>
+      </ol>
+      <FormGrid cols={3}>
+        <Field label="Blank sheet"><Button icon={<Download className="h-3.5 w-3.5" />} disabled={!catalog.data} onClick={() => void template()}>Download stock count sheet</Button></Field>
+        <Field label="Warehouse"><WarehousePicker value={wh} onChange={setWh} /></Field>
+        <Field label="Count type"><SearchableSelect value={type} onChange={setType} options={COUNT_TYPES} clearable={false} /></Field>
+        <Field label="File" className="sm:col-span-3">
+          <input type="file" accept=".xlsx,.csv,.txt" className="text-sm" onChange={(e) => void read(e.target.files?.[0] ?? null)} />
+        </Field>
+      </FormGrid>
+      {problem && <p className="mt-2 text-sm text-danger">{problem}</p>}
+      {rows && rows.length > 0 && (
+        <div className="mt-3 max-h-[45vh] overflow-auto rounded-card border border-line">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0"><tr className="bg-subtle text-left text-2xs font-semibold uppercase tracking-wide text-ink-muted">
+              <th className="h-8 w-14 px-2">Row</th><th className="px-2">Item</th><th className="w-24 px-2">Warehouse</th><th className="w-28 px-2 text-right">Counted</th><th className="px-2">Problem</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} className={cn("border-b border-line/60", r.error && "bg-danger-soft/30")}>
+                  <td className="px-2 py-1 text-2xs text-ink-faint">{r.row}</td>
+                  <td className="px-2 py-1">{r.label}</td>
+                  <td className="px-2 py-1 font-mono text-xs">{whs.data?.find((w) => w.id === r.warehouse_id)?.code ?? "—"}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">{r.qty == null ? "—" : qty(r.qty)} <span className="text-2xs text-ink-faint">{r.uom}</span></td>
+                  <td className="px-2 py-1 text-xs text-danger">{r.error ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </ErpDialog>
   );
 }

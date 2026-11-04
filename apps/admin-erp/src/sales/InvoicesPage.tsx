@@ -18,6 +18,7 @@ import { DiscountField, fetchGdnLinePrices, n, qtyFmt, useItemAvailability, useL
 import { autoFill, useOpenReceipts } from "./allocations";
 import { printDocument } from "./print";
 import { customerRows, type InvoicePackages } from "./calc/invoiceRows";
+import { ShareButtons } from "./ShareButtons";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { ApprovalNotice } from "../documents/ApprovalNotice";
@@ -204,7 +205,7 @@ function useInvoice(id: string) {
     queryKey: ["record", "sales_invoices", id],
     queryFn: async () => {
       const [h, v, l] = await Promise.all([
-        sb().from("sales_invoices").select("id, doc_no, invoice_date, due_date, customer_id, customer_reference, status, notes, lines_draft, subtotal, discount_amount, total_amount, journal_entry_id, posted_at, reversed_at, reversal_reason, carry_receipts, is_quick, corrects_invoice_id, customer:customers(name, code, city)").eq("id", id).single(),
+        sb().from("sales_invoices").select("id, doc_no, invoice_date, due_date, customer_id, customer_reference, status, notes, lines_draft, subtotal, discount_amount, total_amount, journal_entry_id, posted_at, reversed_at, reversal_reason, carry_receipts, is_quick, corrects_invoice_id, customer:customers(name, code, city, phone, whatsapp)").eq("id", id).single(),
         sb().from("sales_invoices_v").select("paid_amount, outstanding, payment_status").eq("id", id).maybeSingle(),
         sb().from("sales_invoice_lines").select("id, line_no, product_id, variant_id, description, quantity, unit_price, sources, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name)").eq("invoice_id", id).order("line_no"),
       ]);
@@ -476,7 +477,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   const h = data.header;
   const id = String(h.id);
   const status = String(h.status);
-  const cust = h.customer as { name: string; code: string; city: string | null };
+  const cust = h.customer as { name: string; code: string; city: string | null; phone?: string | null; whatsapp?: string | null };
   const [tab, setTab] = React.useState("lines");
   const files = useAttachments("sales_invoices", id);
   const [dlg, setDlg] = React.useState<null | "pay" | "alloc" | "reverse" | "correct">(null);
@@ -518,7 +519,7 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   });
   const overdue = isOverdue({ due_date: h.due_date, outstanding });
 
-  const print = () => {
+  const makeBuild = () => {
     const base = {
       docType: "SALES_INVOICE", cfSources: [{ entity: "sales_invoices", id: String(h.id) }],
       company: company?.company_name ?? "", title: "Sales Invoice", docNo: String(h.doc_no),
@@ -539,14 +540,19 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
           [Number(data.pay.paid_amount) ? "Balance due" : "Total", money(Number(data.pay.paid_amount) ? outstanding : (h.total_amount as number))]] as [string, string][],
       };
     };
-    const ok = printDocument(build(null), {
-      prepare: async () => {
-        const r = await sb().rpc("invoice_packages", { p_invoice_id: String(h.id) });
-        return build(r.error ? null : (r.data as InvoicePackages));
-      },
-    });
+    return build;
+  };
+  const print = () => {
+    const build = makeBuild();
+    const ok = printDocument(build(null), { prepare: () => fullSpec(build) });
     if (!ok) toast.error("Allow pop-ups to print");
   };
+  /** the printout with calculator packages folded in (used by Print, Save as PDF and WhatsApp) */
+  const fullSpec = async <T,>(build: (pk: InvoicePackages | null) => T): Promise<T> => {
+    const r = await sb().rpc("invoice_packages", { p_invoice_id: String(h.id) });
+    return build(r.error ? null : (r.data as InvoicePackages));
+  };
+  const shareSpec = () => fullSpec(makeBuild());
 
   return (
     <>
@@ -559,6 +565,8 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
             <div className="flex-1" />
             {!!h.journal_entry_id && can(P.journalsView) && <Button icon={<BookOpen className="h-3.5 w-3.5" />} onClick={() => navigate(`/vouchers?view=${h.journal_entry_id}`)}>Journal entry</Button>}
             {status !== "CANCELLED" && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print</Button>}
+            {status !== "CANCELLED" && <ShareButtons spec={shareSpec} docNo={String(h.doc_no)} customerName={cust.name} phone={cust.whatsapp || cust.phone || null}
+              message={`Assalam-o-Alaikum ${cust.name},\nPlease find attached Invoice ${String(h.doc_no)} dated ${formatDate(h.invoice_date as string)} — total ${money(h.total_amount as number)}${outstanding > 0 && Number(data.pay.paid_amount) > 0 ? `, balance due ${money(outstanding)}` : ""}.\n${company?.company_name ?? ""}`} />}
             <Button onClick={onClose}>Close</Button>
             {status === "POSTED" && canInv && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setDlg("correct")}>Edit</Button>}
             {status === "POSTED" && outstanding > 0 && canInv && <Button icon={<Link2 className="h-3.5 w-3.5" />} onClick={() => setDlg("alloc")}>Use earlier receipt</Button>}

@@ -69,7 +69,7 @@ export interface NavGroup {
 
 /** Navigation follows the ERP module structure (spec §3.1), filtered by role. */
 export const NAV: NavGroup[] = [
-  { label: "", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }, { to: "/warehouse-desk", label: "Warehouse Desk", icon: Gauge, perms: [P.pickingManage] }, { to: "/reports", label: "Reports", icon: BarChart3 }] },
+  { label: "", items: [{ to: "/", label: "Dashboard", icon: LayoutDashboard }, { to: "/warehouse-desk", label: "Warehouse Desk", icon: Gauge, perms: [P.pickingManage] }, { to: "/reports", label: "Reports", icon: BarChart3 }, { to: "/o", label: "Owner phone app", icon: Smartphone, perms: [P.salesViewPrices, P.journalsView] }] },
   {
     label: "Sales",
     items: [

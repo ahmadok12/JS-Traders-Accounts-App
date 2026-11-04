@@ -712,3 +712,16 @@ NEXT: Drinking Line + Main Feeding Line calculators (Ahmad to give the rules); c
     Water Regulator Pipe is now a roll item (FT). Glue = ceil(1.25 × L/400 × N); Water Rope 3mm = ceil(L × N / 300) rolls.
 [x] Main Feeding Line calculator (lines default 1, floor Single/Double, size 65/78 ft; 16 items) — supabase/seed/calc_main_feeding_line.sql
 [x] Farm width (default 50 ft) on all three calculators; package headers read "Length 430 ft · Width 50 ft · Lines 4 · Feed room Centre"
+
+=== 2026-11-04 (night) — Calculator editor, quotation packages, stock import, PDF/WhatsApp, owner app ===
+[x] Settings → Calculators: inputs (typed / choice / worked out), items + rules + default prices, live preview, add new
+    calculators (save_calc_template). Migration 20261104000300_calculator_editor_quotation_packages.
+[x] Quotations: System calculator, package rows on screen + print ("lines × price per line"), packages + discounts carried
+    into the sales order on "Make sales order" (quotation_packages, set_quotation_packages)
+[x] Stock Counts → Import from Excel: download a sheet with every product/variant, fill Counted qty (optional Warehouse
+    column), upload .xlsx/.csv → one stock count per warehouse with counted lines → review → Approve & post
+    (apps/admin-erp/src/inventory/stockImport.ts, tests/unit/stockImport.test.ts)
+[x] Invoices + quotations: Save as PDF / WhatsApp (sales/ShareButtons.tsx, same file as the printout)
+[x] Stage 13 — Owner phone app /o (owner/OwnerApp.tsx): Today (rpt_dashboard tiles + 12-month sales), Stock (negatives,
+    below reorder), Customers (aging + 6-month ledger, call / WhatsApp reminder), Sales (today / month / last month with
+    margin), More: approve sales orders, open orders, PDC cheques, shipments, cash & bank. Menu: Dashboard → Owner phone app.

@@ -20,6 +20,7 @@ import { DocumentTemplates } from "../settings/DocumentTemplates";
 import { CustomFieldsSettings } from "../settings/CustomFieldsSettings";
 import { ApprovalSettings } from "../settings/ApprovalSettings";
 import { NotificationSettings } from "../settings/NotificationSettings";
+import { CalculatorSettings } from "../settings/CalculatorSettings";
 
 type Company = { id: string; code: string; name: string; legal_name: string | null; ntn: string | null; strn: string | null; phone: string | null; email: string | null; address: string | null; base_currency: string };
 
@@ -34,7 +35,7 @@ export function SettingsPage() {
       <div className="overflow-x-auto">
         <Tabs value={tab} onChange={setTab} tabs={[
           { key: "company", label: "Company" }, { key: "branches", label: "Branches" }, { key: "features", label: "Features" },
-          { key: "numbering", label: "Numbering" }, { key: "documents", label: "Documents" }, { key: "fields", label: "Custom fields" },
+          { key: "numbering", label: "Numbering" }, { key: "calculators", label: "Calculators" }, { key: "documents", label: "Documents" }, { key: "fields", label: "Custom fields" },
           { key: "forms", label: "Forms" }, { key: "workflows", label: "Workflows" }, { key: "approvals", label: "Approvals" }, { key: "notifications", label: "Notifications" },
           ...(roles.includes("ADMINISTRATOR") ? [{ key: "trial", label: "Trial data" }] : []),
         ]} />
@@ -43,6 +44,7 @@ export function SettingsPage() {
       {tab === "branches" && <div className="min-h-0 flex-1"><EntityPage config={branches} /></div>}
       {tab === "features" && <FeatureSettings />}
       {tab === "numbering" && <NumberingSettings />}
+      {tab === "calculators" && <div className="min-h-0 flex-1 overflow-auto pb-4"><CalculatorSettings /></div>}
       {tab === "documents" && <DocumentTemplates />}
       {tab === "fields" && <CustomFieldsSettings />}
       {tab === "forms" && <FormSettings />}

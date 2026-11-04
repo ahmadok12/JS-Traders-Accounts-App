@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, CheckCircle2, ExternalLink, FileSignature, Pencil, Plus, Printer, Save, Send, ShieldAlert, ShoppingCart, Trash2, Undo2, XCircle } from "lucide-react";
+import { Ban, Calculator, CheckCircle2, ExternalLink, FileSignature, Package, Pencil, Plus, Printer, Save, Send, ShieldAlert, ShoppingCart, Trash2, Undo2, XCircle } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, FormGrid, Input, KeyValue, PageHeader, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -15,6 +15,11 @@ import { CustomerPicker, ProductPicker, VariantPicker, useProductMeta } from "..
 import { money, today } from "../accounting/common";
 import { DiscountField, n, qtyFmt, useLastPrice } from "./common";
 import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
+import { CalculatorDialog, useCalcTemplates, type CalcResult, type PkgDraft } from "./calc/CalculatorDialog";
+import { describeInputs } from "./calc/formula";
+import { customerRows } from "./calc/invoiceRows";
+import { ShareButtons } from "./ShareButtons";
+import type { PdfSpec } from "./pdf";
 import { printDocument } from "./print";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { ReportShortcuts } from "../reports/Shortcuts";
@@ -84,21 +89,25 @@ export function QuotationsPage() {
   );
 }
 
-interface QLine { id: string; line_no: number; product_id: string; variant_id: string | null; quantity: number; unit_price: number; description: string | null;
+interface QPackage { id: string; template_id: string | null; name: string; unit_label: string; quantity: number; inputs: Record<string, string | number>; discount_amount: number }
+interface QLine { package_id: string | null; calc_qty: number | null; id: string; line_no: number; product_id: string; variant_id: string | null; quantity: number; unit_price: number; description: string | null;
   product: { name: string; sku: string; uom: { code: string } | null }; variant: { name: string } | null }
 function useQuotation(id: string | null) {
   return useQuery({
     queryKey: ["record", "quotations", id],
     enabled: !!id,
     queryFn: async () => {
-      const [h, l] = await Promise.all([
-        sb().from("quotations").select("*, customer:customers(name, code, city), so:sales_orders!quotations_sales_order_id_fkey(id, doc_no)").eq("id", id!).single(),
-        sb().from("quotation_lines").select("id, line_no, product_id, variant_id, quantity, unit_price, description, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name)")
+      const [h, l, pk] = await Promise.all([
+        sb().from("quotations").select("*, customer:customers(name, code, city, phone, whatsapp), so:sales_orders!quotations_sales_order_id_fkey(id, doc_no)").eq("id", id!).single(),
+        sb().from("quotation_lines").select("id, line_no, product_id, variant_id, quantity, unit_price, description, package_id, calc_qty, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name)")
           .eq("quotation_id", id!).eq("is_active", true).order("line_no"),
+        sb().from("quotation_packages").select("id, template_id, name, unit_label, quantity, inputs, discount_amount").eq("quotation_id", id!).order("pkg_no"),
       ]);
       if (h.error) throw h.error;
       if (l.error) throw l.error;
-      return { header: h.data as unknown as Row, lines: (l.data ?? []) as unknown as QLine[] };
+      const lines = (l.data ?? []) as unknown as QLine[];
+      const packages = ((pk.data ?? []) as QPackage[]).filter((p) => lines.some((x) => x.package_id === p.id));
+      return { header: h.data as unknown as Row, lines, packages };
     },
   });
 }
@@ -112,9 +121,11 @@ function QuotationDialog({ id, onClose, onSaved }: { id: string | null; onClose:
   }
   if (mode === "convert" && doc.data) {
     const h = doc.data.header;
+    const pkgDisc = doc.data.packages.reduce((a, p) => a + Number(p.discount_amount), 0);
     const initial: SoInitial = {
-      header: { customer_id: h.customer_id, order_date: today(), customer_reference: h.customer_reference, notes: h.notes },
-      lines: doc.data.lines.map((l) => ({ id: null, want: Number(l.quantity), product_id: l.product_id, variant_id: l.variant_id, unit_price: Number(l.unit_price), notes: l.description, allocations: [] })),
+      header: { customer_id: h.customer_id, order_date: today(), customer_reference: h.customer_reference, notes: h.notes, discount_amount: Math.max(0, Number(h.discount_amount ?? 0) - pkgDisc) },
+      packages: doc.data.packages.map((p) => ({ ...p, quantity: Number(p.quantity), discount_amount: Number(p.discount_amount) })),
+      lines: doc.data.lines.map((l) => ({ id: null, want: Number(l.quantity), package_id: l.package_id, calc_qty: l.calc_qty == null ? null : Number(l.calc_qty), product_id: l.product_id, variant_id: l.variant_id, unit_price: Number(l.unit_price), notes: l.description, allocations: [] })),
     };
     return <SalesOrderForm id={null} initial={initial} quotationId={id!} onCancel={() => setMode("view")} onClose={onClose}
       onSaved={(soId) => { onClose(); navigate(`/sales-orders?view=${soId}`); }} />;
@@ -122,7 +133,7 @@ function QuotationDialog({ id, onClose, onSaved }: { id: string | null; onClose:
   return <QuotationView id={id!} doc={doc} onEdit={() => setMode("edit")} onConvert={() => setMode("convert")} onClose={onClose} />;
 }
 
-interface FLine { key: string; product_id: string | null; variant_id: string | null; quantity: string; unit_price: string; description: string }
+interface FLine { key: string; product_id: string | null; variant_id: string | null; quantity: string; unit_price: string; description: string; pkg?: string; calc?: number | null }
 const newFLine = (): FLine => ({ key: crypto.randomUUID(), product_id: null, variant_id: null, quantity: "", unit_price: "", description: "" });
 
 function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | null; data: ReturnType<typeof useQuotation>["data"] | null; onCancel: () => void; onClose: () => void; onSaved: (id: string) => void }) {
@@ -137,8 +148,12 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
     customer_reference: (h?.customer_reference as string | undefined) ?? "",
     terms: (h?.terms as string | undefined) ?? (h ? "" : DEFAULT_TERMS),
     notes: (h?.notes as string | undefined) ?? "",
-    discount: h && Number(h.discount_amount) ? String(Number(h.discount_amount)) : "",
-    lines: data?.lines.length ? data.lines.map((l) => ({ key: l.id, product_id: l.product_id, variant_id: l.variant_id, quantity: String(Number(l.quantity)), unit_price: String(Number(l.unit_price)), description: l.description ?? "" })) : [newFLine()],
+    // the stored discount includes the package discounts; the form shows the order's own part
+    discount: (() => { const v = Number(h?.discount_amount ?? 0) - (data?.packages ?? []).reduce((a, p) => a + Number(p.discount_amount), 0); return v > 0.004 ? String(Math.round(v * 100) / 100) : ""; })(),
+    lines: data?.lines.length ? data.lines.map((l) => ({ key: l.id, product_id: l.product_id, variant_id: l.variant_id, quantity: String(Number(l.quantity)), unit_price: String(Number(l.unit_price)), description: l.description ?? "",
+      pkg: l.package_id ?? undefined, calc: l.calc_qty == null ? null : Number(l.calc_qty) })) : [newFLine()],
+    packages: (data?.packages ?? []).map((p): PkgDraft => ({ key: p.id, id: p.id, template_id: p.template_id, name: p.name, unit_label: p.unit_label, quantity: Number(p.quantity), inputs: p.inputs ?? {},
+      discount: Number(p.discount_amount) ? String(Number(p.discount_amount)) : "" })),
   }), [data, h]);
   const [f, setF] = React.useState(init);
   const snapshot = React.useRef(JSON.stringify(init));
@@ -157,16 +172,54 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
   }
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const subtotal = used.reduce((a, l) => a + Math.round(n(l.quantity) * n(l.unit_price) * 100) / 100, 0);
-  const total = subtotal - (n(f.discount) || 0);
+  const pkgs = f.packages.filter((p) => f.lines.some((l) => l.pkg === p.key));
+  const pkgGross = (k: string) => used.filter((l) => l.pkg === k).reduce((a, l) => a + Math.round(n(l.quantity) * n(l.unit_price) * 100) / 100, 0);
+  const pkgDisc = pkgs.reduce((a, p) => a + (n(p.discount) || 0), 0);
+  for (const p of pkgs) if ((n(p.discount) || 0) > pkgGross(p.key) + 0.001) errors[`pkg.${p.key}`] = `${p.name}: discount is more than its items`;
+  const total = subtotal - pkgDisc - (n(f.discount) || 0);
+  const calcTpls = useCalcTemplates();
+  const [calc, setCalc] = React.useState<null | { key: string | null }>(null);
+  const calcInitial = React.useMemo(() => {
+    const p = calc?.key ? f.packages.find((x) => x.key === calc.key) : null;
+    if (!p) return null;
+    return { pkg: p, warehouseId: null, items: f.lines.filter((l) => l.pkg === p.key).map((l) => ({ lineKey: l.key, product_id: l.product_id!, variant_id: l.variant_id, calc_qty: l.calc ?? null, total: n(l.quantity) || 0, unit_price: l.unit_price })) };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calc]);
+  const applyCalc = (r: CalcResult) => {
+    setF((s) => {
+      const next: FLine[] = r.items.map((it) => {
+        const prev = it.lineKey ? s.lines.find((l) => l.key === it.lineKey) : undefined;
+        return { ...(prev ?? newFLine()), product_id: it.product_id, variant_id: it.variant_id, quantity: String(it.total), unit_price: it.unit_price, pkg: r.pkg.key, calc: it.calc_qty };
+      });
+      const firstIdx = s.lines.findIndex((l) => l.pkg === r.pkg.key);
+      const rest = s.lines.filter((l) => l.pkg !== r.pkg.key && (l.product_id || l.quantity.trim() || l.unit_price.trim()));
+      const at = firstIdx >= 0 ? Math.min(firstIdx, rest.length) : rest.length;
+      const packages = s.packages.some((p) => p.key === r.pkg.key) ? s.packages.map((p) => (p.key === r.pkg.key ? r.pkg : p)) : [...s.packages, r.pkg];
+      return { ...s, lines: [...rest.slice(0, at), ...next, ...rest.slice(at)], packages };
+    });
+    setCalc(null);
+  };
+  const removePkg = (key: string) => setF((s) => {
+    const lines = s.lines.filter((l) => l.pkg !== key);
+    return { ...s, lines: lines.length ? lines : [newFLine()], packages: s.packages.filter((p) => p.key !== key) };
+  });
   const save = useMutation({
     mutationFn: async () => {
       const { data: nid, error } = await sb().rpc("save_quotation", {
         p_id: id,
-        p_header: { company_id: companyId, customer_id: f.customer_id, quote_date: f.quote_date, valid_until: f.valid_until || null, customer_reference: f.customer_reference, terms: f.terms, notes: f.notes, discount_amount: f.discount.replace(/,/g, "") || "0" },
+        p_header: { company_id: companyId, customer_id: f.customer_id, quote_date: f.quote_date, valid_until: f.valid_until || null, customer_reference: f.customer_reference, terms: f.terms, notes: f.notes,
+          discount_amount: String(Math.round(((n(f.discount) || 0) + pkgDisc) * 100) / 100) },
         p_lines: used.map((l) => ({ product_id: l.product_id, variant_id: l.variant_id, quantity: l.quantity.replace(/,/g, ""), unit_price: l.unit_price.replace(/,/g, ""), description: l.description || null })),
         p_idempotency_key: id ? null : idem.current,
       });
       if (error) throw error;
+      if (pkgs.length || (init.packages ?? []).length) {
+        const r = await sb().rpc("set_quotation_packages", { p_quotation_id: nid, p_packages: pkgs.map((p) => ({
+          template_id: p.template_id, name: p.name, unit_label: p.unit_label, quantity: p.quantity, inputs: p.inputs, discount_amount: p.discount.replace(/,/g, "") || 0,
+          lines: used.map((l, i) => ({ l, i })).filter(({ l }) => l.pkg === p.key).map(({ l, i }) => ({ line_no: i + 1, calc_qty: l.calc ?? null })),
+        })) });
+        if (r.error) { toast.error(`Quotation saved, but the calculator package was not: ${friendlyError(r.error)}`); }
+      }
       return nid as string;
     },
     onSuccess: (nid) => { snapshot.current = JSON.stringify(f); idem.current = crypto.randomUUID(); toast.success("Quotation saved"); qc.invalidateQueries(); onSaved(nid); },
@@ -184,7 +237,7 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
         footer={
           <>
             {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
-            <div className="flex-1 text-right text-sm text-ink-muted">Total <b className="ml-1 text-lg tabular-nums text-ink">{money(total)}</b></div>
+            <div className="flex-1 text-right text-sm text-ink-muted">{pkgDisc > 0 && <span className="mr-3">package discounts −{money(pkgDisc)}</span>}Total <b className="ml-1 text-lg tabular-nums text-ink">{money(total)}</b></div>
             <Button onClick={() => guard(onCancel)}>Cancel</Button>
             <Button variant="primary" icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending} onClick={submit}>Save</Button>
           </>
@@ -202,14 +255,39 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
               <th className="w-[150px] px-2 text-right">Unit price</th><th className="w-[140px] px-2 text-right">Amount</th><th className="w-10" />
             </tr></thead>
             <tbody>
-              {f.lines.map((l, i) => (
-                <QFormLine key={l.key} idx={i} line={l} customerId={f.customer_id} err={err} onChange={(p) => setLine(l.key, p)}
-                  onRemove={f.lines.length > 1 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
-              ))}
+              {f.lines.map((l, i) => {
+                const p = l.pkg ? f.packages.find((x) => x.key === l.pkg) : undefined;
+                const head = p && f.lines.findIndex((x) => x.pkg === p.key) === i;
+                const gross = p ? pkgGross(p.key) : 0; const pd = p ? n(p.discount) || 0 : 0;
+                return (
+                  <React.Fragment key={l.key}>
+                    {head && p && (
+                      <tr className="bg-amber-50/70"><td colSpan={6} className="border-b border-amber-200 px-2 py-2">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                          <span className="inline-flex items-center gap-1.5 font-semibold"><Package className="h-4 w-4 text-amber-600" />{p.name}</span>
+                          <span className="tabular-nums">{qtyFmt(p.quantity)} {p.unit_label}{p.quantity === 1 ? "" : "s"}</span>
+                          <span className="text-xs text-ink-muted">{describeInputs(calcTpls.data?.find((t) => t.id === p.template_id)?.variables, p.inputs)}</span>
+                          <span className="text-sm text-ink-muted">items {money(gross)}{pd > 0 && <> − discount {money(pd)}</>} = <b className="text-ink">{money(gross - pd)}</b> · <b className="text-ink">{money(p.quantity > 0 ? (gross - pd) / p.quantity : 0)}</b> per {p.unit_label}</span>
+                          {err(`pkg.${p.key}`) && <span className="text-xs text-danger">{err(`pkg.${p.key}`)}</span>}
+                          <span className="flex-1" />
+                          <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setCalc({ key: p.key })}>Edit in calculator</Button>
+                          <Button size="sm" variant="ghost" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => removePkg(p.key)}>Remove</Button>
+                        </div>
+                        <p className="mt-0.5 text-2xs text-ink-muted">The printed quotation shows only “{p.name}” — {qtyFmt(p.quantity)} × price per {p.unit_label}.</p>
+                      </td></tr>
+                    )}
+                    <QFormLine idx={i} line={l} customerId={f.customer_id} err={err} onChange={(patch) => setLine(l.key, patch)}
+                      onRemove={f.lines.length > 1 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <Button size="sm" className="mt-2" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newFLine()] }))}>Add item</Button>
+        <div className="mt-2 flex gap-2">
+          <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newFLine()] }))}>Add item</Button>
+          {!!calcTpls.data?.length && <Button size="sm" icon={<Calculator className="h-3.5 w-3.5" />} onClick={() => setCalc({ key: null })}>System calculator</Button>}
+        </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <div>
             <Field label="Customer's reference / enquiry"><Input value={f.customer_reference} onChange={(e) => setF((s) => ({ ...s, customer_reference: e.target.value }))} /></Field>
@@ -218,13 +296,15 @@ function QuotationForm({ id, data, onCancel, onClose, onSaved }: { id: string | 
           </div>
           <dl className="space-y-1.5 self-start rounded-card bg-subtle p-3 text-sm">
             <div className="flex justify-between"><dt className="text-ink-muted">Subtotal</dt><dd className="tabular-nums">{money(subtotal)}</dd></div>
+            {pkgDisc > 0 && <div className="flex justify-between"><dt className="text-ink-muted">Package discounts</dt><dd className="tabular-nums">-{money(pkgDisc)}</dd></div>}
             <div className="flex items-center justify-between gap-3"><dt className="text-ink-muted">Discount</dt>
-              <dd><DiscountField base={subtotal} value={f.discount} onChange={(v) => setF((s) => ({ ...s, discount: v }))} /></dd></div>
+              <dd><DiscountField base={subtotal - pkgDisc} value={f.discount} onChange={(v) => setF((s) => ({ ...s, discount: v }))} /></dd></div>
             <div className="flex justify-between border-t border-line pt-1.5 text-base font-semibold"><dt>Total</dt><dd className="tabular-nums">{money(total)}</dd></div>
           </dl>
         </div>
       </ErpDialog>
       {dialog}
+      {calc && <CalculatorDialog warehouses={[]} initial={calcInitial} onCancel={() => setCalc(null)} onDone={applyCalc} />}
     </>
   );
 }
@@ -274,25 +354,39 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
   const [reason, setReason] = React.useState("");
   const h = doc.data?.header;
   const status = String(h?.status ?? "");
-  const cust = h?.customer as { name: string; code: string; city: string | null } | undefined;
+  const cust = h?.customer as { name: string; code: string; city: string | null; phone?: string | null; whatsapp?: string | null } | undefined;
   const so = h?.so as { id: string; doc_no: string } | null | undefined;
   const lines = doc.data?.lines ?? [];
+  const packages = doc.data?.packages ?? [];
+  const calcTpls = useCalcTemplates();
   const canManage = can(P.salesManage);
+  /** customer view: calculator packages fold into one row each */
+  const quoteRows = () => customerRows(
+    lines.map((l) => ({ line_no: l.line_no, label: `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}${l.description ? ` — ${l.description}` : ""}`, quantity: Number(l.quantity), uom: l.product.uom?.code ?? "", unit_price: Number(l.unit_price) })),
+    { packages: packages.map((p) => { const g = lines.filter((l) => l.package_id === p.id).reduce((a, l) => a + Math.round(Number(l.quantity) * Number(l.unit_price) * 100) / 100, 0);
+        return { id: p.id, name: p.name, unit_label: p.unit_label, quantity: Number(p.quantity), billed: g, full: g, discount: Number(p.discount_amount) }; }),
+      parts: lines.filter((l) => l.package_id).map((l) => ({ line_no: l.line_no, package_id: l.package_id!, qty: Number(l.quantity) })) },
+    Number(h?.discount_amount ?? 0), Number(h?.subtotal ?? 0));
   const setStatus = useMutation({
     mutationFn: async (s: string) => { const { error } = await sb().rpc("set_quotation_status", { p_id: id, p_status: s, p_reason: reason.trim() || null }); if (error) throw error; return s; },
     onSuccess: (s) => { toast.success(`Quotation marked ${qLabel(s).toLowerCase()}`); setAsk(null); setReason(""); qc.invalidateQueries(); },
     onError: (e) => toast.error(friendlyError(e)),
   });
+  const quoteSpec = (): PdfSpec => {
+    const hh = h!;
+    const cr = quoteRows();
+    return { docType: "QUOTATION", cfSources: [{ entity: "quotations", id: String(hh.id) }],
+      company: company?.company_name ?? "", title: "Quotation", docNo: String(hh.doc_no),
+      meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(hh.quote_date as string)], ["Valid until", hh.valid_until ? formatDate(hh.valid_until as string) : ""], ["Your reference", (hh.customer_reference as string) ?? ""]],
+      columns: [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
+      rows: cr.rows.map((r, i) => [String(i + 1), r.label, `${qtyFmt(r.quantity)} ${r.uom}`, r.unit_price == null ? "" : money(r.unit_price), r.amount == null ? "" : money(r.amount)]),
+      totals: [["Subtotal", money(cr.subtotal)], ...(cr.discount > 0.004 ? [["Discount", `-${money(cr.discount)}`] as [string, string]] : []), ["Total", money(hh.total_amount as number)]],
+      notes: [hh.terms, hh.notes].filter(Boolean).join("\n") || null, signatures: ["Prepared by", "Accepted by (customer)"],
+    };
+  };
   const print = () => {
     if (!h) return;
-    const ok = printDocument({ docType: "QUOTATION", cfSources: [{ entity: "quotations", id: String(h.id) }],
-      company: company?.company_name ?? "", title: "Quotation", docNo: String(h.doc_no),
-      meta: [["Customer", `${cust?.name ?? ""}${cust?.city ? `, ${cust.city}` : ""}`], ["Date", formatDate(h.quote_date as string)], ["Valid until", h.valid_until ? formatDate(h.valid_until as string) : ""], ["Your reference", (h.customer_reference as string) ?? ""]],
-      columns: [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
-      rows: lines.map((l) => [String(l.line_no), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}${l.description ? ` — ${l.description}` : ""}`, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`, money(l.unit_price), money(Number(l.quantity) * Number(l.unit_price))]),
-      totals: [["Subtotal", money(h.subtotal as number)], ...(Number(h.discount_amount) ? [["Discount", `-${money(h.discount_amount as number)}`] as [string, string]] : []), ["Total", money(h.total_amount as number)]],
-      notes: [h.terms, h.notes].filter(Boolean).join("\n") || null, signatures: ["Prepared by", "Accepted by (customer)"],
-    });
+    const ok = printDocument(quoteSpec());
     if (!ok) toast.error("Allow pop-ups to print");
   };
   const open = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"].includes(status);
@@ -309,6 +403,8 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
             <div className="flex-1" />
             {so && <Button icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={() => navigate(`/sales-orders?view=${so.id}`)}>{so.doc_no}</Button>}
             {h && status !== "CANCELLED" && <Button icon={<Printer className="h-3.5 w-3.5" />} onClick={print}>Print</Button>}
+            {h && status !== "CANCELLED" && <ShareButtons spec={quoteSpec} docNo={String(h.doc_no)} customerName={cust?.name} phone={cust?.whatsapp || cust?.phone || null}
+              message={`Assalam-o-Alaikum${cust?.name ? ` ${cust.name}` : ""},\nPlease find attached our Quotation ${String(h.doc_no)} dated ${formatDate(h.quote_date as string)}${h.valid_until ? `, valid until ${formatDate(h.valid_until as string)}` : ""} — total ${money(h.total_amount as number)}.\n${company?.company_name ?? ""}`} />}
             <Button onClick={onClose}>Close</Button>
             {["DRAFT", "SENT"].includes(status) && canManage && <Button icon={<Pencil className="h-3.5 w-3.5" />} onClick={onEdit}>Edit</Button>}
             {status === "DRAFT" && canManage && <Button icon={<Send className="h-3.5 w-3.5" />} onClick={() => setStatus.mutate("SENT")}>Mark sent</Button>}
@@ -339,16 +435,29 @@ function QuotationView({ id, doc, onEdit, onConvert, onClose }: { id: string; do
                     <th className="h-8 px-3">#</th><th className="px-3">Item</th><th className="px-3 text-right">Qty</th><th className="px-3 text-right">Price</th><th className="px-3 text-right">Amount</th>
                   </tr></thead>
                   <tbody>
-                    {lines.map((l) => {
+                    {lines.map((l, i) => {
                       const td = "border-b border-line/70 px-3 py-2 align-top";
+                      const p = l.package_id ? packages.find((x) => x.id === l.package_id) : undefined;
+                      const head = p && lines.findIndex((x) => x.package_id === p.id) === i;
+                      const g = p ? lines.filter((x) => x.package_id === p.id).reduce((a, x) => a + Number(x.quantity) * Number(x.unit_price), 0) - Number(p.discount_amount) : 0;
                       return (
-                        <tr key={l.id}>
+                        <React.Fragment key={l.id}>
+                        {head && p && (
+                          <tr className="bg-amber-50/70"><td colSpan={5} className="border-b border-amber-200 px-3 py-2">
+                            <span className="inline-flex items-center gap-1.5 font-semibold"><Package className="h-4 w-4 text-amber-600" />{p.name}</span>
+                            <span className="ml-3 tabular-nums">{qtyFmt(p.quantity)} {p.unit_label}{Number(p.quantity) === 1 ? "" : "s"}</span>
+                            <span className="ml-3 text-xs text-ink-muted">{describeInputs(calcTpls.data?.find((t) => t.id === p.template_id)?.variables, p.inputs)}</span>
+                            <span className="ml-3 text-sm">= <b>{money(g)}</b> · <b>{money(Number(p.quantity) > 0 ? g / Number(p.quantity) : 0)}</b> per {p.unit_label}{Number(p.discount_amount) > 0 && <span className="text-ink-muted"> (after {money(p.discount_amount)} discount)</span>}</span>
+                          </td></tr>
+                        )}
+                        <tr className={cn(p && "bg-amber-50/20")}>
                           <td className={cn(td, "w-8 text-ink-faint")}>{l.line_no}</td>
                           <td className={td}><div className="font-medium">{l.product.name}{l.variant && <span className="font-normal text-ink-muted"> · {l.variant.name}</span>}</div><div className="text-2xs text-ink-muted">{l.description || l.product.sku}</div></td>
                           <td className={cn(td, "text-right tabular-nums")}>{qtyFmt(l.quantity)} <span className="text-2xs text-ink-faint">{l.product.uom?.code}</span></td>
                           <td className={cn(td, "text-right tabular-nums")}>{money(l.unit_price)}</td>
                           <td className={cn(td, "text-right tabular-nums")}>{money(Number(l.quantity) * Number(l.unit_price))}</td>
                         </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>

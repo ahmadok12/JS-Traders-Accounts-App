@@ -130,7 +130,7 @@ export function CalculatorDialog({ warehouses, initial, onDone, onCancel }: {
   if (!tpl) problems.push("Choose a calculator");
   if (Object.keys(varErr).length) problems.push("Check the inputs");
   if (!(units > 0)) problems.push(`Enter the number of ${tpl?.unit_label ?? "line"}s`);
-  if (!wh) problems.push("Choose the warehouse");
+  if (warehouses.length && !wh) problems.push("Choose the warehouse");
   if (!live.length) problems.push("No items with a quantity");
   if ((rows ?? []).some((r) => r.price.trim() !== "" && !(n(r.price) >= 0))) problems.push("A price is not a number");
   if ((rows ?? []).some((r) => r.extra.trim() !== "" && !Number.isFinite(n(r.extra)))) problems.push("An extra quantity is not a number");
@@ -201,11 +201,11 @@ export function CalculatorDialog({ warehouses, initial, onDone, onCancel }: {
                   )}
                 </Field>
               ))}
-              <Field label="Send from warehouse">
+              {warehouses.length > 0 && <Field label="Send from warehouse">
                 <select className="h-control w-full rounded-control border border-line bg-white px-2 text-sm" value={wh} onChange={(e) => setWh(e.target.value)}>
                   {warehouses.map((w) => <option key={w.id} value={w.id}>{w.code} — {w.name}</option>)}
                 </select>
-              </Field>
+              </Field>}
               <Field label="Name on invoice"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
             </div>
             {defs.some((d) => d.formula) && (
@@ -258,7 +258,7 @@ export function CalculatorDialog({ warehouses, initial, onDone, onCancel }: {
                       }} onBlur={() => setPerUnitText(null)} />
                   </div>
                   <div className="flex justify-between border-t border-line pt-1.5 font-semibold"><span>{qtyFmt(units)} {tpl.unit_label}{units === 1 ? "" : "s"}</span><span className="tabular-nums">{money(net)}</span></div>
-                  <p className="text-2xs text-ink-muted">The invoice shows only {name || tpl.name} — {qtyFmt(units)} × {money(perUnit)}. Delivery notes list every item.</p>
+                  <p className="text-2xs text-ink-muted">The {warehouses.length ? "invoice" : "quotation and invoice"} show{warehouses.length ? "s" : ""} only {name || tpl.name} — {qtyFmt(units)} × {money(perUnit)}. Delivery notes list every item.</p>
                 </div>
               )}
             </div>

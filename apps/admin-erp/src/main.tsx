@@ -65,6 +65,7 @@ const ShortcutSettingsPage = React.lazy(() => import("./reports/Shortcuts").then
 const PricingPage = React.lazy(() => import("./pricing/PricingPage").then((m) => ({ default: m.PricingPage })));
 const WarehouseDeskPage = React.lazy(() => import("./picking/WarehouseDesk").then((m) => ({ default: m.WarehouseDeskPage })));
 const StaffApp = React.lazy(() => import("./picking/StaffApp").then((m) => ({ default: m.StaffApp })));
+const OwnerApp = React.lazy(() => import("./owner/OwnerApp").then((m) => ({ default: m.OwnerApp })));
 const InvoicesPage = React.lazy(() => import("./sales/InvoicesPage").then((m) => ({ default: m.InvoicesPage })));
 const SettingsPage = React.lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
@@ -84,6 +85,7 @@ const lazy = (el: React.ReactNode) => <React.Suspense fallback={null}>{el}</Reac
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
   { path: "/m", element: lazy(<StaffApp />) },
+  { path: "/o", element: lazy(<OwnerApp />) },
   {
     path: "/",
     element: <AppShell />,
