@@ -708,3 +708,5 @@ Migration: 20261104000200_system_calculator. Tests: tests/sql/system_calculator.
            sales_corrections invoice path unchanged; vitest 41/41 (calcFormula, calcInvoiceRows); build ok.
 NEXT: Drinking Line + Main Feeding Line calculators (Ahmad to give the rules); calculator rules editor in Settings;
       package rows on quotations; Excel opening-stock import; PDF/WhatsApp on invoices.
+[x] Drinking Line calculator (L ft, N lines default 5; 22 items incl. Winch Handle 1) — supabase/seed/calc_drinking_line.sql;
+    Water Regulator Pipe is now a roll item (FT). Glue = ceil(1.25 × L/400 × N); Water Rope 3mm = ceil(L × N / 300) rolls.

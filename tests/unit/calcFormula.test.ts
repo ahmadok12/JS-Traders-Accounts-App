@@ -55,4 +55,20 @@ describe("calculator formulas", () => {
     const { errors } = resolveVars(BRANCH, { L: "", N: "abc", ROOM: "Side" });
     expect(Object.keys(errors).sort()).toEqual(["L", "N"]);
   });
+  it("works out the Drinking Line (430 ft, 5 lines)", () => {
+    const { vars } = resolveVars([
+      { key: "L", label: "", type: "number", default: 430 }, { key: "N", label: "", type: "number", default: 5 },
+      { key: "PIPES", label: "", formula: "ceil(L/10)" }, { key: "P8", label: "", formula: "ceil(L/8)" },
+    ], {});
+    const q = (f: string) => evalQty(f, vars);
+    expect(q("PIPES*N")).toBe(215);              // water lines (15 nipples) / support pipes
+    expect(q("PIPES*N*15")).toBe(3225);          // drip cups
+    expect(q("PIPES*N*4")).toBe(860);            // hangers
+    expect(q("ceil(1.25*L/400*N)")).toBe(7);     // glue 6.72 → 7
+    expect(q("ceil(PIPES*N*0.5)")).toBe(108);    // joints 107.5 → 108
+    expect(q("P8*N")).toBe(270);                 // pulley / thimmel / adjust / U clump 6mm
+    expect(q("ceil(L*N/300)")).toBe(8);          // rope rolls 7.17 → 8
+    expect(q("8*N")).toBe(40);                   // regulator pipe ft
+    expect(q("L*N+50")).toBe(2200);              // galvanised / shocker wire
+  });
 });
