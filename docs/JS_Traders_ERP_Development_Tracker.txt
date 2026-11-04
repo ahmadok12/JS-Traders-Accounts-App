@@ -725,3 +725,5 @@ NEXT: Drinking Line + Main Feeding Line calculators (Ahmad to give the rules); c
 [x] Stage 13 — Owner phone app /o (owner/OwnerApp.tsx): Today (rpt_dashboard tiles + 12-month sales), Stock (negatives,
     below reorder), Customers (aging + 6-month ledger, call / WhatsApp reminder), Sales (today / month / last month with
     margin), More: approve sales orders, open orders, PDC cheques, shipments, cash & bank. Menu: Dashboard → Owner phone app.
+Live 4 Nov 22:55: migration applied; tests/sql/calculator_editor_quotations.sql 6/6 (rolled back); owner-app RPCs checked on live;
+vitest 49/49; build ok. NEXT: salesperson phone app; Stage 14 end-to-end checks.

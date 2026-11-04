@@ -1,4 +1,9 @@
-# Handoff — where we stopped (4 Nov 2026)
+# Handoff — where we stopped (4 Nov 2026, night)
+
+## Live 4 Nov 22:55
+Settings → Calculators (editor), System calculator on quotations (quotation_packages), Stock Counts → Import from Excel,
+Save as PDF / WhatsApp on invoices + quotations, Owner phone app at /o (Stage 13 owner interface).
+Migration 20261104000300_calculator_editor_quotation_packages. Next: salesperson phone app, Stage 14 end-to-end checks.
 
 ## System stock calculator — 4 Nov 2026 (Branch Feeding Line)
 Sales order → **System calculator** → Branch Feeding Line (farm length, lines, feed room) → 25 items by rule, Extra, Total,
