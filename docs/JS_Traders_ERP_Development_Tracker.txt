@@ -691,3 +691,20 @@ Import: Shipment (items added directly = the order; PO optional) → GRN → Sup
     phone number; a second pop-up when the picker accepts late. Settings -> Features -> Picking (0 = off). pg_cron
     job jst-picking-unaccepted every 30 s. (migration 20261103000700_picking_accept_alert, live check: not-yet/alert-once/
     no-repeat/accepted-late/off/10-min all correct, rolled back)
+
+=== 2026-11-04 — Go-live data + System stock calculator (Branch Feeding Line) ===
+[x] Live: trial data wiped, 84 real products loaded (all negative stock allowed) + Feed Pan P-00085 (China / Local)
+[x] Roll items may go negative when no rolls exist (20261104000100_roll_items_negative_stock)
+[x] Calculator templates (calc_templates / calc_template_items): input variables + derived variables + one formula per item
+    (safe evaluator apps/admin-erp/src/sales/calc/formula.ts: + - * / ( ) ceil floor round min max, ROOM=='Centre' ? a : b)
+    Seed: supabase/seed/calc_branch_feeding_line.sql — Branch Feeding Line (L ft, N lines, feed room Side/Centre, 25 items)
+[x] Sales order → "System calculator": rule qty / Extra / Total / price per item, any item or variant swapped, rows
+    added/removed, discount or "price per line (quoted)", remember default prices. Adds a PACKAGE + its item lines.
+    Order form: amber package header (lines, inputs, items − discount = total, per line), Edit in calculator, Remove.
+[x] sales_order_packages + sales_order_lines.package_id / calc_qty; set_so_packages() saves after the order
+[x] Invoice: package discount carried in proportion (create_invoice_from_gdns); Print shows one row per package
+    "Branch Feeding Line — 4 lines × price per line" (invoice_packages() + calc/invoiceRows.ts); GDN/picking show items
+Migration: 20261104000200_system_calculator. Tests: tests/sql/system_calculator.sql 8/8 on live (rolled back);
+           sales_corrections invoice path unchanged; vitest 41/41 (calcFormula, calcInvoiceRows); build ok.
+NEXT: Drinking Line + Main Feeding Line calculators (Ahmad to give the rules); calculator rules editor in Settings;
+      package rows on quotations; Excel opening-stock import; PDF/WhatsApp on invoices.

@@ -2,7 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, BellRing, CheckCircle2, ClipboardList, ExternalLink, Lock, Pencil, Plus, Printer, ShieldAlert, ShoppingCart, Truck } from "lucide-react";
+import { Ban, BellRing, CheckCircle2, ClipboardList, ExternalLink, Lock, Package, Pencil, Plus, Printer, ShieldAlert, ShoppingCart, Truck } from "lucide-react";
 import { Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, ErpDialog, Field, KeyValue, PageHeader, Skeleton, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess, useEntityList } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -12,7 +12,7 @@ import { Tabs } from "../entity/EntityDialog";
 import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { money } from "../accounting/common";
 import { SO_TONE, qtyFmt, soLabel, useSoLinePrices } from "./common";
-import { SalesOrderForm, type SoInitial } from "./SalesOrderForm";
+import { SalesOrderForm, type SoInitial, type SoPackage } from "./SalesOrderForm";
 import { PricingStrip } from "../pricing/PricingPage";
 import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPicking";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
@@ -102,6 +102,7 @@ export function SalesOrdersPage() {
 }
 
 interface SoLine {
+  package_id: string | null; calc_qty: number | null;
   id: string; line_no: number; quantity: number; delivered_qty: number; unit_price: number | null; notes: string | null; product_id: string; variant_id: string | null;
   product: { name: string; sku: string; uom: { code: string } }; variant: { name: string } | null;
   allocations: { id: string; warehouse_id: string; quantity: number; reserved_quantity: number; delivered_quantity: number; status: string; roll_cuts: { unit_id: string; qty: number }[] | null; warehouse: { code: string; name: string } }[];
@@ -112,10 +113,11 @@ function useSo(id: string | null) {
     queryKey: ["record", "sales_orders", id],
     enabled: !!id,
     queryFn: async () => {
-      const [h, l, g] = await Promise.all([
+      const [h, l, g, pk] = await Promise.all([
         sb().from("sales_orders").select("id, doc_no, order_date, status, customer_id, customer_reference, notes, discount_amount, approved_at, cancelled_at, cancel_reason, closed_at, close_reason, source_reservation_order_id, customer:customers(name, code, city), source:reservation_orders!sales_orders_source_reservation_order_id_fkey(doc_no), quote:quotations!sales_orders_source_quotation_id_fkey(id, doc_no)").eq("id", id!).single(),
-        sb().from("sales_order_lines").select("id, line_no, quantity, delivered_qty, notes, product_id, variant_id, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), allocations:sales_order_line_warehouse_allocations(id, warehouse_id, quantity, reserved_quantity, delivered_quantity, status, roll_cuts, warehouse:warehouses(code, name))").eq("sales_order_id", id!).eq("is_active", true).order("line_no"),
+        sb().from("sales_order_lines").select("id, line_no, quantity, delivered_qty, notes, product_id, variant_id, package_id, calc_qty, product:products(name, sku, uom:units_of_measure!products_base_uom_id_fkey(code)), variant:product_variants(name), allocations:sales_order_line_warehouse_allocations(id, warehouse_id, quantity, reserved_quantity, delivered_quantity, status, roll_cuts, warehouse:warehouses(code, name))").eq("sales_order_id", id!).eq("is_active", true).order("line_no"),
         sb().from("gdns").select("id, doc_no, gdn_date, status").eq("sales_order_id", id!).order("created_at"),
+        sb().from("sales_order_packages").select("id, template_id, name, unit_label, quantity, inputs, discount_amount").eq("sales_order_id", id!).order("pkg_no"),
       ]);
       if (h.error) throw h.error;
       if (l.error) throw l.error;
@@ -123,7 +125,8 @@ function useSo(id: string | null) {
       const pr = await sb().rpc("so_line_prices", { p_so_ids: [id] });
       const pm = new Map(((pr.data ?? []) as { line_id: string; unit_price: number | null }[]).map((x) => [x.line_id, x.unit_price]));
       const lines = (l.data as unknown as SoLine[]).map((x) => ({ ...x, unit_price: pm.get(x.id) ?? null }));
-      return { header: h.data as unknown as Row, lines, gdns: (g.data ?? []) as { id: string; doc_no: string; gdn_date: string; status: string }[] };
+      const packages = ((pk.data ?? []) as SoPackage[]).filter((p) => lines.some((x) => x.package_id === p.id));
+      return { header: h.data as unknown as Row, lines, packages, gdns: (g.data ?? []) as { id: string; doc_no: string; gdn_date: string; status: string }[] };
     },
   });
 }
@@ -133,7 +136,7 @@ export function SalesOrderDialog({ id, onClose, onSaved }: { id: string | null; 
   const [mode, setMode] = React.useState<"view" | "edit">(id ? "view" : "edit");
   React.useEffect(() => setMode(id ? "view" : "edit"), [id]);
   if (mode === "edit" && (!id || doc.data)) {
-    const initial: SoInitial | null = doc.data ? { header: doc.data.header, lines: doc.data.lines.map((l) => ({ ...l })) } : null;
+    const initial: SoInitial | null = doc.data ? { header: doc.data.header, packages: doc.data.packages, lines: doc.data.lines.map((l) => ({ ...l })) } : null;
     const revise = !!doc.data && String(doc.data.header.status) !== "DRAFT";
     return <SalesOrderForm id={id} initial={initial} revise={revise} onCancel={() => (id ? setMode("view") : onClose())} onClose={onClose} onSaved={(nid) => { setMode("view"); onSaved(nid); }} />;
   }
@@ -164,7 +167,9 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
   const cust = h?.customer as { name: string; code: string; city: string | null } | undefined;
   const src = h?.source as { doc_no: string } | null;
   const lines = doc.data?.lines ?? [];
-  const total = lines.reduce((a, l) => a + Number(l.quantity) * Number(l.unit_price ?? 0), 0);
+  const packages = doc.data?.packages ?? [];
+  const pkgDisc = packages.reduce((a, p) => a + Number(p.discount_amount ?? 0), 0);
+  const total = lines.reduce((a, l) => a + Number(l.quantity) * Number(l.unit_price ?? 0), 0) - pkgDisc;
   const pending = lines.filter((l) => l.unit_price == null).length;
   const dispatchable = ["APPROVED", "PARTIALLY_DELIVERED"].includes(status);
   const canPrices = can(P.salesViewPrices);
@@ -193,7 +198,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
         const base = [String(l.line_no), `${l.product.name}${l.variant ? ` · ${l.variant.name}` : ""}`, `${qtyFmt(l.quantity)} ${l.product.uom?.code ?? ""}`];
         return canPrices ? [...base, l.unit_price == null ? "Pending" : money(l.unit_price), l.unit_price == null ? "" : money(Number(l.quantity) * Number(l.unit_price))] : base;
       }),
-      totals: canPrices ? [...(disc ? [["Subtotal", money(total)], ["Discount", `-${money(disc)}`]] as [string, string][] : []), [pending ? "Total (priced items)" : "Total", money(total - disc)]] : [],
+      totals: canPrices ? [...(disc || pkgDisc ? [["Subtotal", money(total + pkgDisc)], ...(pkgDisc ? [["Package discount", `-${money(pkgDisc)}`]] : []), ...(disc ? [["Discount", `-${money(disc)}`]] : [])] as [string, string][] : []), [pending ? "Total (priced items)" : "Total", money(total - disc)]] : [],
       notes: (h.notes as string) ?? null, signatures: ["Prepared by", "Approved by"],
     });
     if (!ok) toast.error("Allow pop-ups to print");
@@ -267,10 +272,23 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
                     <th className="px-3 text-right">Qty</th>{canPrices && <><th className="px-3 text-right">Price</th><th className="px-3 text-right">Amount</th></>}
                   </tr></thead>
                   <tbody>
-                    {lines.map((l) => {
+                    {lines.map((l, i) => {
                       const td = "border-b border-line/70 px-3 py-2 align-top";
+                      const p = l.package_id ? packages.find((x) => x.id === l.package_id) : undefined;
+                      const head = p && lines.findIndex((x) => x.package_id === p.id) === i;
+                      const gross = p ? lines.filter((x) => x.package_id === p.id).reduce((a, x) => a + Number(x.quantity) * Number(x.unit_price ?? 0), 0) : 0;
+                      const pnet = p ? gross - Number(p.discount_amount ?? 0) : 0;
                       return (
-                        <tr key={l.id}>
+                        <React.Fragment key={l.id}>
+                        {head && p && (
+                          <tr className="bg-amber-50/70"><td colSpan={canPrices ? 6 : 4} className="border-b border-amber-200 px-3 py-2">
+                            <span className="inline-flex items-center gap-1.5 font-semibold"><Package className="h-4 w-4 text-amber-600" />{p.name}</span>
+                            <span className="ml-3 tabular-nums">{qtyFmt(p.quantity)} {p.unit_label}{Number(p.quantity) === 1 ? "" : "s"}</span>
+                            <span className="ml-3 text-xs text-ink-muted">{Object.entries(p.inputs ?? {}).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>
+                            {canPrices && <span className="ml-3 text-sm text-ink-muted">items {money(gross)}{Number(p.discount_amount) > 0 && <> − discount {money(p.discount_amount)}</>} = <b className="text-ink">{money(pnet)}</b> · <b className="text-ink">{money(Number(p.quantity) > 0 ? pnet / Number(p.quantity) : 0)}</b> per {p.unit_label}</span>}
+                          </td></tr>
+                        )}
+                        <tr className={cn(p && "bg-amber-50/20")}>
                           <td className={cn(td, "w-8 text-ink-faint")}>{l.line_no}</td>
                           <td className={td}><div className="font-medium">{l.product.name}{l.variant ? <span className="font-normal text-ink-muted"> · {l.variant.name}</span> : null}</div><div className="text-2xs text-ink-muted">{l.product.sku}</div></td>
                           <td className={td}>
@@ -290,6 +308,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
                           {canPrices && <td className={cn(td, "text-right tabular-nums")}>{l.unit_price == null ? <Badge tone="warning">Pending</Badge> : money(l.unit_price)}</td>}
                           {canPrices && <td className={cn(td, "text-right tabular-nums")}>{l.unit_price == null ? "" : money(Number(l.quantity) * Number(l.unit_price))}</td>}
                         </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>

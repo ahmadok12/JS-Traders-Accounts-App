@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { BellRing, CheckCircle2, Plus, Save, Scissors, ShoppingCart, Trash2 } from "lucide-react";
+import { BellRing, Calculator, CheckCircle2, Package, Pencil, Plus, Save, Scissors, ShoppingCart, Trash2 } from "lucide-react";
 import { Badge, Button, ConfirmDialog, ErpDialog, Field, FormGrid, Input, Textarea, cn } from "@jst/ui";
 import { friendlyError, sb, useAccess } from "@jst/data-access";
 import { P } from "@jst/permissions";
@@ -13,12 +13,14 @@ import { DiscountField, n, qtyFmt, useItemAvailability, useLastPrice, useWarehou
 import { PickerChips, staffOf, usePickingStaff } from "../picking/common";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { RollCutsEditor, fmtQty, sumCuts, useRolls, type Cuts } from "../inventory/rolls";
+import { CalculatorDialog, useCalcTemplates, type CalcResult, type PkgDraft } from "./calc/CalculatorDialog";
 
 type Row = Record<string, unknown>;
-interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** roll items: warehouse → chosen rolls (unit_id → qty); missing/empty = Auto */ rolls?: Record<string, Cuts>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number }
+interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** roll items: warehouse → chosen rolls (unit_id → qty); missing/empty = Auto */ rolls?: Record<string, Cuts>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number; /** calculator package key */ pkg?: string; /** quantity by the calculator rule (extra = total − calc) */ calc?: number | null }
 const newLine = (): Line => ({ key: crypto.randomUUID(), id: null, product_id: null, variant_id: null, unit_price: "", notes: "", alloc: {}, sent: {}, held: {} });
 const sentTotal = (l: Line) => Object.values(l.sent).reduce((a, v) => a + v, 0);
-export interface SoInitial { header: Row; lines: { id: string | null; want?: number; product_id: string; variant_id: string | null; unit_price: number | null; notes: string | null; allocations: { warehouse_id: string; quantity: number; status: string; delivered_quantity?: number; reserved_quantity?: number; roll_cuts?: { unit_id: string; qty: number }[] | null }[] }[] }
+export interface SoPackage { id: string; template_id: string | null; name: string; unit_label: string; quantity: number; inputs: Record<string, string | number>; discount_amount: number }
+export interface SoInitial { packages?: SoPackage[]; header: Row; lines: { id: string | null; want?: number; package_id?: string | null; calc_qty?: number | null; product_id: string; variant_id: string | null; unit_price: number | null; notes: string | null; allocations: { warehouse_id: string; quantity: number; status: string; delivered_quantity?: number; reserved_quantity?: number; roll_cuts?: { unit_id: string; qty: number }[] | null }[] }[] }
 
 export function SalesOrderForm({ id, initial, revise = false, quotationId, onCancel, onClose, onSaved }: {
   id: string | null; initial: SoInitial | null; /** editing an approved / part-delivered order */ revise?: boolean; /** converting this quotation */ quotationId?: string; onCancel: () => void; onClose: () => void; onSaved: (id: string) => void;
@@ -36,7 +38,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     discount: Number(initial?.header.discount_amount ?? 0) ? String(Number(initial?.header.discount_amount)) : "",
     lines: initial?.lines.length
       ? initial.lines.map((l) => ({
-          key: l.id ?? crypto.randomUUID(), id: l.id, want: l.want, product_id: l.product_id, variant_id: l.variant_id, unit_price: l.unit_price == null ? "" : String(Number(l.unit_price)), notes: l.notes ?? "",
+          key: l.id ?? crypto.randomUUID(), id: l.id, want: l.want, pkg: l.package_id ?? undefined, calc: l.calc_qty == null ? null : Number(l.calc_qty), product_id: l.product_id, variant_id: l.variant_id, unit_price: l.unit_price == null ? "" : String(Number(l.unit_price)), notes: l.notes ?? "",
           alloc: Object.fromEntries(l.allocations.filter((a) => (revise ? a.status !== "CANCELLED" : a.status === "OPEN")).map((a) => [a.warehouse_id, String(Number(a.quantity))])),
           sent: Object.fromEntries(l.allocations.filter((a) => Number(a.delivered_quantity ?? 0) > 0).map((a) => [a.warehouse_id, Number(a.delivered_quantity)])),
           held: Object.fromEntries(l.allocations.filter((a) => Number(a.reserved_quantity ?? 0) > 0).map((a) => [a.warehouse_id, Number(a.reserved_quantity)])),
@@ -44,6 +46,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
             .map((a) => [a.warehouse_id, Object.fromEntries(a.roll_cuts!.map((c) => [c.unit_id, String(Number(c.qty))]))])),
         }))
       : [newLine()],
+    packages: (initial?.packages ?? []).map((p): PkgDraft => ({ key: p.id, id: p.id, template_id: p.template_id, name: p.name, unit_label: p.unit_label, quantity: Number(p.quantity),
+      inputs: p.inputs ?? {}, discount: Number(p.discount_amount) ? String(Number(p.discount_amount)) : "" })),
   }), [initial, revise]);
   const [f, setF] = React.useState(init);
   const snapshot = React.useRef(JSON.stringify(init));
@@ -77,8 +81,12 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
   const total = used.reduce((a, l) => a + (l.unit_price.trim() === "" ? 0 : lineTotal(l) * n(l.unit_price)), 0);
   const pending = used.filter((l) => l.product_id && l.unit_price.trim() === "").length;
   const disc = n(f.discount) || 0;
+  const pkgs = f.packages.filter((p) => f.lines.some((l) => l.pkg === p.key));
+  const pkgGross = (k: string) => used.filter((l) => l.pkg === k).reduce((a, l) => a + (l.unit_price.trim() === "" ? 0 : lineTotal(l) * n(l.unit_price)), 0);
+  const pkgDisc = pkgs.reduce((a, p) => a + (n(p.discount) || 0), 0);
+  for (const p of pkgs) if ((n(p.discount) || 0) > pkgGross(p.key) + 0.001) errors[`pkg.${p.key}`] = `${p.name}: discount is more than its items`;
   if (canPrices && f.discount.trim() !== "" && !(n(f.discount) >= 0)) errors.discount = "Invalid discount";
-  else if (canPrices && disc > total + 0.001) errors.discount = "Discount is more than the order value";
+  else if (canPrices && disc > total - pkgDisc + 0.001) errors.discount = "Discount is more than the order value";
   const initDisc = n(init.discount) || 0;
   /** the discount is saved separately (needs price access) */
   const saveDiscount = async (sid: string) => {
@@ -111,6 +119,23 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     if (r.error) throw Object.assign(r.error, { savedId: sid, rollsFailed: true });
   };
 
+  const hadPkgs = (init.packages ?? []).length > 0;
+  /** calculator packages are saved after the order (they point at the saved lines) */
+  const savePackages = async (sid: string) => {
+    if (!pkgs.length && !hadPkgs) return;
+    const { data, error } = await sb().from("sales_order_lines").select("id, line_no, product_id, variant_id").eq("sales_order_id", sid).eq("is_active", true).order("line_no");
+    if (error) throw Object.assign(error, { savedId: sid, pkgFailed: true });
+    const rows = (data ?? []) as { id: string; line_no: number; product_id: string; variant_id: string | null }[];
+    // saved lines are numbered in the order they were sent
+    const idAt = (i: number, l: Line) => { const r = rows.find((x) => x.line_no === i + 1); return r && r.product_id === l.product_id && (r.variant_id ?? null) === (l.variant_id ?? null) ? r.id : null; };
+    const payload = pkgs.map((p) => ({
+      id: p.id, template_id: p.template_id, name: p.name, unit_label: p.unit_label, quantity: p.quantity, inputs: p.inputs, discount_amount: p.discount.replace(/,/g, "") || 0,
+      lines: used.map((l, i) => ({ l, i })).filter(({ l }) => l.pkg === p.key).map(({ l, i }) => ({ line_id: idAt(i, l), calc_qty: l.calc ?? null })).filter((x) => x.line_id),
+    }));
+    const r = await sb().rpc("set_so_packages", { p_so_id: sid, p_packages: payload });
+    if (r.error) throw Object.assign(r.error, { savedId: sid, pkgFailed: true });
+  };
+
   const save = useMutation({
     mutationFn: async (approve: boolean) => {
       const payload = {
@@ -127,6 +152,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
         try { await docCf.save(id!); } catch (e) { throw Object.assign(e as Error, { savedId: id }); }
         await saveDiscount(id!);
         await saveRolls(id!);
+        await savePackages(id!);
         if (approve && sending) {
           const t = await sb().rpc("start_so_picking", { p_so_id: id, p_plan: plan, p_notes: f.notes || null });
           if (t.error) throw Object.assign(t.error, { savedId: id });
@@ -148,6 +174,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
       try { await docCf.save(nid); } catch (e) { throw Object.assign(e as Error, { savedId: nid, cfFailed: true }); }
       await saveDiscount(nid);
       await saveRolls(nid);
+      await savePackages(nid);
       if (quotationId) {
         const q = await sb().rpc("link_quotation_order", { p_quotation_id: quotationId, p_so_id: nid });
         if (q.error) throw Object.assign(q.error, { savedId: nid });
@@ -169,6 +196,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
     },
     onError: (e: Error & { savedId?: string }) => {
       if (e.savedId && (e as { cfFailed?: boolean }).cfFailed) { toast.error(`Order saved, but the document fields were not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
+      else if (e.savedId && (e as { pkgFailed?: boolean }).pkgFailed) { toast.error(`Order saved, but the calculator package was not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else if (e.savedId && (e as { rollsFailed?: boolean }).rollsFailed) { toast.error(`Order saved, but the roll choice was not: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else if (e.savedId) { snapshot.current = JSON.stringify(f); toast.error(`Saved, but not ${sending ? "sent to pickers" : "approved"}: ${friendlyError(e)}`); qc.invalidateQueries(); onSaved(e.savedId); }
       else toast.error(friendlyError(e));
@@ -187,6 +215,51 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
   const primaryLabel = revise ? (sending ? "Save & send to pickers" : null) : can(P.salesApprove) ? (sending ? "Save, approve & send to pickers" : "Save & approve") : null;
   const qtyTotal = used.reduce((a, l) => a + lineTotal(l), 0);
 
+  // ---- system calculator: a package of items worked out from rules
+  const calcTpls = useCalcTemplates();
+  const [calc, setCalc] = React.useState<null | { key: string | null }>(null);
+  const calcInitial = React.useMemo(() => {
+    if (!calc?.key) return null;
+    const p = f.packages.find((x) => x.key === calc.key);
+    if (!p) return null;
+    const ls = f.lines.filter((l) => l.pkg === p.key);
+    const whCount = new Map<string, number>();
+    for (const l of ls) for (const [w, v] of Object.entries(l.alloc)) if (n(v) > 0) whCount.set(w, (whCount.get(w) ?? 0) + 1);
+    const wh = [...whCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    return { pkg: p, warehouseId: wh, items: ls.map((l) => ({ lineKey: l.key, product_id: l.product_id!, variant_id: l.variant_id, calc_qty: l.calc ?? null, total: lineTotal(l), unit_price: l.unit_price })) };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calc]);
+  const applyCalc = (r: CalcResult) => {
+    setF((s) => {
+      const old = s.lines.filter((l) => l.pkg === r.pkg.key);
+      const keep = old.filter((l) => sentTotal(l) > 0 && !r.items.some((it) => it.lineKey === l.key));
+      if (keep.length) toast.warning(`${keep.length} item(s) already dispatched stay on the order`);
+      const next: Line[] = r.items.map((it) => {
+        const prev = it.lineKey ? old.find((l) => l.key === it.lineKey) : undefined;
+        const same = prev && prev.product_id === it.product_id && (prev.variant_id ?? null) === (it.variant_id ?? null);
+        const base = same ? prev! : newLine();
+        const sameQty = same && Math.abs(lineTotal(prev!) - it.total) < 1e-9;
+        return { ...base, product_id: it.product_id, variant_id: it.variant_id, unit_price: it.unit_price, pkg: r.pkg.key, calc: it.calc_qty,
+          ...(sameQty ? {} : { alloc: { [r.warehouseId]: String(it.total) }, rolls: undefined }) };
+      });
+      const firstIdx = s.lines.findIndex((l) => l.pkg === r.pkg.key);
+      const rest = s.lines.filter((l) => l.pkg !== r.pkg.key || keep.includes(l));
+      // a blank starting row is replaced
+      const cleaned = rest.filter((l) => l.product_id || lineTotal(l) > 0 || l.pkg);
+      const at = firstIdx >= 0 ? Math.min(firstIdx, cleaned.length) : cleaned.length;
+      const lines = [...cleaned.slice(0, at), ...next, ...cleaned.slice(at)];
+      const packages = s.packages.some((p) => p.key === r.pkg.key) ? s.packages.map((p) => (p.key === r.pkg.key ? r.pkg : p)) : [...s.packages, r.pkg];
+      return { ...s, lines: lines.length ? lines : [newLine()], packages };
+    });
+    setCalc(null);
+  };
+  const removePkg = (key: string) => setF((s) => {
+    const sent = s.lines.filter((l) => l.pkg === key && sentTotal(l) > 0);
+    if (sent.length) { toast.error("Some of its items are already dispatched — reduce the other items instead"); return s; }
+    const lines = s.lines.filter((l) => l.pkg !== key);
+    return { ...s, lines: lines.length ? lines : [newLine()], packages: s.packages.filter((p) => p.key !== key) };
+  });
+
   return (
     <>
       <ErpDialog
@@ -198,8 +271,8 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
           <>
             {dirty && <span className="text-xs text-warning">Unsaved changes</span>}
             <div className="flex-1 text-right">
-              {canPrices && <span className="mr-4 inline-flex items-start gap-2 text-sm text-ink-muted"><span className="pt-1.5">Discount</span><DiscountField base={total} value={f.discount} onChange={(v) => setF((s) => ({ ...s, discount: v }))} />{err("discount") && <span className="pt-1.5 text-xs text-danger">{err("discount")}</span>}</span>}
-              {canPrices && <span className="text-sm text-ink-muted">Order total <b className="ml-1 text-lg tabular-nums text-ink">{money(total - disc)}</b>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} price{pending > 1 ? "s" : ""} pending</span>}</span>}
+              {canPrices && <span className="mr-4 inline-flex items-start gap-2 text-sm text-ink-muted"><span className="pt-1.5">Discount</span><DiscountField base={total - pkgDisc} value={f.discount} onChange={(v) => setF((s) => ({ ...s, discount: v }))} />{err("discount") && <span className="pt-1.5 text-xs text-danger">{err("discount")}</span>}</span>}
+              {canPrices && <span className="text-sm text-ink-muted">Order total <b className="ml-1 text-lg tabular-nums text-ink">{money(total - pkgDisc - disc)}</b>{pending > 0 && <span className="ml-1 text-xs text-warning">+ {pending} price{pending > 1 ? "s" : ""} pending</span>}</span>}
             </div>
             <Button onClick={() => guard(onCancel)}>Cancel</Button>
             <Button icon={<Save className="h-3.5 w-3.5" />} loading={save.isPending && save.variables === false} disabled={save.isPending} onClick={() => submit(false)}>{revise ? "Save changes" : "Save draft"}</Button>
@@ -222,7 +295,10 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
                 <h3 className="text-sm font-semibold text-ink">Items</h3>
                 <p className="text-xs text-ink-muted">Quantity to send from each warehouse.{canPrices && <> Leave the price empty if not agreed yet — it stays <b>Pending</b> until invoicing.</>}</p>
               </div>
-              <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newLine()] }))}>Add item</Button>
+              <div className="flex gap-2">
+                {!!calcTpls.data?.length && <Button size="sm" icon={<Calculator className="h-3.5 w-3.5" />} onClick={() => setCalc({ key: null })}>System calculator</Button>}
+                <Button size="sm" icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setF((s) => ({ ...s, lines: [...s.lines, newLine()] }))}>Add item</Button>
+              </div>
             </div>
             {err("lines") && <p className="mb-2 text-xs text-danger">{err("lines")}</p>}
             <div className="overflow-x-auto rounded-card border border-line">
@@ -238,10 +314,36 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
                   </tr>
                 </thead>
                 <tbody>
-                  {f.lines.map((l, i) => (
-                    <SoLine key={l.key} idx={i} line={l} customerId={f.customer_id} showPrice={canPrices} warehouses={whs.data ?? []} err={err}
-                      onChange={(p) => setLine(l.key, p)} onRemove={f.lines.length > 1 && sentTotal(l) === 0 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
-                  ))}
+                  {f.lines.map((l, i) => {
+                    const p = l.pkg ? f.packages.find((x) => x.key === l.pkg) : undefined;
+                    const head = p && f.lines.findIndex((x) => x.pkg === p.key) === i;
+                    const cols = 3 + (whs.data?.length ?? 0) + (canPrices ? 2 : 0);
+                    const gross = p ? pkgGross(p.key) : 0;
+                    const pd = p ? n(p.discount) || 0 : 0;
+                    return (
+                      <React.Fragment key={l.key}>
+                        {head && p && (
+                          <tr className="bg-amber-50/70">
+                            <td colSpan={cols} className="border-b border-amber-200 px-2 py-2">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Package className="h-4 w-4 text-amber-600" />{p.name}</span>
+                                <span className="text-sm tabular-nums">{qtyFmt(p.quantity)} {p.unit_label}{p.quantity === 1 ? "" : "s"}</span>
+                                <span className="text-xs text-ink-muted">{Object.entries(p.inputs).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>
+                                {canPrices && <span className="text-sm text-ink-muted">items {money(gross)}{pd > 0 && <> − discount {money(pd)}</>} = <b className="tabular-nums text-ink">{money(gross - pd)}</b> · <b className="tabular-nums text-ink">{money(p.quantity > 0 ? (gross - pd) / p.quantity : 0)}</b> per {p.unit_label}</span>}
+                                {err(`pkg.${p.key}`) && <span className="text-xs text-danger">{err(`pkg.${p.key}`)}</span>}
+                                <span className="flex-1" />
+                                <Button size="sm" variant="ghost" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setCalc({ key: p.key })}>Edit in calculator</Button>
+                                <Button size="sm" variant="ghost" icon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => removePkg(p.key)}>Remove</Button>
+                              </div>
+                              <p className="mt-0.5 text-2xs text-ink-muted">Invoice shows only “{p.name}” — {qtyFmt(p.quantity)} × price per {p.unit_label}. Pickers and the delivery note see every item below.</p>
+                            </td>
+                          </tr>
+                        )}
+                        <SoLine idx={i} line={l} customerId={f.customer_id} showPrice={canPrices} warehouses={whs.data ?? []} err={err} inPkg={!!p}
+                          onChange={(patch) => setLine(l.key, patch)} onRemove={f.lines.length > 1 && sentTotal(l) === 0 ? () => setF((s) => ({ ...s, lines: s.lines.filter((x) => x.key !== l.key) })) : undefined} />
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -270,12 +372,13 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
         </div>
       </ErpDialog>
       {dialog}
+      {calc && <CalculatorDialog warehouses={whs.data ?? []} initial={calcInitial} onCancel={() => setCalc(null)} onDone={applyCalc} />}
     </>
   );
 }
 
-function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, onRemove }: {
-  idx: number; line: Line; showPrice: boolean; customerId: string | null; warehouses: Wh[]; err: (k: string) => string | undefined;
+function SoLine({ idx, line, customerId, showPrice, warehouses, err, inPkg, onChange, onRemove }: {
+  idx: number; line: Line; showPrice: boolean; customerId: string | null; warehouses: Wh[]; err: (k: string) => string | undefined; inPkg?: boolean;
   onChange: (p: Partial<Line>) => void; onRemove?: () => void;
 }) {
   const meta = useProductMeta(line.product_id);
@@ -303,8 +406,8 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
   const [rollWh, setRollWh] = React.useState<Wh | null>(null);
   const isRoll = !!meta.data?.rolls && ready;
   return (
-    <tr className="group bg-white hover:bg-indigo-50/30">
-      <td className={cn(td, "pt-3 text-center text-2xs text-ink-faint")}>{idx + 1}</td>
+    <tr className={cn("group hover:bg-indigo-50/30", inPkg ? "bg-amber-50/20" : "bg-white")}>
+      <td className={cn(td, "pt-3 text-center text-2xs text-ink-faint", inPkg && "border-l-2 border-l-amber-300")}>{idx + 1}</td>
       <td className={td}>
         <div className="flex gap-1.5">
           <div className="min-w-0 flex-1">
@@ -314,6 +417,7 @@ function SoLine({ idx, line, customerId, showPrice, warehouses, err, onChange, o
         </div>
         {err(`${line.key}.p`) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.p`)}</p>}
         {meta.data?.is_bundle && <p className="mt-0.5 text-2xs text-ink-muted">Bundle — availability from its components</p>}
+        {inPkg && line.calc != null && Math.abs(total - line.calc) > 1e-9 && <p className="mt-0.5 text-2xs text-ink-muted">rule {qtyFmt(line.calc)} {total > line.calc ? "+" : "−"} {qtyFmt(Math.abs(total - line.calc))} extra</p>}
         {err(`${line.key}.q`) && <p className="mt-0.5 text-2xs text-danger">{err(`${line.key}.q`)}</p>}
       </td>
       {warehouses.map((w) => {

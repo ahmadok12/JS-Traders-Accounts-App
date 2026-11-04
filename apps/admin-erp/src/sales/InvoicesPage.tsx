@@ -17,6 +17,7 @@ import { BankPicker, money, num, today } from "../accounting/common";
 import { DiscountField, fetchGdnLinePrices, n, qtyFmt, useItemAvailability, useLastPrice, useWarehouses, type Wh } from "./common";
 import { autoFill, useOpenReceipts } from "./allocations";
 import { printDocument } from "./print";
+import { customerRows, type InvoicePackages } from "./calc/invoiceRows";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { ApprovalNotice } from "../documents/ApprovalNotice";
@@ -518,16 +519,31 @@ function InvoiceView({ data, onClose }: { data: InvData; onClose: () => void }) 
   const overdue = isOverdue({ due_date: h.due_date, outstanding });
 
   const print = () => {
-    const ok = printDocument({ docType: "SALES_INVOICE", cfSources: [{ entity: "sales_invoices", id: String(h.id) }],
+    const base = {
+      docType: "SALES_INVOICE", cfSources: [{ entity: "sales_invoices", id: String(h.id) }],
       company: company?.company_name ?? "", title: "Sales Invoice", docNo: String(h.doc_no),
       meta: [["Customer", `${cust.name}${cust.city ? `, ${cust.city}` : ""}`], ["Invoice date", formatDate(h.invoice_date as string)], ["Due date", h.due_date ? formatDate(h.due_date as string) : ""],
-        ["Customer ref.", (h.customer_reference as string) ?? ""], ["Delivery notes", data.gdns.map((g) => g.doc_no).join(", ")]],
-      columns: [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" }, { label: "Price", align: "right" }, { label: "Amount", align: "right" }],
-      rows: data.lines.map((l) => [String(l.line_no), `${l.name}${l.variant ? ` · ${l.variant}` : ""}${l.description ? ` — ${l.description}` : ""}`, `${qtyFmt(l.quantity)} ${l.uom}`, money(l.unit_price), money(l.quantity * Number(l.unit_price))]),
-      totals: [["Subtotal", money(h.subtotal as number)], ...(Number(h.discount_amount) ? [["Discount", `-${money(h.discount_amount as number)}`] as [string, string]] : []),
-        ...(Number(data.pay.paid_amount) ? [["Total", money(h.total_amount as number)], ["Paid", money(data.pay.paid_amount)]] as [string, string][] : []),
-        [Number(data.pay.paid_amount) ? "Balance due" : "Total", money(Number(data.pay.paid_amount) ? outstanding : (h.total_amount as number))]],
+        ["Customer ref.", (h.customer_reference as string) ?? ""], ["Delivery notes", data.gdns.map((g) => g.doc_no).join(", ")]] as [string, string][],
+      columns: [{ label: "#" }, { label: "Item" }, { label: "Qty", align: "right" as const }, { label: "Price", align: "right" as const }, { label: "Amount", align: "right" as const }],
       notes: h.notes as string | null, signatures: ["Prepared by", "Customer signature"],
+    };
+    // calculator packages print as one row each ("Branch Feeding Line — 4 lines × price per line")
+    const build = (pk: InvoicePackages | null) => {
+      const c = customerRows(data.lines.map((l) => ({ line_no: l.line_no, label: `${l.name}${l.variant ? ` · ${l.variant}` : ""}${l.description ? ` — ${l.description}` : ""}`, quantity: l.quantity, uom: l.uom, unit_price: l.unit_price == null ? null : Number(l.unit_price) })),
+        pk, Number(h.discount_amount ?? 0), Number(h.subtotal ?? 0));
+      return {
+        ...base,
+        rows: c.rows.map((r, i) => [String(i + 1), r.label, `${qtyFmt(r.quantity)} ${r.uom}`, r.unit_price == null ? "" : money(r.unit_price), r.amount == null ? "" : money(r.amount)]),
+        totals: [["Subtotal", money(c.subtotal)], ...(c.discount > 0.004 ? [["Discount", `-${money(c.discount)}`] as [string, string]] : []),
+          ...(Number(data.pay.paid_amount) ? [["Total", money(h.total_amount as number)], ["Paid", money(data.pay.paid_amount)]] as [string, string][] : []),
+          [Number(data.pay.paid_amount) ? "Balance due" : "Total", money(Number(data.pay.paid_amount) ? outstanding : (h.total_amount as number))]] as [string, string][],
+      };
+    };
+    const ok = printDocument(build(null), {
+      prepare: async () => {
+        const r = await sb().rpc("invoice_packages", { p_invoice_id: String(h.id) });
+        return build(r.error ? null : (r.data as InvoicePackages));
+      },
     });
     if (!ok) toast.error("Allow pop-ups to print");
   };
