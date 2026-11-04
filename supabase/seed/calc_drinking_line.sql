@@ -10,8 +10,9 @@ begin
 
   insert into public.calc_templates(company_id, code, name, description, unit_label, qty_var, sort_order, variables)
   values (c, 'DRINKING', 'Drinking Line', 'Drinking lines for one shed: length and number of lines', 'line', 'N', 2,
-  '[{"key":"L","label":"Farm length (ft)","type":"number","default":430,"step":10,"hint":"usually 400–450 ft"},
-    {"key":"N","label":"No. of drinking lines","type":"number","default":5,"step":1},
+  '[{"key":"L","label":"Farm length (ft)","short":"Length","unit":"ft","type":"number","default":430,"step":10,"hint":"usually 400–450 ft"},
+    {"key":"W","label":"Farm width (ft)","short":"Width","unit":"ft","type":"number","default":50,"step":5,"hint":"usually 50 ft"},
+    {"key":"N","label":"No. of drinking lines","short":"Lines","type":"number","default":5,"step":1},
     {"key":"PIPES","label":"Water lines (15 nipples, 10 ft) per line","formula":"ceil(L/10)"},
     {"key":"P8","label":"Hanging points per line (every 8 ft)","formula":"ceil(L/8)"}]'::jsonb)
   on conflict (company_id, code) do update set variables = excluded.variables, name = excluded.name, description = excluded.description

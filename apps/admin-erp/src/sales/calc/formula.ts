@@ -12,6 +12,16 @@ export interface CalcVariable {
   key: string; label: string;
   /** input variables */ type?: "number" | "choice"; default?: number | string; options?: string[]; step?: number; hint?: string;
   /** derived variables (shown, not typed) */ formula?: string;
+  /** short name and unit for summaries: "Length 430 ft" */ short?: string; unit?: string;
+}
+
+/** "Length 430 ft · Width 50 ft · Lines 4 · Feed room Centre" from a package's saved inputs */
+export function describeInputs(defs: CalcVariable[] | null | undefined, inputs: Record<string, unknown> | null | undefined): string {
+  const inp = inputs ?? {};
+  const known = (defs ?? []).filter((d) => !d.formula && d.key in inp)
+    .map((d) => `${d.short ?? d.label.replace(/\s*\(.*\)\s*$/, "")} ${String(inp[d.key])}${d.unit ? ` ${d.unit}` : ""}`);
+  const rest = Object.keys(inp).filter((k) => !(defs ?? []).some((d) => d.key === k)).map((k) => `${k} ${String(inp[k])}`);
+  return [...known, ...rest].join(" · ");
 }
 
 type Tok = { t: "num"; v: number } | { t: "str"; v: string } | { t: "id"; v: string } | { t: "op"; v: string };

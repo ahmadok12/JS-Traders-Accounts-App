@@ -4,7 +4,7 @@
 Sales order → **System calculator** → Branch Feeding Line (farm length, lines, feed room) → 25 items by rule, Extra, Total,
 prices, discount / quoted price per line → **Add to order**: a package + item lines. Invoice print = one row per package.
 Migration `20261104000200_system_calculator`; template seeded from `supabase/seed/calc_branch_feeding_line.sql`.
-Formulas live in `calc_template_items.formula` (edit with SQL until the Settings editor exists). Drinking Line added the same evening (supabase/seed/calc_drinking_line.sql). Next: Main Feeding Line.
+Formulas live in `calc_template_items.formula` (edit with SQL until the Settings editor exists). Drinking Line added the same evening (supabase/seed/calc_drinking_line.sql). Main Feeding Line added too (supabase/seed/calc_main_feeding_line.sql); all three have Farm width. Next: rules editor in Settings, packages on quotations.
 
 ## Go-live with real data — 4 Nov 2026
 - Trial transactions wiped with `reset_trial_transactions('RESET JST')` (stock, SOs, GDNs, invoices, ledger…); masters kept.

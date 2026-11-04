@@ -14,6 +14,7 @@ import { PickerChips, staffOf, usePickingStaff } from "../picking/common";
 import { ReportShortcuts } from "../reports/Shortcuts";
 import { RollCutsEditor, fmtQty, sumCuts, useRolls, type Cuts } from "../inventory/rolls";
 import { CalculatorDialog, useCalcTemplates, type CalcResult, type PkgDraft } from "./calc/CalculatorDialog";
+import { describeInputs } from "./calc/formula";
 
 type Row = Record<string, unknown>;
 interface Line { key: string; id: string | null; product_id: string | null; variant_id: string | null; unit_price: string; notes: string; alloc: Record<string, string>; sent: Record<string, number>; held: Record<string, number>; /** roll items: warehouse → chosen rolls (unit_id → qty); missing/empty = Auto */ rolls?: Record<string, Cuts>; /** quantity to spread over warehouses automatically (from a quotation) */ want?: number; /** calculator package key */ pkg?: string; /** quantity by the calculator rule (extra = total − calc) */ calc?: number | null }
@@ -328,7 +329,7 @@ export function SalesOrderForm({ id, initial, revise = false, quotationId, onCan
                               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                                 <span className="inline-flex items-center gap-1.5 font-semibold text-ink"><Package className="h-4 w-4 text-amber-600" />{p.name}</span>
                                 <span className="text-sm tabular-nums">{qtyFmt(p.quantity)} {p.unit_label}{p.quantity === 1 ? "" : "s"}</span>
-                                <span className="text-xs text-ink-muted">{Object.entries(p.inputs).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>
+                                <span className="text-xs text-ink-muted">{describeInputs(calcTpls.data?.find((t) => t.id === p.template_id)?.variables, p.inputs)}</span>
                                 {canPrices && <span className="text-sm text-ink-muted">items {money(gross)}{pd > 0 && <> − discount {money(pd)}</>} = <b className="tabular-nums text-ink">{money(gross - pd)}</b> · <b className="tabular-nums text-ink">{money(p.quantity > 0 ? (gross - pd) / p.quantity : 0)}</b> per {p.unit_label}</span>}
                                 {err(`pkg.${p.key}`) && <span className="text-xs text-danger">{err(`pkg.${p.key}`)}</span>}
                                 <span className="flex-1" />

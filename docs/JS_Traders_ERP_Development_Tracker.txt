@@ -710,3 +710,5 @@ NEXT: Drinking Line + Main Feeding Line calculators (Ahmad to give the rules); c
       package rows on quotations; Excel opening-stock import; PDF/WhatsApp on invoices.
 [x] Drinking Line calculator (L ft, N lines default 5; 22 items incl. Winch Handle 1) — supabase/seed/calc_drinking_line.sql;
     Water Regulator Pipe is now a roll item (FT). Glue = ceil(1.25 × L/400 × N); Water Rope 3mm = ceil(L × N / 300) rolls.
+[x] Main Feeding Line calculator (lines default 1, floor Single/Double, size 65/78 ft; 16 items) — supabase/seed/calc_main_feeding_line.sql
+[x] Farm width (default 50 ft) on all three calculators; package headers read "Length 430 ft · Width 50 ft · Lines 4 · Feed room Centre"

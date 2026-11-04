@@ -15,9 +15,10 @@ begin
 
   insert into public.calc_templates(company_id, code, name, description, unit_label, qty_var, sort_order, variables)
   values (c, 'BRANCH_FEEDING', 'Branch Feeding Line', 'Branch feed lines for one shed: length, number of lines, feed room position', 'line', 'N', 1,
-  '[{"key":"L","label":"Farm length (ft)","type":"number","default":430,"step":10,"hint":"usually 400–450 ft"},
-    {"key":"N","label":"No. of branch feed lines","type":"number","default":4,"step":1},
-    {"key":"ROOM","label":"Feed room","type":"choice","options":["Side","Centre"],"default":"Side"},
+  '[{"key":"L","label":"Farm length (ft)","short":"Length","unit":"ft","type":"number","default":430,"step":10,"hint":"usually 400–450 ft"},
+    {"key":"W","label":"Farm width (ft)","short":"Width","unit":"ft","type":"number","default":50,"step":5,"hint":"usually 50 ft"},
+    {"key":"N","label":"No. of branch feed lines","short":"Lines","type":"number","default":4,"step":1},
+    {"key":"ROOM","label":"Feed room","short":"Feed room","type":"choice","options":["Side","Centre"],"default":"Side"},
     {"key":"PIPES","label":"Feed pipes per line (10 ft each)","formula":"ceil(L/10)"},
     {"key":"MOTORS","label":"Feed motors per line","formula":"ROOM==''Centre'' ? 2 : 1"},
     {"key":"P8","label":"Hanging points per line (every 8 ft)","formula":"ceil(L/8)"}]'::jsonb)

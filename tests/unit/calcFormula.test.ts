@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evalQty, evaluate, resolveVars, type CalcVariable } from "../../apps/admin-erp/src/sales/calc/formula";
+import { describeInputs, evalQty, evaluate, resolveVars, type CalcVariable } from "../../apps/admin-erp/src/sales/calc/formula";
 
 const BRANCH: CalcVariable[] = [
   { key: "L", label: "Farm length", type: "number", default: 430 },
@@ -70,5 +70,32 @@ describe("calculator formulas", () => {
     expect(q("ceil(L*N/300)")).toBe(8);          // rope rolls 7.17 → 8
     expect(q("8*N")).toBe(40);                   // regulator pipe ft
     expect(q("L*N+50")).toBe(2200);              // galvanised / shocker wire
+  });
+  it("works out the Main Feeding Line (single / double floor, 65 / 78 ft)", () => {
+    const defs: CalcVariable[] = [
+      { key: "N", label: "Lines", type: "number", default: 1 },
+      { key: "FLOOR", label: "Floor", type: "choice", options: ["Single", "Double"], default: "Single" },
+      { key: "SIZE", label: "Main line size (ft)", type: "choice", options: ["65", "78"], default: "65" },
+    ];
+    const single = resolveVars(defs, {}).vars;
+    const dbl = resolveVars(defs, { N: "2", FLOOR: "Double", SIZE: "78" }).vars;
+    expect(evalQty("SIZE*N", single)).toBe(65);
+    expect(evalQty("SIZE*N", dbl)).toBe(156);
+    expect(evalQty("(FLOOR=='Double' ? 5 : 4)*N", single)).toBe(4);
+    expect(evalQty("(FLOOR=='Double' ? 5 : 4)*N", dbl)).toBe(10);
+    expect(evalQty("(FLOOR=='Double' ? 4 : 3)*N", dbl)).toBe(8);
+    expect(evalQty("FLOOR=='Single' ? N : 0", dbl)).toBe(0);
+    expect(evalQty("FLOOR=='Double' ? N : 0", dbl)).toBe(2);
+  });
+  it("summarises the inputs in words", () => {
+    const defs: CalcVariable[] = [
+      { key: "L", label: "Farm length (ft)", short: "Length", unit: "ft", type: "number" },
+      { key: "W", label: "Farm width (ft)", short: "Width", unit: "ft", type: "number" },
+      { key: "N", label: "No. of branch feed lines", short: "Lines", type: "number" },
+      { key: "ROOM", label: "Feed room", type: "choice" },
+      { key: "PIPES", label: "Pipes", formula: "ceil(L/10)" },
+    ];
+    expect(describeInputs(defs, { L: 430, W: 50, N: 4, ROOM: "Centre" })).toBe("Length 430 ft · Width 50 ft · Lines 4 · Feed room Centre");
+    expect(describeInputs(null, { L: 430 })).toBe("L 430");
   });
 });

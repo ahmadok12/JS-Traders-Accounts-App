@@ -13,6 +13,8 @@ import { SearchBox, StatusFilter, useUrlState } from "../inventory/DocPage";
 import { money } from "../accounting/common";
 import { SO_TONE, qtyFmt, soLabel, useSoLinePrices } from "./common";
 import { SalesOrderForm, type SoInitial, type SoPackage } from "./SalesOrderForm";
+import { useCalcTemplates } from "./calc/CalculatorDialog";
+import { describeInputs } from "./calc/formula";
 import { PricingStrip } from "../pricing/PricingPage";
 import { SoPickingTab, SendToPickersDialog, useSoTasks } from "../picking/SoPicking";
 import { AttachmentsPanel, filesLabel, useAttachments } from "../attachments/Attachments";
@@ -168,6 +170,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
   const src = h?.source as { doc_no: string } | null;
   const lines = doc.data?.lines ?? [];
   const packages = doc.data?.packages ?? [];
+  const calcTpls = useCalcTemplates();
   const pkgDisc = packages.reduce((a, p) => a + Number(p.discount_amount ?? 0), 0);
   const total = lines.reduce((a, l) => a + Number(l.quantity) * Number(l.unit_price ?? 0), 0) - pkgDisc;
   const pending = lines.filter((l) => l.unit_price == null).length;
@@ -284,7 +287,7 @@ function SoView({ id, doc, onEdit, onClose }: { id: string; doc: ReturnType<type
                           <tr className="bg-amber-50/70"><td colSpan={canPrices ? 6 : 4} className="border-b border-amber-200 px-3 py-2">
                             <span className="inline-flex items-center gap-1.5 font-semibold"><Package className="h-4 w-4 text-amber-600" />{p.name}</span>
                             <span className="ml-3 tabular-nums">{qtyFmt(p.quantity)} {p.unit_label}{Number(p.quantity) === 1 ? "" : "s"}</span>
-                            <span className="ml-3 text-xs text-ink-muted">{Object.entries(p.inputs ?? {}).map(([k, v]) => `${k} ${v}`).join(" · ")}</span>
+                            <span className="ml-3 text-xs text-ink-muted">{describeInputs(calcTpls.data?.find((t) => t.id === p.template_id)?.variables, p.inputs)}</span>
                             {canPrices && <span className="ml-3 text-sm text-ink-muted">items {money(gross)}{Number(p.discount_amount) > 0 && <> − discount {money(p.discount_amount)}</>} = <b className="text-ink">{money(pnet)}</b> · <b className="text-ink">{money(Number(p.quantity) > 0 ? pnet / Number(p.quantity) : 0)}</b> per {p.unit_label}</span>}
                           </td></tr>
                         )}

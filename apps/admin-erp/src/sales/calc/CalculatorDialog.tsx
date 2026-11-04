@@ -184,7 +184,7 @@ export function CalculatorDialog({ warehouses, initial, onDone, onCancel }: {
 
         {tpl && (
           <section className="rounded-card border border-line bg-subtle/50 p-3">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
               {defs.filter((d) => !d.formula).map((d) => (
                 <Field key={d.key} label={d.label} error={varErr[d.key]} hint={d.hint}>
                   {d.type === "choice" ? (
