@@ -10,6 +10,9 @@
 - Then 24 drinking-line products (P-00027…P-00050, category Drinking Systems, same rules): roll items Galvanised Steel Wire 3mm
   and 1.2mm Shocker Wire (FT); China/Local variants on Support Pipe 27mm, Drip Cup, Water Line Hanger, Glue, End Valve,
   Water Level Pipe, Joint, Male/Female Joint, Pulley 24mm, Water Line Adjust, Water Line End Patri.
+- Then 34 more (P-00051…P-00084): 90mm/75mm feeding parts (Feeding Systems; Augar 90mm and Augar 75mm are roll items in FT —
+  75mm was not marked Rolls in his sheet, set as roll to match the others, told Ahmad) and Air Vent, Cooling Pads, fans,
+  Temp R Tron 16 Stage Controller (variants Master Automation / Local) under Ventilation & Cooling.
 - Fix `20261104000100_roll_items_negative_stock`: roll items with no rolls could never go negative ("choose the roll(s)" error).
 - Ahmad's plan: make delivery notes now (stock goes negative), then count items one by one (Stock count) to correct stock.
 
