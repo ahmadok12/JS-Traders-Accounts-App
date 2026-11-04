@@ -7,6 +7,9 @@
   roll items (tracking PHYSICAL_UNIT, unit FT): Augar 45mm, 3mm / 5mm / 1.2mm Steel Wire; the rest PCS.
   Variants China/Local (Motor Box: China Plastic / Local Steel) on Feed Pipe Round, Hopper 60 x 60, Feed Boot 45mm Single/Double,
   Motor Box 45mm, Shaft 45mm, Feed Line Adjust, Feed Line Hanger, Feed Pulley 45mm, C Clump 45mm, End Patri.
+- Then 24 drinking-line products (P-00027…P-00050, category Drinking Systems, same rules): roll items Galvanised Steel Wire 3mm
+  and 1.2mm Shocker Wire (FT); China/Local variants on Support Pipe 27mm, Drip Cup, Water Line Hanger, Glue, End Valve,
+  Water Level Pipe, Joint, Male/Female Joint, Pulley 24mm, Water Line Adjust, Water Line End Patri.
 - Fix `20261104000100_roll_items_negative_stock`: roll items with no rolls could never go negative ("choose the roll(s)" error).
 - Ahmad's plan: make delivery notes now (stock goes negative), then count items one by one (Stock count) to correct stock.
 
