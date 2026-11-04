@@ -18,4 +18,4 @@ Ahmad — JS Traders, poultry equipment, Okara. After every sprint report: what 
 - Monorepo: `apps/admin-erp` (Vite + React + TanStack Query), `packages/{ui,data-access,permissions,types,utilities}`.
 - `npm run typecheck`, `npm run build`, `npx vitest run`. SQL tests in `tests/sql` run inside a transaction and roll back.
 - All business rules live in Postgres functions (security definer, `search_path = ''`, permission checks via `inv_require` / `has_permission`).
-- Live DB currently holds trial data: opening stock (`supabase/seed/trial_opening_stock.sql`), Settings → Trial data (RESET JST) wipes transactions.
+- Live DB went LIVE on 4 Nov 2026: trial transactions wiped (RESET JST), old trial products deleted, Ahmad's 26 real feeding-line products loaded (P-00001…P-00026, all allow negative stock). Do NOT reseed `supabase/seed/trial_opening_stock.sql` or run the trial reset without asking him.
